@@ -18,7 +18,7 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // ✅ SECURE: Frontend URL based on environment
 const FRONTEND_URL = NODE_ENV === 'production' 
   ? 'https://devhubconnect.com' 
-  : 'http://localhost:5173';
+  : process.env.FRONTEND_URL || 'https://devhubconnect-production.up.railway.app';
 
 // ✅ SECURE: Validate Stripe configuration
 if (!STRIPE_SECRET_KEY) {

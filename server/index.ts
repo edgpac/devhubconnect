@@ -21,7 +21,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || 'https://devhubconnect-production.up.railway.app',
   credentials: true,
   optionsSuccessStatus: 200
 }));
@@ -80,21 +80,21 @@ app.post('/api/generate-setup-instructions', async (req: Request, res: Response)
     const instructions = `🔧 **Setup Instructions for ${templateId}**
 
 **Step 1: Environment Setup**
-• Ensure you have n8n installed and running
-• Access your n8n instance (Cloud or self-hosted)
+- Ensure you have n8n installed and running
+- Access your n8n instance (Cloud or self-hosted)
 
 **Step 2: Import Template**
-• In n8n, go to "Workflows" → "Import from JSON"
-• Paste the template JSON you uploaded
-• Click "Import"
+- In n8n, go to "Workflows" → "Import from JSON"
+- Paste the template JSON you uploaded
+- Click "Import"
 
 **Step 3: Configure Credentials**
 ${uniqueServices.map(service => `• Set up credentials for ${service.replace('n8n-nodes-base.', '')}`).join('\n')}
-• Test all connections to ensure they work
+- Test all connections to ensure they work
 
 **Step 4: Activate Workflow**
-• Click the "Activate" toggle in n8n
-• Monitor the execution log for any errors
+- Click the "Activate" toggle in n8n
+- Monitor the execution log for any errors
 
 **Template contains:** ${workflow.nodes?.length || 0} nodes
 **Services detected:** ${uniqueServices.length > 0 ? uniqueServices.map(s => s.replace('n8n-nodes-base.', '')).join(', ') : 'None'}

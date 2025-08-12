@@ -28,7 +28,7 @@ const BASE_URL = NODE_ENV === 'production'
 
 const FRONTEND_URL = NODE_ENV === 'production' 
  ? 'https://devhubconnect.com' 
- : 'http://localhost:5173';
+ : process.env.FRONTEND_URL || 'https://devhubconnect-production.up.railway.app';
 
 const GITHUB_REDIRECT_URI = `${BASE_URL}/api/auth/github/callback`;
 const FRONTEND_SUCCESS_URI = `${FRONTEND_URL}/auth/success`;
