@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/components/context/AuthProvider';
 import { toast } from 'sonner';
+import { API_ENDPOINTS, apiCall } from '../config/api';
 
 export const AuthSuccess = () => {
   const navigate = useNavigate();
@@ -18,8 +19,8 @@ export const AuthSuccess = () => {
       if (success === 'true' && userId && userEmail) {
         try {
           // Get complete user data from backend API (including avatar)
-          const response = await fetch('http://localhost:3000/api/auth/profile/session', {
-            credentials: 'include'
+          const response = await apiCall(API_ENDPOINTS.AUTH_SESSION, {
+            method: 'GET',
           });
 
           if (response.ok) {

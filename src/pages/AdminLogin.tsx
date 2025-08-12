@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Shield, Eye, EyeOff, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { API_ENDPOINTS, apiCall } from '../config/api';
 
 export function AdminLogin() {
   const [password, setPassword] = useState('');
@@ -19,9 +20,8 @@ export function AdminLogin() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:3000/api/auth/admin/login', {
+      const response = await apiCall(API_ENDPOINTS.AUTH_ADMIN_LOGIN, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
       });
 

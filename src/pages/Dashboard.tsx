@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEnhancedRecommendations } from "@/hooks/useEnhancedRecommendations";
+import { API_ENDPOINTS, apiCall } from '../config/api';
 
 import { 
  ShoppingBag, 
@@ -64,8 +65,8 @@ export const Dashboard = () => {
  useEffect(() => {
    const fetchPurchases = async () => {
      try {
-       const response = await fetch('http://localhost:3000/api/purchases', {
-         credentials: 'include'
+       const response = await apiCall(API_ENDPOINTS.PURCHASES, {
+         method: 'GET',
        });
        if (response.ok) {
          const data = await response.json();

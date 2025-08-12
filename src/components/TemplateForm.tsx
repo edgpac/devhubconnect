@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { TemplatePreviewModal } from '@/components/TemplatePreviewModal';
+import { API_ENDPOINTS, apiCall } from '../config/api';
 import { 
   Wand2, 
   Eye, 
@@ -58,10 +59,9 @@ export default function TemplateForm() {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3000/api/ask-ai', {
+      const response = await apiCall(API_ENDPOINTS.ASK_AI, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
         body: JSON.stringify({
@@ -142,10 +142,9 @@ export default function TemplateForm() {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3000/api/templates', {
+      const response = await apiCall(API_ENDPOINTS.TEMPLATES, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
         body: JSON.stringify({

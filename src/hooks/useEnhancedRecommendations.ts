@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
+import { API_ENDPOINTS, apiCall } from '../config/api';
 
 interface RecommendationFilters {
   categories?: string[];
@@ -55,7 +56,7 @@ export const useEnhancedRecommendations = (userId?: string) => {
     queryKey: ['enhanced-recommendations', userId, filters],
     queryFn: async () => {
       const queryParams = buildQueryParams();
-      const response = await fetch(`http://localhost:3000/api/recommendations?${queryParams}`);
+      const response = await apiCall(`${API_ENDPOINTS.RECOMMENDATIONS}?${queryParams}`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch recommendations');

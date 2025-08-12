@@ -7,6 +7,7 @@ import { ArrowLeft, ShoppingCart, Star, Eye, Edit, SlidersHorizontal, Share2, Do
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/context/AuthProvider"; // ✅ ADDED: Import useAuth
+import { API_ENDPOINTS, apiCall } from '../config/api';
 
 import { getDeterministicRandom } from "@/lib/utils";
 import { loadStripe } from '@stripe/stripe-js';
@@ -51,11 +52,8 @@ const getIntegratedApps = (nodes: { type: string }[] | undefined): string[] => {
 async function fetchTemplateById(id: string | number | undefined): Promise<Template> {
   if (!id) throw new Error("No template ID provided");
   
-  const response = await fetch(`http://localhost:3000/api/templates/${id}`, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include' // Send HTTP-only cookies
+  const response = await apiCall(API_ENDPOINTS.TEMPLATE_BY_ID(id.toString()), {
+    method: 'GET',
   });
   
   if (!response.ok) throw new Error("Failed to fetch template details.");
@@ -107,12 +105,8 @@ export const TemplateDetail = () => {
         return;
       }
 
-      const response = await fetch('http://localhost:3000/api/stripe/create-checkout-session', {
+      const response = await apiCall(API_ENDPOINTS.CREATE_CHECKOUT, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Send HTTP-only cookies for authentication
         body: JSON.stringify({ templateId: template.id }),
       });
 

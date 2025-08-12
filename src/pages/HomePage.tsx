@@ -33,6 +33,7 @@ import {
   ChevronsUpDown,
 } from 'lucide-react';
 import ChatBox from '../components/ChatBox'; // ✅ NEW: Import the ChatBox component
+import { API_ENDPOINTS, apiCall } from '../config/api';
 
 interface Template {
   id: number;
@@ -47,7 +48,7 @@ interface Template {
 
 const fetchTemplates = async (): Promise<Template[]> => {
   // --- FIX: Added the full backend URL ---
-  const response = await fetch('http://localhost:3000/api/templates');
+  const response = await apiCall(API_ENDPOINTS.TEMPLATES);
   if (!response.ok) {
     throw new Error('Network response was not ok');
   }
@@ -313,7 +314,7 @@ export const HomePage = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
               <h1 className="text-5xl font-bold mb-6">Premium Templates & Support</h1>
               <p className="text-xl mb-8 text-blue-100 max-w-3xl mx-auto">
-                We won’t just hand you the solution, we’ll build it for you.<br />
+                We won't just hand you the solution, we'll build it for you.<br />
                 Upload your template and get step by step assistance from our AI.<br />
                 Save hours of development time with instantly deployable n8n solutions.
              </p>

@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from "react";
+import { API_ENDPOINTS, apiCall } from '../../config/api';
 
 type User = {
  id: string;
@@ -39,11 +40,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
        }
 
        // If no localStorage data, check session cookie by calling verify endpoint
-       const response = await fetch('http://localhost:3000/api/auth/profile/session', {
-         credentials: 'include', // Send session cookie
-         headers: {
-           'Content-Type': 'application/json',
-         },
+       const response = await apiCall(API_ENDPOINTS.AUTH_SESSION, {
+         method: 'GET',
        });
 
        if (response.ok) {
@@ -107,9 +105,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  const logout = async () => {
    try {
      // Call logout endpoint to clear session cookie
-     await fetch('http://localhost:3000/api/auth/logout', {
+     await apiCall(API_ENDPOINTS.AUTH_LOGOUT, {
        method: 'POST',
-       credentials: 'include',
      });
      console.log('✅ Logout successful - session cleared');
    } catch (error) {

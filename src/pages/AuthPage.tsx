@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Github, Mail, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { API_ENDPOINTS } from '../config/api';
 
 // ✅ Corrected useAuth import based on actual file path
 import { useAuth } from "@/components/context/AuthProvider";
@@ -48,7 +49,7 @@ export const AuthPage = () => {
     });
     // Redirect to your backend's GitHub OAuth initiation route
     // This route on your backend will then redirect to GitHub's authorization page.
-    window.location.href = 'http://localhost:3000/api/auth/github'; // ✅ Corrected route
+    window.location.href = API_ENDPOINTS.AUTH_GITHUB;
   };
 
   return (
