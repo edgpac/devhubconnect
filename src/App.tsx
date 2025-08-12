@@ -18,8 +18,8 @@ import Analytics from "./pages/Analytics";
 import { AuthSuccess } from "./pages/AuthSuccess";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { TermsOfService } from "./pages/TermsOfService";
-import { PrivacyPolicy } from "./pages/PrivacyPolicy";
+import { TermsOfService } from "./pages/TermsOfService.jsx";
+import { PrivacyPolicy } from "./pages/PrivacyPolicy.jsx";
 
 import Footer from "./components/Footer";
 import { ProtectedRoute } from "./components/ProtectedRoute";
