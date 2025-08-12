@@ -1,0 +1,141 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Star, Download, ShoppingCart, Eye } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { getDeterministicRandom } from "@/lib/utils";
+
+interface Template {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  imageUrl?: string;
+  workflowJson?: any;
+  createdAt?: string;
+  downloads?: number;
+  downloadCount?: number;
+  purchased?: boolean;
+  _rating?: number;
+  _reviewCount?: number;
+  _tags?: string[];
+}
+
+interface TemplateCardProps {
+  template: Template;
+  onPreview?: (template: Template) => void;
+}
+
+export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
+  const navigate = useNavigate();
+  
+  // Generate deterministic fake numbers if real data isn't available
+  const downloadCount = template.downloads || template.downloadCount || 
+    getDeterministicRandom(String(template.id) + "-downloads", 45, 850);
+  
+  const rating = template._rating || 
+    (4 + getDeterministicRandom(String(template.id) + "-rating", 1, 9) / 10);
+  
+  const reviewCount = template._reviewCount || 
+    getDeterministicRandom(String(template.id) + "-reviews", 8, 120);
+
+  const handlePreview = () => {
+    // Navigate to the template detail page
+    navigate(`/template/${template.id}`);
+  };
+
+  const handlePurchase = () => {
+    // Navigate to template detail page where they can purchase
+    navigate(`/template/${template.id}`);
+  };
+
+  return (
+    <Card className="h-full flex flex-col hover:shadow-lg transition-shadow duration-200">
+      {/* Template Image */}
+      <div className="relative overflow-hidden rounded-t-lg">
+        {template.imageUrl ? (
+          <img 
+            src={template.imageUrl} 
+            alt={template.name}
+            className="w-full h-48 object-cover transition-transform duration-300 ease-in-out hover:scale-110"
+          />
+        ) : (
+          <div className="w-full h-48 bg-gray-100 flex items-center justify-center transition-transform duration-300 ease-in-out hover:scale-110">
+            <div className="text-center text-gray-400">
+              <div className="text-4xl mb-2">📋</div>
+              <div className="text-sm">Workflow Preview</div>
+            </div>
+          </div>
+        )}
+        
+        {/* Price Badge */}
+        <div className="absolute top-3 right-3 z-10">
+          <Badge variant="secondary" className="bg-white/90 text-gray-800 font-semibold">
+            {template.price === 0 ? 'Free' : `${(template.price / 100).toFixed(2)}`}
+          </Badge>
+        </div>
+      </div>
+
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg font-semibold line-clamp-2 min-h-[3.5rem]">
+          {template.name}
+        </CardTitle>
+      </CardHeader>
+      
+      <CardContent className="flex-1 flex flex-col justify-between">
+        {/* Description */}
+        <p className="text-sm text-gray-600 line-clamp-3 mb-4">
+          {template.description}
+        </p>
+        
+        {/* Stats Row */}
+        <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+          <div className="flex items-center space-x-1">
+            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+            <span className="font-medium">{rating.toFixed(1)}</span>
+            {reviewCount > 0 && <span className="text-gray-400">({reviewCount})</span>}
+          </div>
+          <div className="flex items-center space-x-1">
+            <Download className="h-4 w-4" />
+            <span className="font-medium">{downloadCount.toLocaleString()}</span>
+          </div>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="space-y-2">
+          <Button 
+            className={`w-full ${
+              template.purchased 
+                ? "border-gray-300 text-gray-700 hover:bg-gray-50" 
+                : "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg"
+            }`}
+            variant={template.purchased ? "outline" : "default"}
+            onClick={handlePurchase}
+          >
+            {template.purchased ? (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Purchase JSON Template
+              </>
+            )}
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full border-gray-300 text-gray-700 hover:bg-gray-50"
+            onClick={handlePreview}
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            View Preview
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
