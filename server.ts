@@ -17,7 +17,7 @@ app.use(helmet()); // Security headers
 
 // ✅ Restrict CORS to your frontend domain
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || 'https://devhubconnect-production.up.railway.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -254,7 +254,40 @@ app.post('/api/ask-ai', aiLimiter, authenticateToken, async (req: AuthenticatedR
       });
     });
 
-    // ✅ Make AI request with user context
+    // Check if running in production environment
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    if (isProduction) {
+      // In production, return a helpful message about AI service unavailability
+      const aiResponse = `I understand you'd like AI assistance with your n8n template "${jsonFile.filename}". The AI chat feature is currently unavailable in production.
+
+However, I can still help you with your template! Here's what you can do:
+
+**For Template Setup:**
+1. **Import**: Copy your JSON template and import it into n8n
+2. **Credentials**: Set up API keys for the services your template uses
+3. **Test**: Run a test execution to verify everything works
+4. **Activate**: Turn on your workflow
+
+**Need specific help?** Try our community support or documentation at n8n.io for detailed setup guides.
+
+Would you like me to generate setup instructions based on your template instead?`;
+
+      // ✅ Log the response
+      await withRLSContext(userContext, async (db) => {
+        return db.insert(schema.aiResponses).values({
+          userId: req.userId!,
+          tenantId: req.tenantId,
+          requestId: req.body.requestId, // If you want to track request/response pairs
+          response: aiResponse.substring(0, 1000), // Truncate for storage
+          createdAt: new Date()
+        });
+      });
+
+      return res.json({ response: aiResponse });
+    }
+
+    // ✅ Make AI request with user context (development only)
     const ollamaResponse = await fetch('http://localhost:11434/api/chat', {
       method: 'POST',
       headers: {
@@ -305,7 +338,15 @@ Answer questions strictly about this JSON file's deployment or installation with
 
   } catch (error) {
     console.error('Error in AI request:', error);
-    res.status(500).json({ error: 'Failed to process AI request.' });
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    if (isProduction) {
+      res.json({ 
+        response: 'AI chat is currently unavailable. Please use the template setup instructions or visit our documentation for help with your n8n template deployment.' 
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to process AI request.' });
+    }
   }
 });
 

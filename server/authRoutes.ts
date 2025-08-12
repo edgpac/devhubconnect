@@ -23,12 +23,12 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // ✅ SECURE: Environment-specific URLs
 const BASE_URL = NODE_ENV === 'production' 
- ? 'https://devhubconnect.com' 
+ ? 'https://devhubconnect-production.up.railway.app' 
  : 'http://localhost:3000';
 
 const FRONTEND_URL = NODE_ENV === 'production' 
- ? 'https://devhubconnect.com' 
- : process.env.FRONTEND_URL || 'https://devhubconnect-production.up.railway.app';
+ ? 'https://devhubconnect-production.up.railway.app' 
+ : process.env.FRONTEND_URL || 'http://localhost:5173';
 
 const GITHUB_REDIRECT_URI = `${BASE_URL}/api/auth/github/callback`;
 const FRONTEND_SUCCESS_URI = `${FRONTEND_URL}/auth/success`;
@@ -445,7 +445,7 @@ authRouter.get('/github/callback', callbackLimiter, async (req: Request, res: Re
        sameSite: 'lax',
        maxAge: 24 * 60 * 60 * 1000, // 24 hours
        path: '/',
-       domain: NODE_ENV === 'production' ? '.devhubconnect.com' : undefined
+       domain: NODE_ENV === 'production' ? undefined : undefined
      });
      
      // 🔍 DEBUG: Log what we're setting
@@ -457,7 +457,7 @@ authRouter.get('/github/callback', callbackLimiter, async (req: Request, res: Re
        sameSite: 'lax',
        maxAge: 24 * 60 * 60 * 1000,
        path: '/',
-       domain: NODE_ENV === 'production' ? '.devhubconnect.com' : undefined
+       domain: NODE_ENV === 'production' ? undefined : undefined
      });
 
      // 🔍 DEBUG: Verify session was created in database

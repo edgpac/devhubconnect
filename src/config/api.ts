@@ -1,9 +1,9 @@
-// API Configuration for DevHubConnect
+//API Configuration for DevHubConnect
 // This centralizes all API URLs and handles environment switching
 
 const isDevelopment = import.meta.env.DEV;
 const productionBaseUrl = 'https://devhubconnect-production.up.railway.app';
-const developmentBaseUrl = 'http://localhost:3000';
+const developmentBaseUrl = 'https://devhubconnect-production.up.railway.app';
 
 // Use environment variable if available, otherwise fallback to environment detection
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 

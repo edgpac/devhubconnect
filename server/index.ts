@@ -229,7 +229,29 @@ Remember: Your goal is to ensure this template deploys successfully and works as
       { role: 'user', content: prompt }, // Add the current user prompt
     ];
 
-    // Make a POST request to your local Ollama server's chat API
+    // Check if running in production environment
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    if (isProduction) {
+      // In production, return a helpful message about AI service unavailability
+      return res.json({ 
+        response: `I understand you'd like AI assistance with your n8n template deployment. The AI chat feature is currently unavailable in production.
+
+However, I can still help you with your template! Here's what you can do:
+
+**For Template Setup:**
+1. **Import**: Copy your JSON template and import it into n8n
+2. **Credentials**: Set up API keys for the services your template uses
+3. **Test**: Run a test execution to verify everything works
+4. **Activate**: Turn on your workflow
+
+**Need specific help?** Try our community support or documentation at n8n.io for detailed setup guides.
+
+Would you like me to generate setup instructions based on your template instead?`
+      });
+    }
+
+    // Make a POST request to your local Ollama server's chat API (development only)
     const ollamaResponse = await fetch('http://localhost:11434/api/chat', {
       method: 'POST',
       headers: {
@@ -255,7 +277,15 @@ Remember: Your goal is to ensure this template deploys successfully and works as
 
   } catch (error) {
     console.error('Error connecting to Ollama service:', error);
-    res.status(500).json({ error: 'Failed to connect to the AI service. Please ensure Ollama is running and accessible.' });
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    if (isProduction) {
+      res.json({ 
+        response: 'AI chat is currently unavailable. Please use the template setup instructions or visit our documentation for help with your n8n template deployment.' 
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to connect to the AI service. Please ensure Ollama is running and accessible.' });
+    }
   }
 });
 
