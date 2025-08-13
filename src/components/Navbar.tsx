@@ -284,9 +284,9 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
                 </span>
               </div>
             ) : (
-              /* ✅ ADDED: Sign in section for non-authenticated users */
+              /* ✅ FIXED: Correct route paths - changed /auth to /login */
               <div data-auth="sign-in" className="flex items-center space-x-2">
-                <Link to="/auth">
+                <Link to="/login">
                   <Button 
                     variant="ghost"
                     data-auth="sign-in"
@@ -295,7 +295,7 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
                     Sign In
                   </Button>
                 </Link>
-                <Link to="/auth">
+                <Link to="/register">
                   <Button>Sign Up</Button>
                 </Link>
               </div>
