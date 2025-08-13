@@ -317,6 +317,151 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   }
 });
 
+// ✅ NEW: Stripe webhook endpoint to handle successful purchases
+app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    if (!stripe || !endpointSecret) {
+      console.error('Stripe or webhook secret not configured');
+      return res.status(400).send('Webhook configuration missing');
+    }
+
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    console.log('✅ Webhook signature verified:', event.type);
+  } catch (err) {
+    console.error('❌ Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  switch (event.type) {
+    case 'checkout.session.completed':
+      const session = event.data.object;
+      console.log('🎉 Payment successful for session:', session.id);
+      
+      try {
+        const templateId = session.metadata.templateId;
+        const customerEmail = session.customer_details.email;
+        const amountPaid = session.amount_total;
+        
+        console.log('💰 Recording purchase:', { templateId, customerEmail, amountPaid });
+
+        // Parse templateId as integer for database
+        let dbTemplateId = templateId;
+        const parsedId = parseInt(templateId, 10);
+        if (!isNaN(parsedId)) {
+          dbTemplateId = parsedId;
+        }
+
+        // Get template details
+        const templateResult = await pool.query('SELECT * FROM templates WHERE id = $1', [dbTemplateId]);
+        if (templateResult.rows.length === 0) {
+          console.error('❌ Template not found for purchase:', templateId);
+          break;
+        }
+
+        // Find or create user by email
+        let userId = null;
+        const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [customerEmail]);
+        
+        if (userResult.rows.length > 0) {
+          userId = userResult.rows[0].id;
+          console.log('👤 Found existing user:', customerEmail);
+        } else {
+          // Create user record for purchaser
+          const newUserResult = await pool.query(`
+            INSERT INTO users (id, email, username, created_at)
+            VALUES (gen_random_uuid(), $1, $2, NOW())
+            RETURNING id
+          `, [customerEmail, customerEmail.split('@')[0]]);
+          userId = newUserResult.rows[0].id;
+          console.log('👤 Created new user for purchase:', customerEmail);
+        }
+
+        // Record the purchase
+        const purchaseResult = await pool.query(`
+          INSERT INTO purchases (
+            id, user_id, template_id, stripe_session_id, 
+            amount_paid, currency, status, purchased_at
+          ) VALUES (
+            gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW()
+          ) RETURNING *
+        `, [
+          userId,
+          dbTemplateId,
+          session.id,
+          amountPaid,
+          session.currency,
+          'completed'
+        ]);
+
+        console.log('✅ Purchase recorded:', purchaseResult.rows[0].id);
+
+      } catch (error) {
+        console.error('❌ Error recording purchase:', error);
+      }
+      break;
+
+    default:
+      console.log(`Unhandled event type: ${event.type}`);
+  }
+
+  res.json({received: true});
+});
+
+// ✅ NEW: API endpoint to get user's purchased templates
+app.get('/api/user/purchases', async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    console.log('📋 Fetching purchases for user:', req.user.email);
+
+    const result = await pool.query(`
+      SELECT 
+        p.id as purchase_id,
+        p.purchased_at,
+        p.amount_paid,
+        p.status,
+        t.id as template_id,
+        t.name as template_name,
+        t.description as template_description,
+        t.image_url,
+        t.workflow_json
+      FROM purchases p
+      JOIN templates t ON p.template_id = t.id
+      WHERE p.user_id = $1
+      ORDER BY p.purchased_at DESC
+    `, [req.user.id]);
+
+    const purchases = result.rows.map(row => ({
+      purchaseId: row.purchase_id,
+      purchasedAt: row.purchased_at,
+      amountPaid: row.amount_paid,
+      status: row.status,
+      template: {
+        id: row.template_id,
+        name: row.template_name,
+        description: row.template_description,
+        imageUrl: row.image_url,
+        workflowJson: row.workflow_json,
+        purchased: true
+      }
+    }));
+
+    console.log('✅ Found', purchases.length, 'purchases for user');
+    res.json({ success: true, purchases });
+
+  } catch (error) {
+    console.error('Database error:', error);
+    res.status(500).json({ error: 'Failed to fetch purchases' });
+  }
+});
+
 // Catch-all handler for React routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
