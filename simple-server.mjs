@@ -48,16 +48,16 @@ passport.use(new GitHubStrategy({
       // User exists, return user
       return done(null, userQuery.rows[0]);
     } else {
-      // Create new user with UUID for id
+      // Create new user with UUID for id and fallbacks for missing data
       const newUserQuery = await pool.query(`
         INSERT INTO users (id, github_id, username, email, avatar_url, created_at)
         VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())
         RETURNING *
       `, [
         profile.id,
-        profile.username,
+        profile.username || `user_${profile.id}`,
         profile.emails?.[0]?.value || null,
-        profile.photos?.[0]?.value || null
+        profile.photos?.[0]?.value || 'https://github.com/identicons/default.png'
       ]);
       
       return done(null, newUserQuery.rows[0]);
