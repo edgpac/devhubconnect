@@ -155,6 +155,21 @@ app.get('/api/auth/user', (req, res) => {
   }
 });
 
+// Add missing session endpoint that frontend expects
+app.get('/api/auth/profile/session', (req, res) => {
+  if (req.user) {
+    res.json({ 
+      user: req.user,
+      authenticated: true 
+    });
+  } else {
+    res.status(401).json({ 
+      authenticated: false,
+      error: 'Not authenticated' 
+    });
+  }
+});
+
 app.post('/api/auth/logout', (req, res) => {
   req.logout((err) => {
     if (err) {
