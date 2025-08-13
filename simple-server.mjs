@@ -1,56 +1,49 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import pg from 'pg';
 
+const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Docker-safe middleware
-app.use(express.json({ limit: '10mb' }));
+// Database connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:atUkFxuogjjZODArPEnnbgUtSlZZswCe@ballast.proxy.rlwy.net:59419/railway',
+  ssl: process.env.DATABASE_USE_SSL === 'true' ? { rejectUnauthorized: false } : false
+});
 
-// Serve static files from dist directory
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// API endpoints
+// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/templates', (req, res) => {
-  res.json({ 
-    message: 'Templates endpoint working!', 
-    templates: [],
-    port: port,
-    env: process.env.NODE_ENV || 'development'
-  });
+// Templates API - now with real database query!
+app.get('/api/templates', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM templates ORDER BY id');
+    res.json({ 
+      templates: result.rows,
+      count: result.rows.length
+    });
+  } catch (error) {
+    console.error('Database error:', error);
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
 });
 
-// Serve React app for all other routes
+// Serve React app
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// Docker-safe server binding
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Server running on 0.0.0.0:${port}`);
-  console.log(`📅 Started at: ${new Date().toISOString()}`);
-  console.log(`🐳 Container ready!`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('👋 SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    console.log('✅ Process terminated');
-  });
-});
-
-process.on('SIGINT', () => {
-  console.log('👋 SIGINT received, shutting down gracefully');
-  server.close(() => {
-    console.log('✅ Process terminated');
-  });
+  console.log(`🐳 Container ready with database!`);
 });
