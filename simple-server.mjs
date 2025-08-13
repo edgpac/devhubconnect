@@ -15,6 +15,30 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// Function to parse workflow details
+function parseWorkflowDetails(workflowJson) {
+  try {
+    if (!workflowJson) return { steps: 0, apps: [] };
+    
+    const workflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
+    
+    // Count nodes as steps
+    const steps = workflow.nodes ? workflow.nodes.length : 0;
+    
+    // Extract app integrations from node types
+    const apps = workflow.nodes ? 
+      [...new Set(workflow.nodes
+        .map(node => node.type?.replace('n8n-nodes-base.', '') || 'Unknown')
+        .filter(type => type !== 'Unknown')
+      )] : [];
+    
+    return { steps, apps };
+  } catch (error) {
+    console.error('Error parsing workflow:', error);
+    return { steps: 0, apps: [] };
+  }
+}
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -25,8 +49,18 @@ app.get('/health', (req, res) => {
 app.get('/api/templates', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM templates ORDER BY id');
+    
+    // Add parsed workflow details to each template
+    const templatesWithDetails = result.rows.map(template => {
+      const workflowDetails = parseWorkflowDetails(template.workflow_json);
+      return {
+        ...template,
+        workflowDetails
+      };
+    });
+    
     res.json({ 
-      templates: result.rows,
+      templates: templatesWithDetails,
       count: result.rows.length
     });
   } catch (error) {
@@ -35,7 +69,6 @@ app.get('/api/templates', async (req, res) => {
   }
 });
 
-// Multiple endpoint formats to match frontend expectations
 app.get('/api/templates/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -45,10 +78,16 @@ app.get('/api/templates/:id', async (req, res) => {
       return res.status(404).json({ error: 'Template not found' });
     }
     
-    // Return in multiple formats to match frontend expectations
+    const template = result.rows[0];
+    const workflowDetails = parseWorkflowDetails(template.workflow_json);
+    
     res.json({ 
-      template: result.rows[0],  // Wrapped format
-      ...result.rows[0]          // Direct format
+      template: {
+        ...template,
+        workflowDetails
+      },
+      ...template,
+      workflowDetails
     });
   } catch (error) {
     console.error('Database error:', error);
@@ -56,7 +95,6 @@ app.get('/api/templates/:id', async (req, res) => {
   }
 });
 
-// Additional route patterns the frontend might be using
 app.get('/api/template/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -64,7 +102,16 @@ app.get('/api/template/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Template not found' });
     }
-    res.json({ template: result.rows[0] });
+    
+    const template = result.rows[0];
+    const workflowDetails = parseWorkflowDetails(template.workflow_json);
+    
+    res.json({ 
+      template: {
+        ...template,
+        workflowDetails
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch template' });
   }
