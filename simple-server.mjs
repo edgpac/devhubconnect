@@ -209,9 +209,25 @@ app.get('/api/templates', async (req, res) => {
 app.get('/api/templates/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('SELECT * FROM templates WHERE id = $1', [parseInt(id)]);
+    
+    // ✅ FIXED: Handle both string and numeric IDs
+    if (!id || id === 'undefined' || id === 'null') {
+      return res.status(400).json({ error: 'Invalid template ID provided' });
+    }
+    
+    // Try parsing as integer first, but fallback to string
+    let templateId = id;
+    const parsedId = parseInt(id, 10);
+    if (!isNaN(parsedId)) {
+      templateId = parsedId;
+    }
+    
+    console.log('🔍 Template ID requested:', id, 'Parsed as:', templateId);
+    
+    const result = await pool.query('SELECT * FROM templates WHERE id = $1', [templateId]);
     
     if (result.rows.length === 0) {
+      console.log('❌ Template not found for ID:', templateId);
       return res.status(404).json({ error: 'Template not found' });
     }
     
@@ -225,6 +241,8 @@ app.get('/api/templates/:id', async (req, res) => {
       steps: workflowDetails.steps,
       integratedApps: workflowDetails.apps
     };
+    
+    console.log('✅ Template found:', enhancedTemplate.name);
     
     res.json({ 
       template: enhancedTemplate,
@@ -245,13 +263,29 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     
     const { templateId } = req.body;
     
+    // ✅ FIXED: Validate template ID
+    if (!templateId || templateId === 'undefined' || templateId === 'null') {
+      return res.status(400).json({ error: 'Invalid template ID provided for checkout' });
+    }
+    
+    console.log('🛒 Creating checkout for template ID:', templateId);
+    
+    // Handle both string and numeric IDs
+    let dbTemplateId = templateId;
+    const parsedId = parseInt(templateId, 10);
+    if (!isNaN(parsedId)) {
+      dbTemplateId = parsedId;
+    }
+    
     // Get template details
-    const result = await pool.query('SELECT * FROM templates WHERE id = $1', [templateId]);
+    const result = await pool.query('SELECT * FROM templates WHERE id = $1', [dbTemplateId]);
     if (result.rows.length === 0) {
+      console.log('❌ Template not found for checkout:', dbTemplateId);
       return res.status(404).json({ error: 'Template not found' });
     }
     
     const template = result.rows[0];
+    console.log('✅ Creating checkout for:', template.name, 'Price:', template.price);
     
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
@@ -268,14 +302,15 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
         quantity: 1,
       }],
       mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL}/purchase/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL}/templates/${templateId}`,
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/purchase/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/template/${templateId}`,
       metadata: {
         templateId: templateId.toString(),
       },
     });
     
-    res.json({ sessionId: session.id });
+    console.log('✅ Stripe session created:', session.id);
+    res.json({ sessionId: session.id, url: session.url });
   } catch (error) {
     console.error('Stripe error:', error);
     res.status(500).json({ error: 'Failed to create checkout session' });
