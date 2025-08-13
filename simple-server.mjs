@@ -3,6 +3,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
 import Stripe from 'stripe';
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as GitHubStrategy } from 'passport-github2';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -17,6 +20,65 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
+});
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'fallback-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: false } // Set to true if using HTTPS in production
+}));
+
+// Passport configuration
+app.use(passport.initialize());
+app.use(passport.session());
+
+// GitHub OAuth Strategy
+passport.use(new GitHubStrategy({
+  clientID: process.env.GITHUB_CLIENT_ID,
+  clientSecret: process.env.GITHUB_CLIENT_SECRET,
+  callbackURL: `${process.env.FRONTEND_URL}/api/auth/github/callback`
+}, async (accessToken, refreshToken, profile, done) => {
+  try {
+    // Check if user exists
+    const userQuery = await pool.query('SELECT * FROM users WHERE github_id = $1', [profile.id]);
+    
+    if (userQuery.rows.length > 0) {
+      // User exists, return user
+      return done(null, userQuery.rows[0]);
+    } else {
+      // Create new user
+      const newUserQuery = await pool.query(`
+        INSERT INTO users (github_id, username, email, avatar_url, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        RETURNING *
+      `, [
+        profile.id,
+        profile.username,
+        profile.emails?.[0]?.value || null,
+        profile.photos?.[0]?.value || null
+      ]);
+      
+      return done(null, newUserQuery.rows[0]);
+    }
+  } catch (error) {
+    console.error('GitHub OAuth error:', error);
+    return done(error, null);
+  }
+}));
+
+passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    done(null, result.rows[0]);
+  } catch (error) {
+    done(error, null);
+  }
 });
 
 function convertFieldNames(template) {
@@ -69,10 +131,40 @@ function parseWorkflowDetails(workflowJson) {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
+// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
+// GitHub OAuth routes
+app.get('/api/auth/github', passport.authenticate('github', { scope: ['user:email'] }));
+
+app.get('/api/auth/github/callback', 
+  passport.authenticate('github', { failureRedirect: '/login' }),
+  (req, res) => {
+    // Successful authentication, redirect to frontend
+    res.redirect(`${process.env.FRONTEND_URL}/?auth=success`);
+  }
+);
+
+app.get('/api/auth/user', (req, res) => {
+  if (req.user) {
+    res.json({ user: req.user });
+  } else {
+    res.status(401).json({ error: 'Not authenticated' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    res.json({ message: 'Logged out successfully' });
+  });
+});
+
+// Template routes
 app.get('/api/templates', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM templates WHERE is_public = true ORDER BY id');
@@ -129,7 +221,7 @@ app.get('/api/templates/:id', async (req, res) => {
   }
 });
 
-// Add Stripe checkout endpoint
+// Stripe checkout endpoint
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
     const { templateId } = req.body;
@@ -171,6 +263,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   }
 });
 
+// Catch-all handler for React routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
