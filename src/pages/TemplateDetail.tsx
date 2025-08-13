@@ -49,14 +49,19 @@ const getIntegratedApps = (nodes: { type: string }[] | undefined): string[] => {
   return Array.from(new Set(appTypes));
 };
 
-async function fetchTemplateById(id: string | number | undefined): Promise<Template> {
-  if (!id) throw new Error("No template ID provided");
+async function fetchTemplateById(id: string | undefined): Promise<Template> {
+  if (!id || id.trim() === '') throw new Error("No template ID provided");
   
-  const response = await apiCall(API_ENDPOINTS.TEMPLATE_BY_ID(id.toString()), {
+  const response = await apiCall(API_ENDPOINTS.TEMPLATE_BY_ID(id), {
     method: 'GET',
   });
   
-  if (!response.ok) throw new Error("Failed to fetch template details.");
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`Template with ID "${id}" not found`);
+    }
+    throw new Error("Failed to fetch template details.");
+  }
   const data = await response.json();
   return data.template;
 }
@@ -67,10 +72,10 @@ export const TemplateDetail = () => {
   const [isPurchasing, setIsPurchasing] = useState(false);
   const { currentUser } = useAuth(); // ✅ ADDED: Get current user from AuthProvider
 
-  const templateId = parseInt(templateIdParam || '', 10);
+  const templateId = templateIdParam;
 
-  if (isNaN(templateId)) {
-    return <div className="text-center p-12 text-red-500">Error: Invalid template ID in URL.</div>;
+  if (!templateId || templateId.trim() === '') {
+    return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
   }
 
   const { data: template, isLoading, error } = useQuery<Template>({
