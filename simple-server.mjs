@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
+import Stripe from 'stripe';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -10,12 +11,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Initialize Stripe
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:atUkFxuogjjZODArPEnnbgUtSlZZswCe@ballast.proxy.rlwy.net:59419/railway',
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// Convert snake_case to camelCase for frontend compatibility
 function convertFieldNames(template) {
   return {
     id: template.id,
@@ -23,7 +26,7 @@ function convertFieldNames(template) {
     description: template.description,
     price: template.price,
     currency: template.currency,
-    imageUrl: template.image_url,  // ← Convert snake_case to camelCase
+    imageUrl: template.image_url,
     workflowJson: template.workflow_json,
     status: template.status,
     isPublic: template.is_public,
@@ -126,28 +129,45 @@ app.get('/api/templates/:id', async (req, res) => {
   }
 });
 
-app.get('/api/template/:id', async (req, res) => {
-  const { id } = req.params;
+// Add Stripe checkout endpoint
+app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM templates WHERE id = $1', [parseInt(id)]);
+    const { templateId } = req.body;
+    
+    // Get template details
+    const result = await pool.query('SELECT * FROM templates WHERE id = $1', [templateId]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Template not found' });
     }
     
     const template = result.rows[0];
-    const converted = convertFieldNames(template);
-    const workflowDetails = parseWorkflowDetails(template.workflow_json);
     
-    res.json({ 
-      template: {
-        ...converted,
-        workflowDetails,
-        steps: workflowDetails.steps,
-        integratedApps: workflowDetails.apps
-      }
+    // Create Stripe checkout session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: template.name,
+            description: template.description,
+          },
+          unit_amount: template.price, // Price in cents
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: `${process.env.FRONTEND_URL}/purchase/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/templates/${templateId}`,
+      metadata: {
+        templateId: templateId.toString(),
+      },
     });
+    
+    res.json({ sessionId: session.id });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch template' });
+    console.error('Stripe error:', error);
+    res.status(500).json({ error: 'Failed to create checkout session' });
   }
 });
 
