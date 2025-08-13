@@ -34,6 +34,176 @@
 
     <!-- Optional: Boost lazy loading with low fetch priority (no script required) -->
     <meta name="fetchpriority" content="low" />
+
+    <!-- Auth Checker Script -->
+    <script>
+      // Frontend Authentication Checker - Inline for immediate execution
+      class AuthChecker {
+        constructor() {
+          this.user = null;
+          this.isAuthenticated = false;
+          this.checkingAuth = false;
+        }
+
+        async checkAuthStatus() {
+          if (this.checkingAuth) return;
+          this.checkingAuth = true;
+
+          try {
+            console.log('🔍 Checking authentication status...');
+            
+            // Try the session endpoint first
+            const response = await fetch('/api/auth/profile/session', {
+              method: 'GET',
+              credentials: 'include', // Important: include cookies
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              console.log('✅ User authenticated:', data.user.username);
+              this.user = data.user;
+              this.isAuthenticated = true;
+              this.updateUI();
+              return true;
+            } else {
+              console.log('❌ User not authenticated');
+              this.user = null;
+              this.isAuthenticated = false;
+              this.updateUI();
+              return false;
+            }
+          } catch (error) {
+            console.error('🚨 Auth check error:', error);
+            this.user = null;
+            this.isAuthenticated = false;
+            this.updateUI();
+            return false;
+          } finally {
+            this.checkingAuth = false;
+          }
+        }
+
+        updateUI() {
+          // Update the sign in button or user info display
+          const signInButton = document.querySelector('[data-auth="sign-in"]');
+          const userInfo = document.querySelector('[data-auth="user-info"]');
+          const githubButton = document.querySelector('[data-auth="github"]');
+          
+          if (this.isAuthenticated && this.user) {
+            // Hide sign in button, show user info
+            if (signInButton) signInButton.style.display = 'none';
+            if (githubButton) githubButton.style.display = 'none';
+            if (userInfo) {
+              userInfo.style.display = 'block';
+              userInfo.innerHTML = `
+                <div class="flex items-center space-x-2">
+                  <img src="${this.user.avatar_url}" alt="${this.user.username}" class="w-8 h-8 rounded-full">
+                  <span>Welcome, ${this.user.username}!</span>
+                  <button onclick="authChecker.logout()" class="text-red-600 hover:text-red-800">Logout</button>
+                </div>
+              `;
+            }
+          } else {
+            // Show sign in button, hide user info
+            if (signInButton) signInButton.style.display = 'block';
+            if (githubButton) githubButton.style.display = 'block';
+            if (userInfo) userInfo.style.display = 'none';
+          }
+        }
+
+        async logout() {
+          try {
+            const response = await fetch('/api/auth/logout', {
+              method: 'POST',
+              credentials: 'include'
+            });
+            
+            if (response.ok) {
+              console.log('✅ Logged out successfully');
+              this.user = null;
+              this.isAuthenticated = false;
+              this.updateUI();
+              // Optionally redirect to home
+              window.location.href = '/';
+            }
+          } catch (error) {
+            console.error('🚨 Logout error:', error);
+          }
+        }
+
+        handleOAuthCallback() {
+          // Check if we're coming back from OAuth
+          const urlParams = new URLSearchParams(window.location.search);
+          const authStatus = urlParams.get('auth');
+          
+          if (authStatus === 'success') {
+            console.log('🎉 OAuth success detected! Checking session...');
+            // Clean the URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+            // Check auth status after a brief delay to ensure session is set
+            setTimeout(() => this.checkAuthStatus(), 1000);
+          } else if (authStatus === 'error') {
+            console.log('❌ OAuth error detected');
+            alert('Authentication failed. Please try again.');
+            // Clean the URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        }
+
+        initGitHubLogin() {
+          // Add click handler to GitHub login button
+          const githubButton = document.querySelector('[data-auth="github"]');
+          if (githubButton) {
+            githubButton.addEventListener('click', (e) => {
+              e.preventDefault();
+              console.log('🔄 Initiating GitHub OAuth...');
+              window.location.href = '/api/auth/github';
+            });
+          }
+        }
+
+        init() {
+          console.log('🚀 Initializing Auth Checker...');
+          
+          // Handle OAuth callback
+          this.handleOAuthCallback();
+          
+          // Check initial auth status
+          this.checkAuthStatus();
+          
+          // Initialize GitHub login (retry if button not found)
+          const tryInitGitHub = () => {
+            const githubButton = document.querySelector('[data-auth="github"]');
+            if (githubButton) {
+              this.initGitHubLogin();
+            } else {
+              // Retry after 1 second if button not found
+              setTimeout(tryInitGitHub, 1000);
+            }
+          };
+          tryInitGitHub();
+          
+          // Check auth status periodically (every 5 minutes)
+          setInterval(() => this.checkAuthStatus(), 5 * 60 * 1000);
+        }
+      }
+
+      // Create global instance
+      const authChecker = new AuthChecker();
+
+      // Auto-initialize when DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => authChecker.init());
+      } else {
+        authChecker.init();
+      }
+
+      // Export for use in other scripts
+      window.authChecker = authChecker;
+    </script>
   </head>
 
   <body>
