@@ -49,7 +49,7 @@ export const AuthPage = () => {
     });
     // Redirect to your backend's GitHub OAuth initiation route
     // This route on your backend will then redirect to GitHub's authorization page.
-    window.location.href = API_ENDPOINTS.AUTH_GITHUB;
+    window.location.href = "/api/auth/github";
   };
 
   return (
@@ -114,7 +114,12 @@ export const AuthPage = () => {
                       </Button>
                     </div>
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button 
+                    type="submit" 
+                    className="w-full" 
+                    disabled={isLoading}
+                    data-auth="sign-in"
+                  >
                     {isLoading ? "Signing in..." : "Sign In"}
                   </Button>
                 </form>
@@ -180,14 +185,26 @@ export const AuthPage = () => {
               </div>
             </div>
 
+            {/* ✅ FIXED: Added data-auth attributes for the GitHub button */}
             <Button
               variant="outline"
               className="w-full"
               onClick={handleGithubAuth}
+              data-auth="github"
+              data-auth-primary="sign-in"
             >
               <Github className="mr-2 h-4 w-4" />
               GitHub
             </Button>
+
+            {/* ✅ ADDED: User info display area (hidden by default) */}
+            <div 
+              data-auth="user-info" 
+              style={{ display: 'none' }} 
+              className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200"
+            >
+              {/* User info will be populated by the auth checker */}
+            </div>
 
             <div className="text-center mt-6 text-sm text-gray-600">
               <Link to="/" className="hover:text-blue-600 transition-colors">
