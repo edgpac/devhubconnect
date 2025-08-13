@@ -1,4 +1,9 @@
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -6,13 +11,12 @@ const port = process.env.PORT || 3000;
 // Docker-safe middleware
 app.use(express.json({ limit: '10mb' }));
 
-// Health check endpoint
+// Serve static files from dist directory
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// API endpoints
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-app.get('/', (req, res) => {
-  res.send(`🚀 Backend is working! Port: ${port}, Time: ${new Date().toISOString()}`);
 });
 
 app.get('/api/templates', (req, res) => {
@@ -22,6 +26,11 @@ app.get('/api/templates', (req, res) => {
     port: port,
     env: process.env.NODE_ENV || 'development'
   });
+});
+
+// Serve React app for all other routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 // Docker-safe server binding
