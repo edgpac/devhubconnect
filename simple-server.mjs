@@ -229,7 +229,7 @@ function parseWorkflowDetails(workflowJson) {
     return { steps, apps: apps.slice(0, 10), hasWorkflow: true };
   } catch (error) {
     console.error('Error parsing workflow:', error);
-    return { steps: 0, apps: [], hasWorkflow: false };
+    return { steps, apps: [], hasWorkflow: false };
   }
 }
 
@@ -837,8 +837,7 @@ app.get('/api/user/purchases', async (req, res) => {
       for (const email of possibleEmails) {
         const emailVariationResult = await pool.query(`
           SELECT 
-            p.id as purchase_id,
-            p.purchased_at,
+            p.id as purchase_id,p.purchased_at,
             p.amount_paid,
             p.status,
             t.id as template_id,
@@ -885,15 +884,159 @@ app.get('/api/user/purchases', async (req, res) => {
   }
 });
 
-// Catch-all handler for React routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// ✅ NEW: Chat endpoint for AI assistance (missing from simple-server.mjs)
+app.post('/api/ask-ai', async (req, res) => {
+  const { prompt, history, templateContext } = req.body;
+
+  if (!prompt) {
+    return res.status(400).json({ error: 'Prompt is required in the request body.' });
+  }
+
+  try {
+    console.log('🗨️ Chat request received:', { prompt: prompt.substring(0, 100) + '...' });
+
+    // Check if valid JSON template is provided in the conversation
+    const latestUserMessage = history?.slice(-1)[0]?.content || '';
+    let jsonProvidedInThisTurn = false;
+    try {
+      const parsed = JSON.parse(latestUserMessage);
+      if (parsed && typeof parsed === 'object' && parsed.nodes && Array.isArray(parsed.nodes)) {
+        jsonProvidedInThisTurn = true;
+      }
+    } catch (e) {
+      // Not JSON, continue with normal chat
+    }
+
+    // If JSON template was provided, return setup guidance
+    if (jsonProvidedInThisTurn) {
+      return res.json({
+        response: `✅ Template validated successfully! I'm your DevHubConnect Setup Assistant, ready to guide you through the deployment process.
+
+To get started, I need to understand your environment:
+
+1. **What type of n8n setup are you using?**
+   • n8n Cloud (cloud.n8n.io)
+   • Self-hosted Docker installation
+   • Local development installation
+   • n8n Desktop app
+
+2. **What's your experience level with n8n?**
+   • Beginner (new to n8n)
+   • Intermediate (familiar with basic workflows)
+   • Advanced (experienced with complex automations)
+
+Once I know your setup, I'll provide specific step-by-step instructions for deploying this template successfully.`
+      });
+    }
+
+    // Check for prompt disclosure attempts
+    const promptDisclosurePattern = /prompt.*(runs|controls|used|that.*runs.*this.*chat)/i;
+    if (promptDisclosurePattern.test(prompt)) {
+      return res.json({ 
+        response: "I cannot answer questions about my instructions. I'm here to help with your uploaded .json file only." 
+      });
+    }
+
+    // Handle specific setup questions
+    let response = '';
+    
+    if (prompt.toLowerCase().includes('credentials') || prompt.toLowerCase().includes('switch')) {
+      response = `🔧 **Switch Node Configuration Help**
+      
+The Switch node in n8n is for conditional routing and doesn't require external credentials:
+
+**Setup Steps:**
+1. **Open Switch Node**: Click the Switch node in your workflow
+2. **Choose Mode**: Select "Expression" or "Rules" mode
+3. **Add Conditions**: 
+   - Expression mode: Write JavaScript like \`{{ $json.price > 100 }}\`
+   - Rules mode: Set up condition-based rules with operators
+4. **Add Outputs**: Click "Add Routing Rule" for multiple paths
+5. **Label Outputs**: Name them clearly (e.g., "Buy Signal", "Sell Signal")
+6. **Test**: Use sample data to verify routing works
+
+**Common Trading Conditions:**
+- Price-based: \`{{ parseFloat($json.price) > threshold }}\`
+- Signal-based: \`{{ $json.signal === 'buy' }}\`
+- Time-based: \`{{ new Date().getHours() >= 9 }}\`
+
+What specific condition are you trying to set up?`;
+      
+    } else if (prompt.toLowerCase().includes('webhook') || prompt.toLowerCase().includes('api')) {
+      response = `🔗 **Webhook & API Configuration**
+
+For webhook setup in your trading agent:
+
+**1. Webhook Trigger Node:**
+- Set HTTP method (POST/GET)
+- Configure endpoint URL
+- Set up authentication if needed
+
+**2. API Request Nodes:**
+- Add proper headers (Authorization, Content-Type)
+- Configure request body for POST requests
+- Set up error handling
+
+**3. Testing:**
+- Use n8n's test webhook feature
+- Check endpoint connectivity
+- Validate response data structure
+
+Need help with a specific API integration or webhook configuration?`;
+      
+    } else if (prompt.toLowerCase().includes('activate') || prompt.toLowerCase().includes('deploy')) {
+      response = `⚡ **Template Activation & Deployment**
+
+**Step-by-step activation:**
+1. **Import Complete**: Ensure template is fully imported
+2. **Credentials Set**: All nodes have proper credentials configured
+3. **Test Execution**: Run manual test first
+4. **Check Connections**: Verify all API connections work
+5. **Activate Workflow**: Toggle the "Active" switch in n8n
+6. **Monitor Logs**: Watch execution log for any errors
+
+**Common Issues:**
+- Missing API keys → Add credentials to each service node
+- Webhook not receiving data → Check endpoint URL and method
+- Execution errors → Review node configuration and test data
+
+What specific step are you having trouble with?`;
+      
+    } else {
+      response = `💬 **DevHubConnect Setup Assistant**
+
+I can help you with your n8n template deployment:
+
+**🔧 Configuration Help:**
+- Switch node setup and conditional routing
+- Credential configuration for service nodes
+- API key setup and authentication
+
+**⚙️ Technical Support:**
+- Webhook configuration and testing
+- Node connection and data flow
+- Error troubleshooting and debugging
+
+**📊 Template-Specific Guidance:**
+- AI trading agent setup
+- Workflow activation and monitoring
+- Performance optimization
+
+What specific aspect of your template setup do you need help with?`;
+    }
+
+    console.log('✅ Chat response generated successfully');
+    res.json({ response });
+
+  } catch (error) {
+    console.error('❌ Chat error:', error);
+    res.status(500).json({ 
+      error: 'Chat service temporarily unavailable. Please try again.' 
+    });
+  }
 });
 
-const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`✅ Server running on 0.0.0.0:${port}`);
-});
-// ✅ ADD THIS ENDPOINT to your simple-server.mjs
+// ✅ IMPROVED: Enhanced generate-setup-instructions with better error handling
 app.post('/api/generate-setup-instructions', async (req, res) => {
   const { workflow, templateId, purchaseId } = req.body;
 
@@ -902,6 +1045,8 @@ app.post('/api/generate-setup-instructions', async (req, res) => {
   }
 
   try {
+    console.log('📋 Generating setup instructions for:', templateId);
+    
     // Analyze the workflow to generate specific instructions
     const nodeTypes = workflow.nodes?.map((node) => node.type).filter(Boolean) || [];
     const uniqueServices = [...new Set(nodeTypes)].slice(0, 5);
@@ -914,11 +1059,14 @@ app.post('/api/generate-setup-instructions', async (req, res) => {
 
 **Step 2: Import Template**
 - In n8n, go to "Workflows" → "Import from JSON"
-- Paste the template JSON you uploaded
+- Paste the template JSON you downloaded
 - Click "Import"
 
 **Step 3: Configure Credentials**
-${uniqueServices.map(service => `• Set up credentials for ${service.replace('n8n-nodes-base.', '')}`).join('\n')}
+${uniqueServices.map(service => {
+  const cleanService = service.replace('n8n-nodes-base.', '');
+  return `• Set up credentials for ${cleanService}`;
+}).join('\n')}
 - Test all connections to ensure they work
 
 **Step 4: Activate Workflow**
@@ -928,12 +1076,31 @@ ${uniqueServices.map(service => `• Set up credentials for ${service.replace('n
 **Template contains:** ${workflow.nodes?.length || 0} nodes
 **Services detected:** ${uniqueServices.length > 0 ? uniqueServices.map(s => s.replace('n8n-nodes-base.', '')).join(', ') : 'None'}
 
-Need help with any specific step? Ask me about credential setup, webhook configuration, or troubleshooting!`;
+💬 **Need specific help?** Ask me about:
+- Switch node configuration and conditional routing
+- Credential setup for specific services  
+- Webhook configuration and testing
+- Troubleshooting execution errors
 
-    res.json({ instructions });
+You can now ask me questions about this template or request specific help with the setup process.`;
+
+    console.log('✅ Setup instructions generated successfully');
+    res.json({ 
+      success: true,
+      instructions: instructions 
+    });
 
   } catch (error) {
-    console.error('Error generating setup instructions:', error);
+    console.error('❌ Error generating setup instructions:', error);
     res.status(500).json({ error: 'Failed to generate setup instructions.' });
   }
+});
+
+// Catch-all handler for React routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log(`✅ Server running on 0.0.0.0:${port}`);
 });
