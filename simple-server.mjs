@@ -536,7 +536,7 @@ app.get('/api/recommendations/preferences', async (req, res) => {
     }
   } catch (error) {
     console.error('Error fetching preferences:', error);
-    res.status(500).json comportamenti: { error: 'Failed to fetch preferences' });
+    res.status(500).json({ error: 'Failed to fetch preferences' });
   }
 });
 
