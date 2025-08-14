@@ -883,304 +883,6 @@ app.get('/api/user/purchases', async (req, res) => {
   }
 });
 
-// ✅ STRUCTURED PROMPT SYSTEM - Using Your Working Approach
-app.post('/api/ask-ai', async (req, res) => {
-  const { prompt, history, templateContext } = req.body;
-
-  if (!prompt) {
-    return res.status(400).json({ error: 'Prompt is required in the request body.' });
-  }
-
-  try {
-    console.log('🗨️ Structured Chat request:', { 
-      prompt: prompt.substring(0, 100) + '...',
-      templateId: templateContext?.templateId || 'none'
-    });
-
-    // Check if valid JSON template is provided
-    const latestUserMessage = history?.slice(-1)[0]?.content || '';
-    let jsonProvidedInThisTurn = false;
-    let workflowJSON = null;
-    
-    try {
-      const parsed = JSON.parse(latestUserMessage);
-      if (parsed && typeof parsed === 'object' && parsed.nodes && Array.isArray(parsed.nodes)) {
-        jsonProvidedInThisTurn = true;
-        workflowJSON = parsed;
-      }
-    } catch (e) {
-      // Not JSON, continue
-    }
-
-    if (jsonProvidedInThisTurn) {
-      const response = `✅ Template validated successfully! I'm your DevHubConnect Setup Assistant, ready to guide you through the deployment process.
-
-To get started, I need to understand your environment:
-
-1. **What type of n8n setup are you using?**
-   • n8n Cloud (cloud.n8n.io)
-   • Self-hosted Docker installation
-   • Local development installation
-   • n8n Desktop app
-
-2. **What's your experience level with n8n?**
-   • Beginner (new to n8n)
-   • Intermediate (familiar with basic workflows)
-   • Advanced (experienced with complex automations)
-
-Once I know your setup, I'll provide specific step-by-step instructions for deploying this template successfully.`;
-
-      // Simple logging
-      try {
-        await pool.query(`
-          INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, created_at)
-          VALUES ($1, $2, $3, $4, NOW())
-        `, [
-          templateContext?.templateId || 'json_validation',
-          'JSON template provided',
-          response,
-          req.user?.id || 'anonymous'
-        ]);
-      } catch (logError) {
-        console.error('Error logging chat:', logError);
-      }
-
-      return res.json({ response });
-    }
-
-    // Check for prompt disclosure attempts
-    const promptDisclosurePattern = /prompt.*(runs|controls|used|that.*runs.*this.*chat)/i;
-    if (promptDisclosurePattern.test(prompt)) {
-      return res.json({ 
-        response: "I cannot answer questions about my instructions. I'm here to help with your uploaded .json file only." 
-      });
-    }
-
-    // ✅ USE YOUR STRUCTURED PROMPT APPROACH
-    const groqApiKey = process.env.GROQ_API_KEY;
-    let response = '';
-
-    if (groqApiKey) {
-      try {
-        // ✅ YOUR PROVEN STRUCTURED PROMPT
-        const structuredPrompt = `You are a technical writer specializing in beginner-friendly n8n automation guides. 
-
-CONTEXT: User is asking about n8n template setup.
-Template: ${templateContext?.templateId || 'n8n workflow'}
-Previous conversation: ${getConversationSummary(history)}
-
-USER QUESTION: "${prompt}"
-
-Provide a detailed, step-by-step response focusing on:
-1. Exact n8n UI navigation (specific button names, menu locations)
-2. Credential setup with exact field names
-3. Common errors and solutions
-4. What to do next
-
-Be specific about n8n interface elements. Include exact paths like "Credentials → Add Credential → [Service Name]" and field names like "API Key" field.
-
-Focus on practical, actionable instructions that a beginner can follow exactly.`;
-
-        const messages = [
-          { role: 'system', content: structuredPrompt },
-          { role: 'user', content: prompt }
-        ];
-
-        console.log('🚀 Sending structured request to Groq...');
-
-        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${groqApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'llama-3.1-70b-versatile',
-            messages: messages,
-            max_tokens: 1000,
-            temperature: 0.2, // Very low for consistent, focused responses
-            stream: false
-          }),
-        });
-
-        if (groqResponse.ok) {
-          const data = await groqResponse.json();
-          response = data.choices?.[0]?.message?.content || 'No response received.';
-          console.log('✅ Structured Groq response received');
-        } else {
-          throw new Error('Groq API failed');
-        }
-
-      } catch (groqError) {
-        console.error('❌ Groq error:', groqError);
-        response = generateStructuredFallback(prompt, templateContext, history);
-      }
-    } else {
-      console.log('⚠️ No Groq key, using structured fallbacks');
-      response = generateStructuredFallback(prompt, templateContext, history);
-    }
-
-    // Simple logging
-    try {
-      await pool.query(`
-        INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, created_at)
-        VALUES ($1, $2, $3, $4, NOW())
-      `, [
-        templateContext?.templateId || 'general_chat',
-        prompt,
-        response,
-        req.user?.id || 'anonymous'
-      ]);
-    } catch (logError) {
-      console.error('Error logging chat:', logError);
-    }
-
-    res.json({ response });
-
-  } catch (error) {
-    console.error('❌ Structured chat error:', error);
-    res.json({ 
-      response: `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`
-    });
-  }
-});
-
-// ✅ GET CONVERSATION SUMMARY
-function getConversationSummary(history) {
-  if (!history || history.length === 0) return 'New conversation';
-  
-  const recentMessages = history.slice(-3).filter(msg => msg.role === 'user');
-  if (recentMessages.length === 0) return 'New conversation';
-  
-  const lastQuestions = recentMessages.map(msg => msg.content.substring(0, 50)).join(' | ');
-  return `Recent questions: ${lastQuestions}`;
-}
-
-// ✅ STRUCTURED FALLBACK RESPONSES
-function generateStructuredFallback(prompt, templateContext, history) {
-  const userPrompt = prompt.toLowerCase();
-  const templateId = templateContext?.templateId || '';
-  const conversationSummary = getConversationSummary(history);
-  const isAboutCredentials = conversationSummary.includes('credential') || conversationSummary.includes('openai') || conversationSummary.includes('api');
-
-  // Specific credential setup responses
-  if (userPrompt.includes('add credential') || userPrompt.includes('how do i add') || 
-      (userPrompt.includes('credential') && isAboutCredentials)) {
-    return `🔑 **How to Add Credentials in n8n**
-
-**Method 1: From the Credentials Menu**
-1. **Click "Credentials"** in the main n8n menu (left sidebar)
-2. **Click "+ Add Credential"** button (top right)
-3. **Search for the service** you need (e.g., "OpenAI")
-4. **Click on the service** from the search results
-5. **Fill in the required fields** (API Key, tokens, etc.)
-6. **Click "Test"** to verify the connection
-7. **Click "Save"** to store the credential
-
-**Method 2: From a Node**
-1. **Click on your node** that needs credentials
-2. **Find the "Credential" dropdown** (usually at the top)
-3. **Click the gear ⚙️ icon** next to the dropdown
-4. **Select "Create New"**
-5. **Choose the credential type** (e.g., OpenAI)
-6. **Fill in the fields and save**
-
-**For OpenAI specifically:**
-- Credential type: **"OpenAI"**
-- Field name: **"API Key"**
-- Value: Your \`sk-\` key from platform.openai.com
-
-**Next Step:** Once saved, select the credential from the dropdown in your node.
-
-Are you trying to add OpenAI credentials, or a different service?`;
-  }
-
-  // OpenAI specific setup
-  if (userPrompt.includes('openai') || userPrompt.includes('langchain') || userPrompt.includes('@n8n/n8n-nodes-langchain')) {
-    return `🔑 **Complete OpenAI Credential Setup Guide**
-
-**Step 1: Get Your API Key**
-1. Go to: **https://platform.openai.com/api-keys**
-2. Sign in to your OpenAI account
-3. Click **"+ Create new secret key"**
-4. **Copy the entire key** (starts with \`sk-\`)
-5. ⚠️ **Save it now** - you can't see it again!
-
-**Step 2: Add to n8n (Choose ONE method)**
-
-**Method A - Via Credentials Menu:**
-1. n8n sidebar → **"Credentials"**
-2. **"+ Add Credential"** button
-3. Search: **"OpenAI"**
-4. Paste your \`sk-\` key in **"API Key"** field
-5. **"Test"** → **"Save"**
-
-**Method B - Via Your Node:**
-1. Click your **@n8n/n8n-nodes-langchain.openAi** node
-2. **Credential dropdown** → **Gear ⚙️** → **"Create New"**
-3. Select **"OpenAI"** credential type
-4. Paste key → **Test** → **Save**
-
-**Step 3: Connect to Node**
-1. In your node, **select the credential** from dropdown
-2. **Test your workflow** with a simple message
-
-**Troubleshooting:**
-❌ "Invalid API key" → Key must start with \`sk-\`, no spaces
-❌ "Rate limit exceeded" → Add billing at platform.openai.com
-❌ "Credential not found" → Make sure you saved it properly
-
-**Current Status:** Do you have your API key, or do you need help getting one?`;
-  }
-
-  // Slack setup
-  if (userPrompt.includes('slack')) {
-    return `🔧 **Slack Credential Setup**
-
-**Step 1: Create Slack App**
-1. Go to: **https://api.slack.com/apps**
-2. **"Create New App"** → **"From scratch"**
-3. Name: **"n8n Bot"** (or your choice)
-4. Select your workspace
-
-**Step 2: Get Bot Token**
-1. Go to **"OAuth & Permissions"**
-2. Add **Bot Token Scopes**:
-   - \`channels:read\`
-   - \`chat:write\`
-   - \`im:read\`, \`im:write\`
-3. **"Install to Workspace"**
-4. **Copy "Bot User OAuth Token"** (starts with \`xoxb-\`)
-
-**Step 3: Add to n8n**
-1. Credentials → **"Slack OAuth2 API"**
-2. Paste your \`xoxb-\` token
-3. Test → Save
-
-Which step do you need help with?`;
-  }
-
-  // Generic help with better structure
-  return `💬 **n8n Setup Assistant**
-
-I'm here to help with your **${templateId}** template setup!
-
-**What I can help with:**
-🔑 **Adding Credentials** - Step-by-step for any n8n service
-🔧 **Node Configuration** - Specific UI navigation and setup
-⚡ **Workflow Activation** - Getting your template running
-🛠️ **Troubleshooting** - Fixing common errors
-
-**For specific help, try asking:**
-- "How do I add OpenAI credentials?"
-- "Where do I paste my API key?"
-- "How do I configure my Slack node?"
-- "Why won't my workflow activate?"
-
-**Current Template:** ${templateId}
-**What specific part of the setup do you need help with?**`;
-}
-
 // ✅ ENHANCED: Generate setup instructions using structured approach
 app.post('/api/generate-setup-instructions', async (req, res) => {
   const { workflow, templateId, purchaseId } = req.body;
@@ -1191,8 +893,8 @@ app.post('/api/generate-setup-instructions', async (req, res) => {
 
   try {
     console.log('📋 Generating structured setup instructions for:', templateId);
+    console.log('🔑 Groq API Key available:', !!process.env.GROQ_API_KEY);
     
-    // ✅ USE YOUR STRUCTURED PROMPT FOR SETUP INSTRUCTIONS
     const groqApiKey = process.env.GROQ_API_KEY;
     
     if (groqApiKey) {
@@ -1205,7 +907,12 @@ Respond with ONLY this JSON structure:
   "description": "Paragraph 1: Workflow purpose and key nodes.\\n\\nParagraph 2: Setup requirements and configuration.\\n\\nParagraph 3: Testing and deployment steps. Use exactly 400 words total. Include key nodes relevant to the workflow and the specific service. Provide detailed beginner instructions: include n8n installation steps, credential acquisition for the service, and error-handling examples. Focus on webhook setup, API credential configuration, and output validation. Use standard n8n node names and focus on their functions."
 }
 
-JSON: ${JSON.stringify(workflow)}`;
+JSON: ${JSON.stringify(workflow).substring(0, 8000)}`; // Limit JSON size
+
+        console.log('🚀 Sending request to Groq API...');
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
 
         const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
@@ -1220,72 +927,159 @@ JSON: ${JSON.stringify(workflow)}`;
             temperature: 0.1,
             stream: false
           }),
+          signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
+        console.log('📡 Groq response status:', groqResponse.status);
 
         if (groqResponse.ok) {
           const data = await groqResponse.json();
           const aiResponse = data.choices?.[0]?.message?.content || '';
+          console.log('✅ Groq response received, length:', aiResponse.length);
           
           try {
             const parsedResponse = JSON.parse(aiResponse);
+            console.log('✅ Successfully parsed AI response');
             return res.json({ 
               success: true,
-              instructions: `# ${parsedResponse.name}\n\n${parsedResponse.description}`
+              instructions: `# ${parsedResponse.name}\n\n${parsedResponse.description}`,
+              source: 'groq_ai'
             });
           } catch (parseError) {
-            console.error('Failed to parse AI response as JSON:', parseError);
-            // Fall back to basic instructions
+            console.error('❌ Failed to parse AI response as JSON:', parseError);
+            console.log('Raw AI response:', aiResponse.substring(0, 200));
+            // Fall through to structured fallback
           }
+        } else {
+          const errorText = await groqResponse.text();
+          console.error('❌ Groq API error:', groqResponse.status, errorText);
+          // Fall through to structured fallback
         }
       } catch (groqError) {
-        console.error('Groq error in setup instructions:', groqError);
+        console.error('❌ Groq fetch error:', groqError.message);
+        // Fall through to structured fallback
       }
+    } else {
+      console.log('⚠️ No Groq API key found, using structured fallback');
     }
     
-    // Fallback to basic instructions
+    // ✅ ENHANCED STRUCTURED FALLBACK
+    console.log('📝 Generating structured fallback instructions...');
+    
     const nodeTypes = workflow.nodes?.map((node) => node.type).filter(Boolean) || [];
-    const uniqueServices = [...new Set(nodeTypes)].slice(0, 5);
+    const uniqueServices = [...new Set(nodeTypes)]
+      .map(service => service.replace('n8n-nodes-base.', ''))
+      .filter(service => !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(service))
+      .slice(0, 5);
 
-    const instructions = `🔧 **Setup Instructions for ${templateId}**
+    // Detect workflow type based on nodes
+    let workflowType = 'General Automation';
+    let specificInstructions = '';
 
-**Step 1: Environment Setup**
-- Ensure you have n8n installed and running
-- Access your n8n instance (Cloud or self-hosted)
+    if (nodeTypes.some(node => node.includes('OpenAi') || node.includes('langchain'))) {
+      workflowType = 'AI-Powered Automation';
+      specificInstructions = `
+**🤖 AI Setup Requirements:**
+1. **OpenAI Account:** Get API key from platform.openai.com
+2. **n8n Credentials:** Add OpenAI credential with your \`sk-\` key
+3. **Test Connection:** Verify API calls work before activation
 
-**Step 2: Import Template**
-- In n8n, go to "Workflows" → "Import from JSON"
-- Paste the template JSON you downloaded
-- Click "Import"
+**Common AI Node Configuration:**
+- **Model:** Use \`gpt-3.5-turbo\` or \`gpt-4\` 
+- **Max Tokens:** Set appropriate limits (e.g., 1000)
+- **Temperature:** 0.7 for creative, 0.1 for factual responses`;
+    } else if (nodeTypes.some(node => node.includes('Webhook'))) {
+      workflowType = 'Webhook-Based Integration';
+      specificInstructions = `
+**🔗 Webhook Setup Requirements:**
+1. **Webhook URL:** Copy from your n8n Webhook node
+2. **External Service:** Configure webhook in source system
+3. **Test Webhook:** Send test payload to verify connection
 
-**Step 3: Configure Credentials**
-${uniqueServices.map(service => {
-  const cleanService = service.replace('n8n-nodes-base.', '');
-  return `• Set up credentials for ${cleanService}`;
-}).join('\n')}
-- Test all connections to ensure they work
+**Webhook Security:**
+- Use authentication headers when possible
+- Validate incoming payload structure
+- Set up proper error handling`;
+    } else if (nodeTypes.some(node => node.includes('Slack') || node.includes('Discord'))) {
+      workflowType = 'Communication Automation';
+      specificInstructions = `
+**💬 Chat Integration Setup:**
+1. **Bot Creation:** Create bot in your platform (Slack/Discord)
+2. **Permissions:** Grant necessary scopes (read, write, manage)
+3. **Token Setup:** Add bot token to n8n credentials
+4. **Channel Access:** Invite bot to target channels`;
+    }
 
-**Step 4: Activate Workflow**
-- Click the "Activate" toggle in n8n
-- Monitor the execution log for any errors
+    const instructions = `# ${templateId.replace(/[_-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
 
-**Template contains:** ${workflow.nodes?.length || 0} nodes
-**Services detected:** ${uniqueServices.length > 0 ? uniqueServices.map(s => s.replace('n8n-nodes-base.', '')).join(', ') : 'None'}
+## 🎯 Workflow Overview
 
-💬 **Need specific help?** Ask me about:
-- "How do I add credentials in n8n?"
-- "Where do I paste my API key?"
-- "How do I configure [specific service]?"
+This **${workflowType}** template contains **${workflow.nodes?.length || 0} nodes** designed to streamline your automation processes. The workflow integrates with **${uniqueServices.length > 0 ? uniqueServices.join(', ') : 'core n8n functionality'}** to deliver powerful automation capabilities.
 
-I'll give you exact n8n UI steps for any question!`;
+${specificInstructions}
+
+## 🚀 Quick Setup Guide
+
+**Step 1: Import Template**
+1. Open your n8n instance (cloud.n8n.io or self-hosted)
+2. Navigate to **"Workflows"** → **"Add workflow"** → **"Import from JSON"**
+3. Paste your downloaded template JSON
+4. Click **"Import"** to create the workflow
+
+**Step 2: Configure Services**
+${uniqueServices.length > 0 ? uniqueServices.map(service => {
+  return `• **${service}:** Go to Credentials → Add → "${service}" → Configure API connection`;
+}).join('\n') : '• Review each node for any required configuration'}
+
+**Step 3: Test & Activate**
+1. **Manual Test:** Click **"Test workflow"** button
+2. **Check Executions:** Review execution log for errors
+3. **Activate:** Toggle the **"Active"** switch when ready
+4. **Monitor:** Watch the execution history for successful runs
+
+## 🔧 Troubleshooting
+
+**Common Issues:**
+- **❌ Credential errors:** Verify API keys and permissions
+- **❌ Node failures:** Check required fields are filled
+- **❌ Webhook timeouts:** Ensure external services can reach n8n
+- **❌ Rate limits:** Add delays between API calls if needed
+
+## 💬 Need Help?
+
+Ask me specific questions like:
+- *"How do I add OpenAI credentials?"*
+- *"Where do I find my webhook URL?"*
+- *"How do I test this workflow?"*
+
+I'll provide exact n8n UI navigation steps for any setup question!
+
+---
+**Template ID:** ${templateId}  
+**Nodes:** ${workflow.nodes?.length || 0}  
+**Services:** ${uniqueServices.join(', ') || 'Core n8n'}`;
+
+    console.log('✅ Structured fallback instructions generated');
 
     res.json({ 
       success: true,
-      instructions: instructions 
+      instructions: instructions,
+      source: 'structured_fallback',
+      metadata: {
+        nodeCount: workflow.nodes?.length || 0,
+        services: uniqueServices,
+        workflowType: workflowType
+      }
     });
 
   } catch (error) {
     console.error('❌ Error generating setup instructions:', error);
-    res.status(500).json({ error: 'Failed to generate setup instructions.' });
+    res.status(500).json({ 
+      error: 'Failed to generate setup instructions.',
+      details: error.message,
+      fallback: true
+    });
   }
 });
 
@@ -1294,7 +1088,10 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// ✅ SERVER STARTUP
+// ✅ SERVER STARTUP - The part you were looking for!
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Server running on 0.0.0.0:${port}`);
+  console.log(`🔑 Groq API Key configured: ${!!process.env.GROQ_API_KEY}`);
+  console.log(`💳 Stripe configured: ${!!process.env.STRIPE_SECRET_KEY}`);
+  console.log(`🗄️ Database URL configured: ${!!process.env.DATABASE_URL}`);
 });
