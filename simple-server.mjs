@@ -1132,3 +1132,71 @@ What would you like help with?`;
     });
   }
 });
+// ✅ IMPROVED: Enhanced generate-setup-instructions with better error handling
+app.post('/api/generate-setup-instructions', async (req, res) => {
+  const { workflow, templateId, purchaseId } = req.body;
+
+  if (!workflow || !templateId) {
+    return res.status(400).json({ error: 'Workflow and templateId are required.' });
+  }
+
+  try {
+    console.log('📋 Generating setup instructions for:', templateId);
+    
+    // Analyze the workflow to generate specific instructions
+    const nodeTypes = workflow.nodes?.map((node) => node.type).filter(Boolean) || [];
+    const uniqueServices = [...new Set(nodeTypes)].slice(0, 5);
+
+    const instructions = `🔧 **Setup Instructions for ${templateId}**
+
+**Step 1: Environment Setup**
+- Ensure you have n8n installed and running
+- Access your n8n instance (Cloud or self-hosted)
+
+**Step 2: Import Template**
+- In n8n, go to "Workflows" → "Import from JSON"
+- Paste the template JSON you downloaded
+- Click "Import"
+
+**Step 3: Configure Credentials**
+${uniqueServices.map(service => {
+  const cleanService = service.replace('n8n-nodes-base.', '');
+  return `• Set up credentials for ${cleanService}`;
+}).join('\n')}
+- Test all connections to ensure they work
+
+**Step 4: Activate Workflow**
+- Click the "Activate" toggle in n8n
+- Monitor the execution log for any errors
+
+**Template contains:** ${workflow.nodes?.length || 0} nodes
+**Services detected:** ${uniqueServices.length > 0 ? uniqueServices.map(s => s.replace('n8n-nodes-base.', '')).join(', ') : 'None'}
+
+💬 **Need specific help?** Ask me about:
+- Switch node configuration and conditional routing
+- Credential setup for specific services  
+- Webhook configuration and testing
+- Troubleshooting execution errors
+
+You can now ask me questions about this template or request specific help with the setup process.`;
+
+    console.log('✅ Setup instructions generated successfully');
+    res.json({ 
+      success: true,
+      instructions: instructions 
+    });
+
+  } catch (error) {
+    console.error('❌ Error generating setup instructions:', error);
+    res.status(500).json({ error: 'Failed to generate setup instructions.' });
+  }
+});
+
+// Catch-all handler for React routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log(`✅ Server running on 0.0.0.0:${port}`);
+});
