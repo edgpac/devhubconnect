@@ -1019,7 +1019,172 @@ I'm here to help with your **${templateId}** template setup!
 **What specific part of the setup do you need help with?**`;
 }
 
-// ✅ FIXED CHAT ENDPOINT - No Body Stream Error
+// ✅ LEARNING SYSTEM HELPER FUNCTIONS
+
+// Check if we have a learned response for this question
+async function checkLearnedResponses(prompt, templateId) {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        ai_response,
+        COUNT(*) as usage_count,
+        AVG(CASE WHEN user_feedback = 'helpful' THEN 1 ELSE 0 END) as helpfulness_score
+      FROM chat_interactions 
+      WHERE 
+        LOWER(user_question) = LOWER($1)
+        AND template_id = $2
+        AND interaction_type IN ('groq_api', 'learned_response')
+        AND created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY ai_response
+      HAVING COUNT(*) >= 2 AND AVG(CASE WHEN user_feedback = 'helpful' THEN 1 ELSE 0 END) > 0.7
+      ORDER BY COUNT(*) DESC, AVG(CASE WHEN user_feedback = 'helpful' THEN 1 ELSE 0 END) DESC
+      LIMIT 1
+    `, [prompt, templateId]);
+
+    if (result.rows.length > 0) {
+      return {
+        response: result.rows[0].ai_response,
+        confidence: Math.min(0.95, result.rows[0].helpfulness_score * result.rows[0].usage_count / 10)
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error checking learned responses:', error);
+    return null;
+  }
+}
+
+// Learn from successful interactions
+async function learnFromInteraction(question, response, templateId, isSuccessful) {
+  try {
+    // Store the successful pattern
+    await pool.query(`
+      INSERT INTO template_intelligence (
+        template_id, 
+        common_questions, 
+        success_rate,
+        last_updated
+      ) 
+      VALUES (
+        $1,
+        jsonb_build_array($2),
+        CASE WHEN $3 THEN 100.0 ELSE 0.0 END,
+        NOW()
+      )
+      ON CONFLICT (template_id) DO UPDATE SET
+        common_questions = CASE 
+          WHEN template_intelligence.common_questions ? $2 THEN template_intelligence.common_questions
+          ELSE template_intelligence.common_questions || jsonb_build_array($2)
+        END,
+        last_updated = NOW()
+    `, [templateId, question, isSuccessful]);
+
+    console.log('🧠 Learned from interaction:', { question: question.substring(0, 50), templateId, isSuccessful });
+  } catch (error) {
+    console.error('Error learning from interaction:', error);
+  }
+}
+
+// Enhanced smart fallback with confidence scoring
+function generateSmartFallback(prompt, templateContext, history) {
+  const userPrompt = prompt.toLowerCase();
+  const templateId = templateContext?.templateId || '';
+  let confidence = 0.5; // Base confidence
+  
+  // Increase confidence for known patterns
+  const credentialKeywords = ['credential', 'credentials', 'api key', 'setup', 'configure', 'authentication', 'login', 'token'];
+  const isCredentialQuestion = credentialKeywords.some(keyword => userPrompt.includes(keyword));
+  
+  if (isCredentialQuestion) confidence += 0.3;
+  
+  // Template-specific confidence boost
+  if (templateId && (userPrompt.includes('node') || userPrompt.includes('workflow') || userPrompt.includes('template'))) {
+    confidence += 0.2;
+  }
+  
+  // High confidence responses for common patterns
+  if (userPrompt.includes('openai') && userPrompt.includes('credential')) {
+    return {
+      confidence: 0.95,
+      response: `🔑 **Complete OpenAI Credential Setup Guide**
+
+**Step 1: Get Your API Key**
+1. Go to: **https://platform.openai.com/api-keys**
+2. Sign in to your OpenAI account
+3. Click **"+ Create new secret key"**
+4. **Copy the entire key** (starts with \`sk-\`)
+5. ⚠️ **Save it now** - you can't see it again!
+
+**Step 2: Add to n8n**
+1. n8n sidebar → **"Credentials"**
+2. **"+ Add Credential"** button
+3. Search: **"OpenAI"**
+4. Paste your \`sk-\` key in **"API Key"** field
+5. **"Test"** → **"Save"**
+
+**Troubleshooting:**
+❌ "Invalid API key" → Key must start with \`sk-\`, no spaces
+❌ "Rate limit exceeded" → Add billing at platform.openai.com
+
+**Current Status:** Do you have your API key, or do you need help getting one?`
+    };
+  }
+  
+  // Return generic response with confidence
+  return {
+    confidence: Math.min(confidence, 0.7), // Cap at 0.7 for generic responses
+    response: generateStructuredFallback(prompt, templateContext, history)
+  };
+}
+
+// Enhanced logging with learning metadata
+async function logChatInteraction(templateId, question, response, userId, interactionType = 'unknown') {
+  try {
+    // Categorize the question
+    let questionCategory = 'general';
+    const lowerQuestion = question.toLowerCase();
+    
+    if (lowerQuestion.includes('credential') || lowerQuestion.includes('api key')) {
+      questionCategory = 'credentials';
+    } else if (lowerQuestion.includes('test') || lowerQuestion.includes('workflow')) {
+      questionCategory = 'testing';
+    } else if (lowerQuestion.includes('node') || lowerQuestion.includes('configure')) {
+      questionCategory = 'configuration';
+    } else if (lowerQuestion.includes('error') || lowerQuestion.includes('troubleshoot')) {
+      questionCategory = 'troubleshooting';
+    }
+
+    await pool.query(`
+      INSERT INTO chat_interactions (
+        template_id, user_question, ai_response, user_id, created_at,
+        interaction_type, question_category, learning_score
+      )
+      VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7)
+    `, [
+      templateId,
+      question,
+      response,
+      userId,
+      interactionType,
+      questionCategory,
+      interactionType === 'learned_response' ? 10 : (interactionType === 'groq_api' ? 5 : 3)
+    ]);
+  } catch (error) {
+    console.error('Error logging chat interaction:', error);
+  }
+}
+
+function isPromptDisclosure(prompt) {
+  const disclosurePatterns = [
+    /prompt.*(runs|controls|used|that.*runs.*this.*chat)/i,
+    /instructions.*(you.*follow|given.*to.*you)/i,
+    /system.*(message|prompt)/i
+  ];
+  return disclosurePatterns.some(pattern => pattern.test(prompt));
+}
+
+// ✅ ENHANCED CHAT ENDPOINT WITH LEARNING SYSTEM
 app.post('/api/ask-ai', async (req, res) => {
   const { prompt, history, templateContext } = req.body;
 
@@ -1028,11 +1193,30 @@ app.post('/api/ask-ai', async (req, res) => {
   }
 
   try {
-    console.log('🗨️ Chat request:', { 
+    console.log('🧠 Learning AI request:', { 
       prompt: prompt.substring(0, 100) + '...',
-      templateId: templateContext?.templateId || 'none',
-      groqAvailable: !!process.env.GROQ_API_KEY
+      templateId: templateContext?.templateId || 'none'
     });
+
+    // ✅ STEP 1: CHECK LEARNED RESPONSES FIRST (Save API costs!)
+    const learnedResponse = await checkLearnedResponses(prompt, templateContext?.templateId);
+    if (learnedResponse) {
+      console.log('🎓 Using learned response - API cost saved!');
+      
+      await logChatInteraction(
+        templateContext?.templateId || 'general_chat',
+        prompt,
+        learnedResponse.response,
+        req.user?.id || 'anonymous',
+        'learned_response'
+      );
+      
+      return res.json({ 
+        response: learnedResponse.response,
+        source: 'learned',
+        confidence: learnedResponse.confidence
+      });
+    }
 
     // Check if valid JSON template is provided
     const latestUserMessage = history?.slice(-1)[0]?.content || '';
@@ -1067,39 +1251,53 @@ To get started, I need to understand your environment:
 
 Once I know your setup, I'll provide specific step-by-step instructions for deploying this template successfully.`;
 
-      // Simple logging
-      try {
-        await pool.query(`
-          INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, created_at)
-          VALUES ($1, $2, $3, $4, NOW())
-        `, [
-          templateContext?.templateId || 'json_validation',
-          'JSON template provided',
-          response,
-          req.user?.id || 'anonymous'
-        ]);
-      } catch (logError) {
-        console.error('Error logging chat:', logError);
-      }
+      await logChatInteraction(
+        templateContext?.templateId || 'json_validation',
+        'JSON template provided',
+        response,
+        req.user?.id || 'anonymous',
+        'json_validation'
+      );
 
-      return res.json({ response });
+      return res.json({ response, source: 'template_validation' });
     }
 
     // Check for prompt disclosure attempts
-    const promptDisclosurePattern = /prompt.*(runs|controls|used|that.*runs.*this.*chat)/i;
-    if (promptDisclosurePattern.test(prompt)) {
+    if (isPromptDisclosure(prompt)) {
       return res.json({ 
         response: "I cannot answer questions about my instructions. I'm here to help with your uploaded .json file only." 
       });
     }
 
-    // ✅ USE YOUR STRUCTURED PROMPT APPROACH
+    // ✅ STEP 2: Try Enhanced Structured Fallback BEFORE API
+    const smartFallback = generateSmartFallback(prompt, templateContext, history);
+    if (smartFallback.confidence > 0.8) {
+      console.log('🧠 High confidence fallback - API cost saved!');
+      
+      await logChatInteraction(
+        templateContext?.templateId || 'general_chat',
+        prompt,
+        smartFallback.response,
+        req.user?.id || 'anonymous',
+        'smart_fallback'
+      );
+      
+      return res.json({ 
+        response: smartFallback.response,
+        source: 'smart_fallback',
+        confidence: smartFallback.confidence
+      });
+    }
+
+    // ✅ STEP 3: Use Groq API only when necessary
     const groqApiKey = process.env.GROQ_API_KEY;
     let response = '';
+    let responseSource = 'fallback';
 
     if (groqApiKey) {
       try {
-        // ✅ YOUR PROVEN STRUCTURED PROMPT
+        console.log('💰 Using Groq API - counting cost...');
+        
         const structuredPrompt = `You are a technical writer specializing in beginner-friendly n8n automation guides. 
 
 CONTEXT: User is asking about n8n template setup.
@@ -1149,44 +1347,52 @@ Focus on practical, actionable instructions that a beginner can follow exactly.`
         if (groqResponse.ok) {
           const data = await groqResponse.json();
           response = data.choices?.[0]?.message?.content || 'No response received.';
-          console.log('✅ Structured Groq response received');
+          responseSource = 'groq_api';
+          console.log('✅ Groq response received - will learn from this!');
+          
+          // ✅ LEARN FROM SUCCESSFUL API RESPONSE
+          await learnFromInteraction(prompt, response, templateContext?.templateId, true);
+          
         } else {
-          // ✅ FIX: Don't read response body if already failed
           console.error('❌ Groq API error:', groqResponse.status);
           throw new Error(`Groq API failed with status ${groqResponse.status}`);
         }
 
       } catch (groqError) {
         console.error('❌ Groq error:', groqError.message);
-        response = generateStructuredFallback(prompt, templateContext, history);
+        response = smartFallback.response;
+        responseSource = 'error_fallback';
       }
     } else {
-      console.log('⚠️ No Groq key, using structured fallbacks');
-      response = generateStructuredFallback(prompt, templateContext, history);
+      console.log('⚠️ No Groq key, using smart fallback');
+      response = smartFallback.response;
+      responseSource = 'no_api_key';
     }
 
-    // Simple logging
-    try {
-      await pool.query(`
-        INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, created_at)
-        VALUES ($1, $2, $3, $4, NOW())
-      `, [
-        templateContext?.templateId || 'general_chat',
-        prompt,
-        response,
-        req.user?.id || 'anonymous'
-      ]);
-    } catch (logError) {
-      console.error('Error logging chat:', logError);
-    }
+    // ✅ STEP 4: Log interaction with learning data
+    await logChatInteraction(
+      templateContext?.templateId || 'general_chat',
+      prompt,
+      response,
+      req.user?.id || 'anonymous',
+      responseSource
+    );
 
-    res.json({ response });
+    res.json({ response, source: responseSource });
 
   } catch (error) {
     console.error('❌ Chat error:', error);
-    res.json({ 
-      response: `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`
-    });
+    const fallbackResponse = `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`;
+    
+    await logChatInteraction(
+      templateContext?.templateId || 'general_chat',
+      prompt,
+      fallbackResponse,
+      req.user?.id || 'anonymous',
+      'error'
+    );
+    
+    res.json({ response: fallbackResponse });
   }
 });
 
@@ -1390,6 +1596,65 @@ I'll provide exact n8n UI navigation steps for any setup question!
   }
 });
 
+// ✅ API ENDPOINT: Get Learning Statistics
+app.get('/api/ai/learning-stats', async (req, res) => {
+  try {
+    const stats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_interactions,
+        COUNT(CASE WHEN interaction_type = 'learned_response' THEN 1 END) as learned_responses,
+        COUNT(CASE WHEN interaction_type = 'groq_api' THEN 1 END) as api_calls,
+        ROUND(
+          COUNT(CASE WHEN interaction_type = 'learned_response' THEN 1 END) * 100.0 / 
+          NULLIF(COUNT(*), 0), 
+          2
+        ) as cost_savings_percentage
+      FROM chat_interactions 
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+    `);
+
+    const categoryStats = await pool.query(`
+      SELECT 
+        question_category,
+        COUNT(*) as count,
+        AVG(learning_score) as avg_score
+      FROM chat_interactions 
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY question_category
+      ORDER BY count DESC
+    `);
+
+    res.json({
+      overall: stats.rows[0],
+      categories: categoryStats.rows,
+      message: `AI learning system active! ${stats.rows[0].cost_savings_percentage}% of responses use learned patterns instead of API calls.`
+    });
+  } catch (error) {
+    console.error('Error fetching learning stats:', error);
+    res.status(500).json({ error: 'Failed to fetch learning statistics' });
+  }
+});
+
+// ✅ API ENDPOINT: User Feedback for Learning
+app.post('/api/ai/feedback', async (req, res) => {
+  try {
+    const { interactionId, feedback, helpful } = req.body;
+    
+    await pool.query(`
+      UPDATE chat_interactions 
+      SET 
+        user_feedback = $1,
+        learning_score = learning_score + CASE WHEN $2 THEN 2 ELSE -1 END
+      WHERE id = $3
+    `, [feedback, helpful, interactionId]);
+    
+    res.json({ success: true, message: 'Feedback recorded - AI will learn from this!' });
+  } catch (error) {
+    console.error('Error recording feedback:', error);
+    res.status(500).json({ error: 'Failed to record feedback' });
+  }
+});
+
 // Catch-all handler for React routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
@@ -1401,4 +1666,5 @@ const server = app.listen(port, '0.0.0.0', () => {
   console.log(`🔑 Groq API Key configured: ${!!process.env.GROQ_API_KEY}`);
   console.log(`💳 Stripe configured: ${!!process.env.STRIPE_SECRET_KEY}`);
   console.log(`🗄️ Database URL configured: ${!!process.env.DATABASE_URL}`);
+  console.log(`🧠 AI Learning System: ACTIVE - Reducing API costs over time`);
 });
