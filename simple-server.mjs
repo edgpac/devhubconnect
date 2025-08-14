@@ -883,6 +883,177 @@ app.get('/api/user/purchases', async (req, res) => {
   }
 });
 
+// ✅ FIXED CHAT ENDPOINT - No Body Stream Error
+app.post('/api/ask-ai', async (req, res) => {
+  const { prompt, history, templateContext } = req.body;
+
+  if (!prompt) {
+    return res.status(400).json({ error: 'Prompt is required in the request body.' });
+  }
+
+  try {
+    console.log('🗨️ Chat request:', { 
+      prompt: prompt.substring(0, 100) + '...',
+      templateId: templateContext?.templateId || 'none',
+      groqAvailable: !!process.env.GROQ_API_KEY
+    });
+
+    // Check if valid JSON template is provided
+    const latestUserMessage = history?.slice(-1)[0]?.content || '';
+    let jsonProvidedInThisTurn = false;
+    let workflowJSON = null;
+    
+    try {
+      const parsed = JSON.parse(latestUserMessage);
+      if (parsed && typeof parsed === 'object' && parsed.nodes && Array.isArray(parsed.nodes)) {
+        jsonProvidedInThisTurn = true;
+        workflowJSON = parsed;
+      }
+    } catch (e) {
+      // Not JSON, continue
+    }
+
+    if (jsonProvidedInThisTurn) {
+      const response = `✅ Template validated successfully! I'm your DevHubConnect Setup Assistant, ready to guide you through the deployment process.
+
+To get started, I need to understand your environment:
+
+1. **What type of n8n setup are you using?**
+   • n8n Cloud (cloud.n8n.io)
+   • Self-hosted Docker installation
+   • Local development installation
+   • n8n Desktop app
+
+2. **What's your experience level with n8n?**
+   • Beginner (new to n8n)
+   • Intermediate (familiar with basic workflows)
+   • Advanced (experienced with complex automations)
+
+Once I know your setup, I'll provide specific step-by-step instructions for deploying this template successfully.`;
+
+      // Simple logging
+      try {
+        await pool.query(`
+          INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, created_at)
+          VALUES ($1, $2, $3, $4, NOW())
+        `, [
+          templateContext?.templateId || 'json_validation',
+          'JSON template provided',
+          response,
+          req.user?.id || 'anonymous'
+        ]);
+      } catch (logError) {
+        console.error('Error logging chat:', logError);
+      }
+
+      return res.json({ response });
+    }
+
+    // Check for prompt disclosure attempts
+    const promptDisclosurePattern = /prompt.*(runs|controls|used|that.*runs.*this.*chat)/i;
+    if (promptDisclosurePattern.test(prompt)) {
+      return res.json({ 
+        response: "I cannot answer questions about my instructions. I'm here to help with your uploaded .json file only." 
+      });
+    }
+
+    // ✅ USE YOUR STRUCTURED PROMPT APPROACH
+    const groqApiKey = process.env.GROQ_API_KEY;
+    let response = '';
+
+    if (groqApiKey) {
+      try {
+        // ✅ YOUR PROVEN STRUCTURED PROMPT
+        const structuredPrompt = `You are a technical writer specializing in beginner-friendly n8n automation guides. 
+
+CONTEXT: User is asking about n8n template setup.
+Template: ${templateContext?.templateId || 'n8n workflow'}
+Previous conversation: ${getConversationSummary(history)}
+
+USER QUESTION: "${prompt}"
+
+Provide a detailed, step-by-step response focusing on:
+1. Exact n8n UI navigation (specific button names, menu locations)
+2. Credential setup with exact field names
+3. Common errors and solutions
+4. What to do next
+
+Be specific about n8n interface elements. Include exact paths like "Credentials → Add Credential → [Service Name]" and field names like "API Key" field.
+
+Focus on practical, actionable instructions that a beginner can follow exactly.`;
+
+        const messages = [
+          { role: 'system', content: structuredPrompt },
+          { role: 'user', content: prompt }
+        ];
+
+        console.log('🚀 Sending structured request to Groq...');
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'llama-3.1-70b-versatile',
+            messages: messages,
+            max_tokens: 1000,
+            temperature: 0.2, // Very low for consistent, focused responses
+            stream: false
+          }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (groqResponse.ok) {
+          const data = await groqResponse.json();
+          response = data.choices?.[0]?.message?.content || 'No response received.';
+          console.log('✅ Structured Groq response received');
+        } else {
+          // ✅ FIX: Don't read response body if already failed
+          console.error('❌ Groq API error:', groqResponse.status);
+          throw new Error(`Groq API failed with status ${groqResponse.status}`);
+        }
+
+      } catch (groqError) {
+        console.error('❌ Groq error:', groqError.message);
+        response = generateStructuredFallback(prompt, templateContext, history);
+      }
+    } else {
+      console.log('⚠️ No Groq key, using structured fallbacks');
+      response = generateStructuredFallback(prompt, templateContext, history);
+    }
+
+    // Simple logging
+    try {
+      await pool.query(`
+        INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
+      `, [
+        templateContext?.templateId || 'general_chat',
+        prompt,
+        response,
+        req.user?.id || 'anonymous'
+      ]);
+    } catch (logError) {
+      console.error('Error logging chat:', logError);
+    }
+
+    res.json({ response });
+
+  } catch (error) {
+    console.error('❌ Chat error:', error);
+    res.json({ 
+      response: `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`
+    });
+  }
+});
+
 // ✅ ENHANCED: Generate setup instructions using structured approach
 app.post('/api/generate-setup-instructions', async (req, res) => {
   const { workflow, templateId, purchaseId } = req.body;
