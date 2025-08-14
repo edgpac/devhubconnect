@@ -1,5 +1,6 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
+import { useAuth as useAuthProvider } from './context/AuthProvider';
 
 interface User {
   id: string;
@@ -13,20 +14,35 @@ interface AuthContextType {
   isLoading: boolean;
 }
 
-// ✅ FIXED: Updated to match AdminLogin localStorage keys
+// ✅ ENHANCED: Updated to check BOTH session auth AND localStorage
 const useAuth = (): AuthContextType => {
   const [user, setUser] = React.useState<User | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const { currentUser: sessionUser, token: sessionToken } = useAuthProvider();
 
   React.useEffect(() => {
     const checkAuth = () => {
       try {
-        // Check for JWT token
+        // ✅ ENHANCED: First check session auth from AuthProvider
+        if (sessionUser && sessionToken) {
+          console.log('🔐 Session Auth Found:', sessionUser.email);
+          setUser({
+            id: sessionUser.id,
+            email: sessionUser.email,
+            role: sessionUser.isAdmin ? 'admin' : 'user',
+            isAdmin: sessionUser.isAdmin || false
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        // ✅ FALLBACK: Check localStorage (existing code preserved)
         const token = localStorage.getItem('token');
         const adminAuth = localStorage.getItem('admin_auth'); // ✅ ADDED: Check admin_auth
         const savedUser = localStorage.getItem('devhub_user'); // ✅ FIXED: Changed from 'user' to 'devhub_user'
         
         console.log('🔐 Auth Check:', {
+          hasSessionUser: !!sessionUser,
           hasToken: !!token,
           hasAdminAuth: !!adminAuth,
           hasSavedUser: !!savedUser
@@ -75,7 +91,7 @@ const useAuth = (): AuthContextType => {
     };
 
     checkAuth();
-  }, []);
+  }, [sessionUser, sessionToken]); // ✅ ENHANCED: Re-run when session auth changes
 
   return { user, isLoading };
 };
