@@ -893,3 +893,47 @@ app.get('*', (req, res) => {
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Server running on 0.0.0.0:${port}`);
 });
+// ✅ ADD THIS ENDPOINT to your simple-server.mjs
+app.post('/api/generate-setup-instructions', async (req, res) => {
+  const { workflow, templateId, purchaseId } = req.body;
+
+  if (!workflow || !templateId) {
+    return res.status(400).json({ error: 'Workflow and templateId are required.' });
+  }
+
+  try {
+    // Analyze the workflow to generate specific instructions
+    const nodeTypes = workflow.nodes?.map((node) => node.type).filter(Boolean) || [];
+    const uniqueServices = [...new Set(nodeTypes)].slice(0, 5);
+
+    const instructions = `🔧 **Setup Instructions for ${templateId}**
+
+**Step 1: Environment Setup**
+- Ensure you have n8n installed and running
+- Access your n8n instance (Cloud or self-hosted)
+
+**Step 2: Import Template**
+- In n8n, go to "Workflows" → "Import from JSON"
+- Paste the template JSON you uploaded
+- Click "Import"
+
+**Step 3: Configure Credentials**
+${uniqueServices.map(service => `• Set up credentials for ${service.replace('n8n-nodes-base.', '')}`).join('\n')}
+- Test all connections to ensure they work
+
+**Step 4: Activate Workflow**
+- Click the "Activate" toggle in n8n
+- Monitor the execution log for any errors
+
+**Template contains:** ${workflow.nodes?.length || 0} nodes
+**Services detected:** ${uniqueServices.length > 0 ? uniqueServices.map(s => s.replace('n8n-nodes-base.', '')).join(', ') : 'None'}
+
+Need help with any specific step? Ask me about credential setup, webhook configuration, or troubleshooting!`;
+
+    res.json({ instructions });
+
+  } catch (error) {
+    console.error('Error generating setup instructions:', error);
+    res.status(500).json({ error: 'Failed to generate setup instructions.' });
+  }
+});
