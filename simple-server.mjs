@@ -883,7 +883,7 @@ app.get('/api/user/purchases', async (req, res) => {
   }
 });
 
-// ✅ ENHANCED AI CHAT SYSTEM - Template-Intelligent & Self-Learning
+// ✅ FOCUSED SMART CHAT - Simple but Intelligent
 app.post('/api/ask-ai', async (req, res) => {
   const { prompt, history, templateContext } = req.body;
 
@@ -892,12 +892,12 @@ app.post('/api/ask-ai', async (req, res) => {
   }
 
   try {
-    console.log('🗨️ Enhanced AI Chat request received:', { 
+    console.log('🗨️ Smart Chat request:', { 
       prompt: prompt.substring(0, 100) + '...',
       templateId: templateContext?.templateId || 'none'
     });
 
-    // Check if valid JSON template is provided in the conversation
+    // Check if valid JSON template is provided
     const latestUserMessage = history?.slice(-1)[0]?.content || '';
     let jsonProvidedInThisTurn = false;
     try {
@@ -906,10 +906,9 @@ app.post('/api/ask-ai', async (req, res) => {
         jsonProvidedInThisTurn = true;
       }
     } catch (e) {
-      // Not JSON, continue with normal chat
+      // Not JSON, continue
     }
 
-    // If JSON template was provided, return setup guidance
     if (jsonProvidedInThisTurn) {
       const response = `✅ Template validated successfully! I'm your DevHubConnect Setup Assistant, ready to guide you through the deployment process.
 
@@ -928,20 +927,19 @@ To get started, I need to understand your environment:
 
 Once I know your setup, I'll provide specific step-by-step instructions for deploying this template successfully.`;
 
-      // ✅ LOG INTERACTION WITH TEMPLATE ANALYSIS
+      // Simple logging
       try {
         await pool.query(`
-          INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, interaction_type, created_at)
-          VALUES ($1, $2, $3, $4, $5, NOW())
+          INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, created_at)
+          VALUES ($1, $2, $3, $4, NOW())
         `, [
           templateContext?.templateId || 'json_validation',
           'JSON template provided',
           response,
-          req.user?.id || 'anonymous',
-          'template_validation'
+          req.user?.id || 'anonymous'
         ]);
       } catch (logError) {
-        console.error('Error logging chat interaction:', logError);
+        console.error('Error logging chat:', logError);
       }
 
       return res.json({ response });
@@ -955,91 +953,53 @@ Once I know your setup, I'll provide specific step-by-step instructions for depl
       });
     }
 
-    // ✅ GET RELATED SUCCESSFUL INTERACTIONS FOR LEARNING
-    const relatedInteractions = await getRelatedSuccessfulAnswers(prompt, templateContext?.templateId);
-
-    // ✅ ENHANCED GROQ API INTEGRATION WITH LEARNING
+    // ✅ SMART CONTEXT AWARENESS
+    const conversationContext = buildConversationContext(history, templateContext);
+    
+    // ✅ FOCUSED GROQ INTEGRATION
     const groqApiKey = process.env.GROQ_API_KEY;
     let response = '';
 
     if (groqApiKey) {
       try {
-        // ✅ ENHANCED AI SYSTEM PROMPT - Template-Intelligent
-        const enhancedSystemPrompt = `You are the DevHubConnect Setup Assistant, an expert n8n automation engineer with deep knowledge of ALL n8n templates and node types.
+        // ✅ SIMPLIFIED BUT SMART SYSTEM PROMPT
+        const smartSystemPrompt = `You are an expert n8n automation engineer helping users deploy templates successfully.
 
-CORE EXPERTISE:
-- Master of n8n automation platform and ALL node configurations
-- Expert in credential setup for any service integration
-- Specialist in template deployment and troubleshooting
-- You understand node naming patterns and can infer credential requirements
+CURRENT CONTEXT:
+- Template: ${templateContext?.templateId || 'Unknown'}
+- Conversation so far: ${conversationContext}
 
-TEMPLATE INTELLIGENCE:
-${templateContext?.templateId ? `
-Current Template: ${templateContext.templateId}
-Template Type: ${inferTemplateType(templateContext.templateId)}
-Likely Required Credentials: ${predictRequiredCredentials(templateContext.templateId)}
-` : ''}
+YOUR EXPERTISE:
+- You know ALL n8n nodes and their exact credential requirements
+- You provide specific, actionable n8n UI instructions
+- You understand conversation context and give relevant follow-up answers
 
-NODE CREDENTIAL MAPPING KNOWLEDGE:
-- @n8n/n8n-nodes-langchain.openAi → OpenAI API credentials
-- @n8n/n8n-nodes-langchain.* → Usually requires API keys from the service provider
-- slackTrigger → Slack App OAuth token (xoxb-*)
-- telegramTrigger → Telegram Bot token from @BotFather
-- Switch/IF/Set nodes → No external credentials needed
-- HTTP Request nodes → Depends on the target API
-- Webhook nodes → Generate URLs in n8n, configure in external services
+CREDENTIAL MAPPING:
+- @n8n/n8n-nodes-langchain.openAi → Needs "OpenAI" credential with API key
+- slackTrigger → Needs "Slack OAuth2 API" credential
+- telegramTrigger → Needs "Telegram API" credential
+- Switch/IF/Set nodes → No credentials needed
 
-LEARNING FROM SUCCESS:
-${relatedInteractions.length > 0 ? `
-Previous successful solutions for similar questions:
-${relatedInteractions.map(interaction => `
-- Question: "${interaction.user_question}"
-- Successful Response: "${interaction.ai_response.substring(0, 200)}..."
-- Success Rate: ${interaction.success_count || 1} deployments
-`).join('\n')}
-` : 'No previous successful patterns found for this question type.'}
+RESPONSE STYLE:
+- Give SPECIFIC n8n UI steps (exact button names, field names)
+- Use conversation context to give relevant follow-ups
+- Be helpful and conversational
+- Include troubleshooting tips
+- Always end with a specific next step
 
-RESPONSE GUIDELINES:
-1. **Parse the exact node name** mentioned in user's question
-2. **Identify the required credential type** for that specific node
-3. **Provide step-by-step setup instructions** with exact UI navigation
-4. **Include the exact credential name** to select in n8n
-5. **Give troubleshooting tips** specific to that service
-6. **Ask follow-up questions** to ensure successful deployment
+FOCUS: Only help with n8n template setup and deployment.`;
 
-COMMUNICATION STYLE:
-- Be conversational and encouraging
-- Use emojis for clarity (🔧 🔑 ✅ ❌)
-- Provide exact button names and field labels
-- Include common error solutions proactively
-- Always end with a specific next step or question
-
-STRICT FOCUS:
-- ONLY help with n8n template deployment and configuration
-- DO NOT generate, edit, or create new workflows
-- DO NOT discuss topics unrelated to n8n automation
-
-Remember: Your goal is to ensure this user successfully deploys their template. Be specific, actionable, and helpful.`;
-
-        // Format chat history for Groq
         const messages = [
-          {
-            role: 'system',
-            content: enhancedSystemPrompt
-          },
-          ...(history || []).map(msg => ({
+          { role: 'system', content: smartSystemPrompt },
+          ...(history || []).slice(-3).map(msg => ({ // Only last 3 messages for focus
             role: msg.role,
             content: msg.content
           })),
-          {
-            role: 'user',
-            content: prompt
-          }
+          { role: 'user', content: prompt }
         ];
 
-        console.log('🚀 Sending enhanced request to Groq...');
+        console.log('🚀 Sending focused request to Groq...');
 
-        // Groq API request
         const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -1049,276 +1009,192 @@ Remember: Your goal is to ensure this user successfully deploys their template. 
           body: JSON.stringify({
             model: 'llama-3.1-70b-versatile',
             messages: messages,
-            max_tokens: 1200,
-            temperature: 0.7,
+            max_tokens: 800, // Shorter for more focused responses
+            temperature: 0.3, // Lower temperature for more consistent answers
             stream: false
           }),
         });
 
         if (groqResponse.ok) {
           const data = await groqResponse.json();
-          response = data.choices?.[0]?.message?.content || 'No response received from AI.';
-          console.log('✅ Enhanced Groq response received');
+          response = data.choices?.[0]?.message?.content || 'No response received.';
+          console.log('✅ Smart Groq response received');
         } else {
           throw new Error('Groq API failed');
         }
 
       } catch (groqError) {
-        console.error('❌ Groq API error:', groqError);
-        // Fall back to enhanced rule-based responses
-        response = generateEnhancedRuleBasedResponse(prompt, templateContext);
+        console.error('❌ Groq error:', groqError);
+        response = generateSmartFallbackResponse(prompt, conversationContext, templateContext);
       }
     } else {
-      console.log('⚠️ Groq API key not configured, using enhanced rule-based responses');
-      response = generateEnhancedRuleBasedResponse(prompt, templateContext);
+      console.log('⚠️ No Groq key, using smart fallbacks');
+      response = generateSmartFallbackResponse(prompt, conversationContext, templateContext);
     }
 
-    // ✅ LOG INTERACTION WITH ENHANCED METADATA
+    // Simple logging
     try {
       await pool.query(`
-        INSERT INTO chat_interactions (
-          template_id, user_question, ai_response, user_id, 
-          interaction_type, question_category, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
       `, [
         templateContext?.templateId || 'general_chat',
         prompt,
         response,
-        req.user?.id || 'anonymous',
-        'ai_response',
-        categorizeQuestion(prompt)
+        req.user?.id || 'anonymous'
       ]);
     } catch (logError) {
-      console.error('Error logging chat interaction:', logError);
+      console.error('Error logging chat:', logError);
     }
 
     res.json({ response });
 
   } catch (error) {
-    console.error('❌ Enhanced chat error:', error);
+    console.error('❌ Smart chat error:', error);
     res.json({ 
-      response: `I'm having trouble right now, but I can still help! I specialize in n8n template deployment. Try asking about specific setup steps like "OpenAI credentials" or "Slack setup". What part of your template deployment do you need help with?`
+      response: `I'm here to help with your n8n template setup! Try asking about specific steps like "Where do I paste my OpenAI API key?" or "How do I configure Slack credentials?"`
     });
   }
 });
 
-// ✅ HELPER FUNCTIONS FOR AI LEARNING
-
-// Get related successful answers for learning
-async function getRelatedSuccessfulAnswers(prompt, templateId = null) {
-  try {
-    const keywords = extractKeywords(prompt);
-    const keywordPattern = keywords.join('|');
-    
-    const query = `
-      SELECT DISTINCT user_question, ai_response, COUNT(*) as success_count
-      FROM chat_interactions 
-      WHERE (
-        user_question ~* $1 
-        OR ai_response ~* $1
-        ${templateId ? 'OR template_id = $2' : ''}
-      )
-      AND interaction_type = 'ai_response'
-      GROUP BY user_question, ai_response
-      ORDER BY success_count DESC
-      LIMIT 3
-    `;
-    
-    const params = templateId ? [keywordPattern, templateId] : [keywordPattern];
-    const result = await pool.query(query, params);
-    return result.rows;
-  } catch (error) {
-    console.error('Error fetching related interactions:', error);
-    return [];
-  }
+// ✅ BUILD CONVERSATION CONTEXT
+function buildConversationContext(history, templateContext) {
+  if (!history || history.length === 0) return 'New conversation';
+  
+  const recentMessages = history.slice(-2); // Last 2 messages
+  const context = recentMessages.map(msg => 
+    `${msg.role}: ${msg.content.substring(0, 100)}`
+  ).join(' | ');
+  
+  const templateInfo = templateContext?.templateId ? `Template: ${templateContext.templateId}` : '';
+  
+  return `${templateInfo} ${context}`.trim();
 }
 
-// Extract keywords from user question
-function extractKeywords(prompt) {
-  const commonWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'how', 'can', 'you', 'help', 'me', 'set', 'up'];
-  return prompt.toLowerCase()
-    .split(/\W+/)
-    .filter(word => word.length > 2 && !commonWords.includes(word))
-    .slice(0, 5); // Top 5 keywords
-}
-
-// Categorize questions for learning
-function categorizeQuestion(prompt) {
-  const categories = {
-    'credentials': ['credential', 'api key', 'token', 'auth', 'oauth', 'login'],
-    'webhook': ['webhook', 'url', 'endpoint', 'trigger'],
-    'node_config': ['node', 'configure', 'setup', 'parameter'],
-    'deployment': ['deploy', 'activate', 'import', 'install'],
-    'troubleshooting': ['error', 'not working', 'failed', 'issue', 'problem']
-  };
-  
-  const lowerPrompt = prompt.toLowerCase();
-  for (const [category, keywords] of Object.entries(categories)) {
-    if (keywords.some(keyword => lowerPrompt.includes(keyword))) {
-      return category;
-    }
-  }
-  return 'general';
-}
-
-// Infer template type from ID
-function inferTemplateType(templateId) {
-  if (!templateId) return 'unknown';
-  
-  const typeMapping = {
-    'trading': 'AI Trading Agent',
-    'shopify': 'E-commerce Automation',
-    'slack': 'Team Communication',
-    'telegram': 'Bot Automation',
-    'email': 'Email Marketing',
-    'crm': 'Customer Management'
-  };
-  
-  for (const [key, type] of Object.entries(typeMapping)) {
-    if (templateId.toLowerCase().includes(key)) {
-      return type;
-    }
-  }
-  return 'Business Automation';
-}
-
-// Predict required credentials
-function predictRequiredCredentials(templateId) {
-  if (!templateId) return 'Various API integrations';
-  
-  const credentialMapping = {
-    'trading': 'OpenAI API, Trading Platform APIs',
-    'shopify': 'Shopify API, Email Service',
-    'slack': 'Slack OAuth Token',
-    'telegram': 'Telegram Bot Token',
-    'openai': 'OpenAI API Key',
-    'langchain': 'OpenAI API Key, LangChain Memory'
-  };
-  
-  for (const [key, credentials] of Object.entries(credentialMapping)) {
-    if (templateId.toLowerCase().includes(key)) {
-      return credentials;
-    }
-  }
-  return 'Service-specific API keys';
-}
-
-// ✅ ENHANCED RULE-BASED FALLBACK WITH TEMPLATE INTELLIGENCE
-function generateEnhancedRuleBasedResponse(prompt, templateContext) {
+// ✅ SMART FALLBACK RESPONSES WITH CONTEXT
+function generateSmartFallbackResponse(prompt, conversationContext, templateContext) {
   const userPrompt = prompt.toLowerCase();
   const templateId = templateContext?.templateId || '';
+  const isFollowUp = conversationContext.includes('openai') || conversationContext.includes('api key');
 
-  // Enhanced OpenAI/LangChain detection
+  // Smart OpenAI responses with context awareness
   if (userPrompt.includes('openai') || userPrompt.includes('langchain') || 
-      userPrompt.includes('@n8n/n8n-nodes-langchain') || userPrompt.includes('gpt')) {
-    return `🔑 **OpenAI & LangChain Credentials Setup**
+      userPrompt.includes('@n8n/n8n-nodes-langchain') || isFollowUp) {
+    
+    // Specific responses for common follow-up questions
+    if (userPrompt.includes('where') && (userPrompt.includes('paste') || userPrompt.includes('put') || userPrompt.includes('enter'))) {
+      return `🔑 **Where to Paste Your OpenAI API Key in n8n**
 
-I can see you're working with the **${templateId}** template that uses OpenAI/LangChain nodes.
+**Step-by-Step UI Navigation:**
 
-**Step 1: Get OpenAI API Key**
-1. Go to: https://platform.openai.com/api-keys
-2. Click **"Create new secret key"**
-3. Copy the key (starts with \`sk-\`)
+1. **In your n8n workflow**, find the **@n8n/n8n-nodes-langchain.openAi** node
+2. **Click on the node** to select it
+3. **Look for the "Credential" dropdown** (usually at the top of the node settings)
+4. **Click "Select Credential"** or the gear ⚙️ icon
+5. **Choose "Create New Credential"** → **"OpenAI"**
+6. **In the credential form**, find the **"API Key" field**
+7. **Paste your \`sk-\` key** directly into that field
+8. **Click "Test"** to verify it works
+9. **Click "Save"** to store the credential
 
-**Step 2: Configure in n8n**
-1. In n8n: **Credentials** → **Add Credential**
+**Visual Tip:** The API Key field should be labeled clearly as "API Key" or "OpenAI API Key"
+
+**Next Step:** Once saved, go back to your node and select this credential from the dropdown.
+
+Is the credential dropdown visible in your node, or are you having trouble finding it?`;
+    }
+
+    if (userPrompt.includes('api key') || userPrompt.includes('key')) {
+      return `🔑 **Getting Your OpenAI API Key**
+
+**Step 1: Get the Key**
+1. Go to: **https://platform.openai.com/api-keys**
+2. Sign in to your OpenAI account
+3. Click **"Create new secret key"**
+4. **Copy the entire key** (starts with \`sk-\`)
+5. **Save it somewhere safe** (you can't see it again)
+
+**Step 2: Add to n8n**
+1. In n8n: **Credentials** menu → **"Add Credential"**
 2. Search for: **"OpenAI"** (not LangChain)
-3. Paste your API key in the **"API Key"** field
-4. Click **"Test"** to verify
+3. Paste your key in the **"API Key"** field
+4. Click **"Test"** → should show "Connection successful"
 5. Click **"Save"**
 
-**Step 3: Connect to Your Nodes**
-- For \`@n8n/n8n-nodes-langchain.openAi\` nodes: Select your OpenAI credential
-- For memory nodes: No additional credentials needed
+**Important:** 
+- ✅ Key must start with \`sk-\`
+- ✅ No extra spaces or characters
+- ✅ You need billing set up at platform.openai.com
+
+**Current Status:** Do you have your OpenAI API key ready, or do you need help getting one?`;
+    }
+
+    // Main OpenAI setup response
+    return `🔑 **OpenAI Setup for ${templateId}**
+
+**Quick Setup Guide:**
+
+**Step 1: Get API Key**
+→ Go to https://platform.openai.com/api-keys
+→ Create new secret key (starts with \`sk-\`)
+
+**Step 2: Add to n8n**
+→ Credentials → Add Credential → "OpenAI"
+→ Paste your \`sk-\` key → Test → Save
+
+**Step 3: Connect to Node**
+→ Click your \`@n8n/n8n-nodes-langchain.openAi\` node
+→ Select your OpenAI credential from dropdown
 
 **Common Issues:**
-❌ "Invalid API key" → Check the key starts with \`sk-\` and has no extra spaces
-❌ "Rate limit exceeded" → You may need to add billing info at platform.openai.com
+❌ "Invalid key" → Check for spaces, must start with \`sk-\`
+❌ "Rate limit" → Add billing at platform.openai.com
 
-**Next Step:** After setting up credentials, test your workflow with a simple message. 
-
-What's your current n8n environment? (Cloud, self-hosted, or local)`;
+**Where are you in this process?** Do you need help with getting the key, adding it to n8n, or connecting it to your node?`;
   }
 
-  // Enhanced Slack detection
+  // Slack responses
   if (userPrompt.includes('slack')) {
-    return `🔧 **Slack Integration Setup**
+    return `🔧 **Slack Setup for ${templateId}**
 
-For your **${templateId}** template's Slack functionality:
+**Quick Setup:**
+1. **Create App**: https://api.slack.com/apps → "Create New App"
+2. **Get Token**: OAuth & Permissions → Copy "Bot User OAuth Token" (\`xoxb-\`)
+3. **Add to n8n**: Credentials → "Slack OAuth2 API" → Paste token
+4. **Connect**: Select credential in your Slack node
 
-**Step 1: Create Slack App**
-1. Go to: https://api.slack.com/apps
-2. Click **"Create New App"** → **"From scratch"**
-3. App name: \`DevHubConnect Bot\`
-4. Select your workspace
-
-**Step 2: Configure Permissions**
-1. Go to **"OAuth & Permissions"**
-2. Add these **Bot Token Scopes**:
-   - \`channels:read\` - Read channel info
-   - \`chat:write\` - Send messages
-   - \`im:read\` - Read direct messages
-   - \`im:write\` - Send direct messages
-
-**Step 3: Install & Get Token**
-1. Click **"Install to Workspace"**
-2. Copy **"Bot User OAuth Token"** (starts with \`xoxb-\`)
-
-**Step 4: Configure in n8n**
-1. Credentials → **"Slack OAuth2 API"**
-2. Paste the \`xoxb-\` token
-3. Test the connection
-
-Which step are you currently on?`;
+**Need help with which step?**`;
   }
 
-  // Enhanced Telegram detection
+  // Telegram responses
   if (userPrompt.includes('telegram')) {
-    return `📱 **Telegram Bot Setup**
+    return `📱 **Telegram Setup for ${templateId}**
 
-For your **${templateId}** template:
+**Quick Setup:**
+1. **Create Bot**: Message @BotFather → \`/newbot\`
+2. **Get Token**: Save the bot token (\`123456789:ABC...\`)
+3. **Add to n8n**: Credentials → "Telegram API" → Paste token
+4. **Test**: Send \`/start\` to your bot
 
-**Step 1: Create Bot with BotFather**
-1. Open Telegram and search: **@BotFather**
-2. Send: \`/newbot\`
-3. Choose bot name and username
-4. **Save the token** (format: \`123456789:ABC...\`)
-
-**Step 2: Configure in n8n**
-1. Credentials → **"Telegram API"**
-2. Paste your bot token
-3. Test the connection
-
-**Step 3: Test Your Bot**
-1. Find your bot in Telegram (search by username)
-2. Send \`/start\`
-3. Check n8n execution logs
-
-What specific issue are you encountering?`;
+**Which step do you need help with?**`;
   }
 
-  // Generic helpful response with template context
-  return `💬 **DevHubConnect Setup Assistant**
+  // Generic helpful response
+  return `💬 **n8n Template Setup Help**
 
-I'm here to help you deploy your **${templateId || 'n8n template'}** successfully!
+I'm here to help with your **${templateId}** template!
 
-**I can help you with:**
-🔑 **Credentials Setup** - API keys, OAuth tokens, service connections
-🔗 **Node Configuration** - Specific setup for any n8n node type
-⚡ **Template Deployment** - Step-by-step activation guide
-🔧 **Troubleshooting** - Common deployment issues
+**Common Setup Questions:**
+🔑 **"Where do I paste my OpenAI API key?"** - I'll show you the exact n8n UI steps
+🔧 **"How do I configure [service] credentials?"** - Step-by-step for any service
+⚡ **"My workflow won't activate"** - Let's troubleshoot together
 
-**For your template, try asking:**
-- "OpenAI credentials setup"
-- "Configure Slack integration"  
-- "Telegram bot creation"
-- "Webhook configuration"
-- "How to activate my workflow"
+**Just ask me specifically what you need help with!**
 
-What specific part of your template setup do you need help with?`;
+Example: "Where do I paste my API key?" or "How do I set up Slack credentials?"`;
 }
 
-// ✅ IMPROVED: Enhanced generate-setup-instructions with better error handling
+// ✅ IMPROVED: Enhanced generate-setup-instructions
 app.post('/api/generate-setup-instructions', async (req, res) => {
   const { workflow, templateId, purchaseId } = req.body;
 
@@ -1329,7 +1205,6 @@ app.post('/api/generate-setup-instructions', async (req, res) => {
   try {
     console.log('📋 Generating setup instructions for:', templateId);
     
-    // Analyze the workflow to generate specific instructions
     const nodeTypes = workflow.nodes?.map((node) => node.type).filter(Boolean) || [];
     const uniqueServices = [...new Set(nodeTypes)].slice(0, 5);
 
@@ -1359,14 +1234,13 @@ ${uniqueServices.map(service => {
 **Services detected:** ${uniqueServices.length > 0 ? uniqueServices.map(s => s.replace('n8n-nodes-base.', '')).join(', ') : 'None'}
 
 💬 **Need specific help?** Ask me about:
-- Switch node configuration and conditional routing
-- Credential setup for specific services  
-- Webhook configuration and testing
-- Troubleshooting execution errors
+- "Where do I paste my OpenAI API key?"
+- "How do I configure Slack credentials?"
+- "My webhook isn't working"
+- "How do I activate my workflow?"
 
-You can now ask me questions about this template or request specific help with the setup process.`;
+I'll give you exact n8n UI steps for any question!`;
 
-    console.log('✅ Setup instructions generated successfully');
     res.json({ 
       success: true,
       instructions: instructions 
@@ -1383,7 +1257,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// ✅ SERVER STARTUP - ESSENTIAL FOR RUNNING THE APP
+// ✅ SERVER STARTUP
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Server running on 0.0.0.0:${port}`);
 });
