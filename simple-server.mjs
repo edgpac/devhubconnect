@@ -1135,7 +1135,7 @@ Focus on practical, actionable instructions that a beginner can follow exactly.`
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'llama-3.1-70b-versatile',
+            model: 'llama-3.3-70b-versatile',
             messages: messages,
             max_tokens: 1000,
             temperature: 0.2, // Very low for consistent, focused responses
@@ -1228,7 +1228,7 @@ JSON: ${JSON.stringify(workflow).substring(0, 8000)}`; // Limit JSON size
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'llama-3.1-70b-versatile',
+            model: 'llama-3.3-70b-versatile',
             messages: [{ role: 'user', content: structuredPrompt }],
             max_tokens: 1500,
             temperature: 0.1,
