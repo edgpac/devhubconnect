@@ -460,6 +460,150 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   }
 });
 
+// ✅ NEW: Add /api/purchases route that matches the expected format
+app.get('/api/purchases', async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    console.log('📋 Fetching purchases for user:', req.user.email || req.user.username);
+
+    // ✅ ENHANCED: Try to find purchases by multiple methods
+    let purchases = [];
+    
+    // Method 1: Find by user_id (for linked accounts)
+    const userIdResult = await pool.query(`
+      SELECT 
+        p.id as purchase_id,
+        p.purchased_at,
+        p.amount_paid,
+        p.status,
+        t.id as template_id,
+        t.name as template_name,
+        t.description as template_description,
+        t.image_url,
+        t.workflow_json,
+        t.price,
+        t.created_at,
+        t.download_count,
+        t.view_count,
+        t.rating
+      FROM purchases p
+      JOIN templates t ON p.template_id = t.id
+      WHERE p.user_id = $1
+      ORDER BY p.purchased_at DESC
+    `, [req.user.id]);
+
+    purchases = userIdResult.rows;
+
+    // Method 2: If no purchases found by user_id, try by email
+    if (purchases.length === 0 && req.user.email) {
+      console.log('🔍 No purchases found by user_id, trying by email:', req.user.email);
+      
+      const emailResult = await pool.query(`
+        SELECT 
+          p.id as purchase_id,
+          p.purchased_at,
+          p.amount_paid,
+          p.status,
+          t.id as template_id,
+          t.name as template_name,
+          t.description as template_description,
+          t.image_url,
+          t.workflow_json,
+          t.price,
+          t.created_at,
+          t.download_count,
+          t.view_count,
+          t.rating
+        FROM purchases p
+        JOIN templates t ON p.template_id = t.id
+        JOIN users u ON p.user_id = u.id
+        WHERE u.email = $1
+        ORDER BY p.purchased_at DESC
+      `, [req.user.email]);
+
+      purchases = emailResult.rows;
+    }
+
+    // Method 3: For GitHub users, also check with common email variations
+    if (purchases.length === 0 && req.user.username) {
+      const possibleEmails = [
+        `${req.user.username}@gmail.com`,
+        `${req.user.username}shopify@gmail.com`, // Based on your pattern
+        req.user.email
+      ].filter(email => email); // Remove null/undefined
+
+      console.log('🔍 Trying email variations:', possibleEmails);
+
+      for (const email of possibleEmails) {
+        const emailVariationResult = await pool.query(`
+          SELECT 
+            p.id as purchase_id,
+            p.purchased_at,
+            p.amount_paid,
+            p.status,
+            t.id as template_id,
+            t.name as template_name,
+            t.description as template_description,
+            t.image_url,
+            t.workflow_json,
+            t.price,
+            t.created_at,
+            t.download_count,
+            t.view_count,
+            t.rating
+          FROM purchases p
+          JOIN templates t ON p.template_id = t.id
+          JOIN users u ON p.user_id = u.id
+          WHERE u.email = $1
+          ORDER BY p.purchased_at DESC
+        `, [email]);
+
+        if (emailVariationResult.rows.length > 0) {
+          purchases = emailVariationResult.rows;
+          console.log('✅ Found purchases with email variation:', email);
+          break;
+        }
+      }
+    }
+
+    // ✅ FIXED: Transform to proper structure for TemplateCard
+    const formattedPurchases = purchases.map(row => ({
+      // Purchase metadata
+      purchaseInfo: {
+        purchaseId: row.purchase_id,
+        amountPaid: row.amount_paid,
+        currency: 'USD',
+        status: row.status,
+        purchasedAt: row.purchased_at
+      },
+      // Template object (correctly structured for TemplateCard)
+      template: {
+        id: row.template_id,                    // ✅ Template ID
+        name: row.template_name,                // ✅ Template name
+        description: row.template_description,  // ✅ Template description
+        price: row.price,
+        imageUrl: row.image_url,
+        workflowJson: row.workflow_json,
+        createdAt: row.created_at,
+        downloadCount: row.download_count,
+        viewCount: row.view_count,
+        rating: row.rating,
+        purchased: true               // ✅ Mark as purchased
+      }
+    }));
+
+    console.log('✅ Found', formattedPurchases.length, 'purchases for user');
+    res.json({ success: true, purchases: formattedPurchases });
+
+  } catch (error) {
+    console.error('Database error:', error);
+    res.status(500).json({ error: 'Failed to fetch purchases' });
+  }
+});
+
 // ✅ ENHANCED: API endpoint to get user's purchased templates with email linking
 app.get('/api/user/purchases', async (req, res) => {
   try {
