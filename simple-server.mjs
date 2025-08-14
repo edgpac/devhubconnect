@@ -937,187 +937,208 @@ Once I know your setup, I'll provide specific step-by-step instructions for depl
       });
     }
 
-    // ✅ IMPROVED: More intelligent response handling based on specific questions
+    // ✅ SMART PRODUCTION FALLBACK: Mimic the original AI behavior
     const userPrompt = prompt.toLowerCase();
     let response = '';
 
-    // Handle specific node configuration questions
-    if (userPrompt.includes('set node') || (userPrompt.includes('set') && userPrompt.includes('credentials'))) {
-      response = `🔧 **Set Node Configuration**
+    // Handle OpenAI/LangChain questions first (most specific)
+    if (userPrompt.includes('openai') || userPrompt.includes('langchain')) {
+      response = `🔑 **OpenAI & LangChain Credentials Setup**
 
-The Set node is used to create or modify data in your workflow and doesn't require external credentials:
+For the OpenAI and LangChain nodes in your template, you need API credentials:
 
-**Setup Steps:**
-1. **Open Set Node**: Click the Set node in your workflow
-2. **Choose Operation**: 
-   - "Set" to create/modify fields
-   - "Remove" to delete fields
-   - "Keep Only" to filter fields
-3. **Add Fields**: Click "Add Field" to define what data to set
-4. **Configure Values**: 
-   - Manual values: Type directly
-   - Expressions: Use \`{{ $json.fieldName }}\` to reference data
-   - Functions: Use JavaScript expressions
+**OpenAI API Key Setup:**
+1. **Get API Key**: Go to platform.openai.com → API Keys → Create new key
+2. **In n8n**: Go to Credentials → Add Credential → OpenAI
+3. **Enter API Key**: Paste your OpenAI API key
+4. **Test Connection**: Click "Test" to verify it works
 
-**Common Use Cases:**
-- Setting variables: \`tradingSignal = "BUY"\`
-- Calculating values: \`profit = {{ $json.sellPrice - $json.buyPrice }}\`
-- Formatting data for APIs
+**LangChain Memory Buffer:**
+- No external credentials needed for memory buffer
+- Configure memory window size in the node settings
+- Connect to your OpenAI credential for LLM functionality
 
-What specific data are you trying to set or modify?`;
+**Important Notes:**
+- Keep your API key secure and never share it
+- Monitor usage at platform.openai.com to track costs
+- Start with small test requests to verify functionality
 
-    } else if (userPrompt.includes('switch node') || (userPrompt.includes('switch') && userPrompt.includes('credentials'))) {
+What's your current n8n environment? (Cloud, self-hosted, or local installation)`;
+
+    } else if (userPrompt.includes('switch') && (userPrompt.includes('credential') || userPrompt.includes('setup'))) {
       response = `🔧 **Switch Node Configuration**
 
-The Switch node routes data based on conditions and doesn't require external credentials:
+The Switch node is a core n8n node for conditional routing and doesn't require external credentials:
 
 **Setup Steps:**
-1. **Open Switch Node**: Click the Switch node in your workflow
-2. **Choose Mode**: Select "Expression" or "Rules" mode
-3. **Add Conditions**: 
-   - Expression mode: Write JavaScript like \`{{ $json.price > 100 }}\`
-   - Rules mode: Set up condition-based rules with operators
-4. **Add Outputs**: Click "Add Routing Rule" for different paths
-5. **Label Outputs**: Name them clearly (e.g., "Buy Signal", "Sell Signal")
+1. **Find the Switch Node**: Look for a diamond-shaped node in your workflow
+2. **Double-click** to open the configuration panel
+3. **Choose Mode**: 
+   - "Expression" for JavaScript conditions
+   - "Rules" for simple comparisons
+4. **Add Conditions**: 
+   - Expression: \`{{ $json.price > 100 }}\`
+   - Rules: Set field, operator, and value
+5. **Configure Outputs**: Each condition creates a different path
+6. **Test**: Use sample data to verify routing
 
-**Common Trading Conditions:**
-- Price-based: \`{{ parseFloat($json.price) > threshold }}\`
-- Signal-based: \`{{ $json.signal === 'buy' }}\`
+**For Trading Workflows:**
+- Price thresholds: \`{{ parseFloat($json.price) > 50 }}\`
+- Signal detection: \`{{ $json.signal === 'BUY' }}\`
 - Time-based: \`{{ new Date().getHours() >= 9 }}\`
-
-What specific routing condition do you need help with?`;
-
-    } else if (userPrompt.includes('open switch node') || userPrompt.includes('click the switch node')) {
-      response = `🎯 **How to Access the Switch Node**
-
-To open/click the Switch node in your n8n workflow:
-
-**Visual Steps:**
-1. **Import your template** into n8n first
-2. **Look for a diamond-shaped node** labeled "Switch" in your workflow
-3. **Double-click the Switch node** to open its configuration panel
-4. **The settings panel** will appear on the right side
-
-**If you can't find the Switch node:**
-- Use **Ctrl/Cmd + F** to search for "Switch" in the workflow
-- Check if the template imported correctly
-- Look for nodes with conditional logic (diamond shapes)
-
-**Alternative:**
-- Right-click the Switch node → "Open" 
-- Or single-click to select, then press Enter
 
 Are you having trouble finding the Switch node in your imported template?`;
 
-    } else if (userPrompt.includes('if node') || (userPrompt.includes('if') && userPrompt.includes('credentials'))) {
-      response = `🔧 **IF Node Configuration**
+    } else if (userPrompt.includes('set') && (userPrompt.includes('credential') || userPrompt.includes('setup'))) {
+      response = `🔧 **Set Node Configuration**
 
-The IF node is for conditional logic and doesn't require external credentials:
+The Set node is for data manipulation and doesn't require external credentials:
 
 **Setup Steps:**
-1. **Open IF Node**: Click the IF node in your workflow
-2. **Set Condition**: Define what to check
-   - Value 1: Data to compare (e.g., \`{{ $json.price }}\`)
-   - Operation: Choose comparison (>, <, =, contains, etc.)
-   - Value 2: What to compare against
-3. **Configure Outputs**: 
-   - True path: What happens when condition is met
-   - False path: What happens when condition fails
+1. **Find the Set Node**: Look for a rectangular node labeled "Set"
+2. **Double-click** to open configuration
+3. **Choose Operation**:
+   - "Set" to add/modify data fields
+   - "Remove" to delete fields
+   - "Keep Only" to filter fields
+4. **Add Fields**: Click "Add Field" to define new data
+5. **Set Values**:
+   - Manual: Type values directly
+   - Expressions: \`{{ $json.fieldName }}\`
+   - Functions: JavaScript calculations
+
+**Common Use Cases:**
+- Set trading signals: \`signal = "BUY"\`
+- Calculate profits: \`profit = {{ $json.sellPrice - $json.buyPrice }}\`
+- Format timestamps: \`timestamp = {{ new Date().toISOString() }}\`
+
+What specific data transformation do you need help with?`;
+
+    } else if (userPrompt.includes('if') && (userPrompt.includes('credential') || userPrompt.includes('setup'))) {
+      response = `🔧 **IF Node Configuration**
+
+The IF node handles conditional logic and doesn't require external credentials:
+
+**Setup Steps:**
+1. **Find the IF Node**: Rectangular node labeled "IF"
+2. **Double-click** to configure
+3. **Set Condition**: Define what to check
+   - Value 1: \`{{ $json.price }}\` (data to compare)
+   - Operation: >, <, =, contains, etc.
+   - Value 2: threshold or comparison value
+4. **Configure Outputs**:
+   - True path: Action when condition is met
+   - False path: Action when condition fails
 
 **Trading Examples:**
-- Price check: \`{{ $json.currentPrice }} > {{ $json.buyThreshold }}\`
-- Signal validation: \`{{ $json.signal }} = "BUY"\`
-- Time checks: \`{{ $now.hour }} >= 9\`
+- Price check: \`{{ $json.currentPrice }} > 100\`
+- Signal validation: \`{{ $json.signal }} equals "BUY"\`
+- Profit threshold: \`{{ $json.profit }} > 50\`
 
-What condition are you trying to set up?`;
+What condition are you trying to implement?`;
 
-    } else if (userPrompt.includes('openai') || userPrompt.includes('langchain')) {
-      response = `🔑 **OpenAI & LangChain Credentials Setup**
+    } else if (userPrompt.includes('activate') || userPrompt.includes('deploy') || userPrompt.includes('workflow')) {
+      response = `⚡ **Template Activation & Deployment**
 
-For the OpenAI and LangChain nodes, you DO need credentials:
+Here's how to activate your n8n trading agent:
 
-**OpenAI Setup:**
-1. **Get API Key**: Go to platform.openai.com → API Keys
-2. **In n8n**: Go to Credentials → Add Credential → OpenAI
-3. **Enter API Key**: Paste your OpenAI API key
-4. **Test Connection**: Verify it works
+**Step-by-Step Activation:**
+1. **Import Complete**: Ensure your JSON template is fully imported in n8n
+2. **Configure Credentials**: Set up OpenAI API key (required for this template)
+3. **Test Execution**: Run a manual test first
+   - Click "Execute Workflow" button
+   - Check for any error messages
+4. **Verify Connections**: Ensure all nodes are properly connected
+5. **Activate**: Toggle the "Active" switch in the top-right
+6. **Monitor**: Watch the execution log for any issues
 
-**LangChain Memory Setup:**
-1. **No external credentials** needed for memory buffer
-2. **Configure in node**: Set memory window size
-3. **Connect to OpenAI**: Link with your OpenAI credential
+**Common Activation Issues:**
+- Missing OpenAI API key → Add in Credentials section
+- Node connection errors → Check workflow connections
+- Execution timeouts → Verify API endpoints are accessible
 
-**Important:**
-- Keep your OpenAI API key secure
-- Monitor usage to avoid unexpected charges
-- Test with small requests first
-
-Need help getting your OpenAI API key?`;
+What step are you currently stuck on?`;
 
     } else if (userPrompt.includes('webhook') || userPrompt.includes('api')) {
       response = `🔗 **Webhook & API Configuration**
 
-For webhook setup in your trading agent:
+For webhook setup in your trading template:
 
-**1. Webhook Trigger Node:**
-- Set HTTP method (POST/GET)
-- Configure endpoint URL  
-- Set up authentication if needed
+**Webhook Trigger Setup:**
+1. **Find Webhook Node**: Usually the first node in the workflow
+2. **Configure Method**: POST for receiving data, GET for simple triggers
+3. **Set Authentication**: Add API keys or basic auth if needed
+4. **Copy Webhook URL**: Use this in external services
 
-**2. API Request Nodes:**
-- Add proper headers (Authorization, Content-Type)
-- Configure request body for POST requests
-- Set up error handling
+**API Request Configuration:**
+1. **Set HTTP Method**: GET, POST, PUT, DELETE
+2. **Add Headers**: 
+   - Authorization: Bearer YOUR_API_KEY
+   - Content-Type: application/json
+3. **Configure Body**: JSON data for POST requests
+4. **Error Handling**: Set up retry logic and error responses
 
-**3. Testing:**
-- Use n8n's test webhook feature
-- Check endpoint connectivity
-- Validate response data structure
+**Testing:**
+- Use n8n's "Test webhook" feature
+- Verify external API endpoints are accessible
+- Check response data structure
 
-Need help with a specific API integration?`;
+Which specific API integration do you need help with?`;
 
-    } else if (userPrompt.includes('activate') || userPrompt.includes('deploy')) {
-      response = `⚡ **Template Activation & Deployment**
-
-**Step-by-step activation:**
-1. **Import Complete**: Ensure template is fully imported
-2. **Credentials Set**: All nodes have proper credentials configured
-3. **Test Execution**: Run manual test first
-4. **Check Connections**: Verify all API connections work
-5. **Activate Workflow**: Toggle the "Active" switch in n8n
-6. **Monitor Logs**: Watch execution log for any errors
-
-**Common Issues:**
-- Missing API keys → Add credentials to each service node
-- Webhook not receiving data → Check endpoint URL and method
-- Execution errors → Review node configuration and test data
-
-What specific activation step are you stuck on?`;
-
-    } else {
-      // Default helpful response
+    } else if (userPrompt.includes('help') || userPrompt.includes('what')) {
       response = `💬 **DevHubConnect Setup Assistant**
 
-I can help you with your n8n template deployment. What specifically do you need help with?
+I'm here to help you deploy your n8n AI trading agent template successfully! 
 
-**Available Help Topics:**
+**What I can help you with:**
+
+🔑 **Credentials & Authentication:**
+- OpenAI API key setup (required for this template)
+- Webhook authentication
+- External service connections
+
 🔧 **Node Configuration:**
-- Switch node setup and routing conditions
-- Set node for data manipulation  
-- IF node for conditional logic
-- OpenAI/LangChain credential setup
+- Switch node conditional routing
+- Set node data manipulation
+- IF node logic setup
+- LangChain memory configuration
 
-⚙️ **Technical Support:**
-- Finding and opening nodes in n8n
-- Webhook configuration and testing
-- Template import and activation
-- Error troubleshooting and debugging
+⚡ **Deployment & Activation:**
+- Template import process
+- Workflow testing and validation
+- Error troubleshooting
+- Performance optimization
 
-**Ask me something like:**
-- "How do I open the Switch node?"
-- "Help with Set node configuration"
-- "I need OpenAI credentials setup"
-- "How to activate my workflow?"
+**To get specific help, ask me about:**
+- "Help with OpenAI credentials"
+- "How to configure the Switch node"
+- "Template activation steps"
+- "Webhook configuration"
+
+What specific aspect of your template deployment do you need help with?`;
+
+    } else {
+      // Default response for unclear questions
+      response = `🤔 **I'd like to help you with your n8n template setup!**
+
+Based on your message, I'm not sure exactly what you need help with. Here are the most common setup tasks for your AI trading agent template:
+
+**Quick Help Options:**
+- **"OpenAI credentials"** - Set up your API key
+- **"Switch node setup"** - Configure conditional routing
+- **"Activate workflow"** - Deploy your template
+- **"Webhook configuration"** - Set up external connections
+
+**Your template includes these key components:**
+- OpenAI integration (requires API key)
+- Switch node for decision logic
+- Set nodes for data processing
+- LangChain memory for conversation context
+
+Could you be more specific about what you're trying to set up? For example:
+- "I need help with OpenAI API key setup"
+- "How do I configure the Switch node?"
+- "My workflow won't activate"
 
 What would you like help with?`;
     }
