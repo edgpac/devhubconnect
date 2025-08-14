@@ -376,6 +376,25 @@ app.get('/api/templates/:id/download', async (req, res) => {
   }
 });
 
+// ✅ NEW: Add missing recommendations endpoint
+app.get('/api/recommendations', async (req, res) => {
+  try {
+    // Simple implementation - return empty recommendations for now
+    res.json({ 
+      recommendations: [], 
+      metadata: {
+        total: 0,
+        personalized: false,
+        trending_boost_applied: false,
+        filters_applied: {}
+      }
+    });
+  } catch (error) {
+    console.error('Recommendations error:', error);
+    res.status(500).json({ error: 'Failed to fetch recommendations' });
+  }
+});
+
 // Stripe checkout endpoint
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
@@ -424,7 +443,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
         quantity: 1,
       }],
       mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/purchase/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard?purchase=success`,
       cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/template/${templateId}`,
       metadata: {
         templateId: templateId.toString(),
