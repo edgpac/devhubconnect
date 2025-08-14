@@ -340,6 +340,42 @@ app.get('/api/templates/:id', async (req, res) => {
   }
 });
 
+// ✅ NEW: Download endpoint for purchased templates
+app.get('/api/templates/:id/download', async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const templateId = parseInt(req.params.id);
+    
+    // Check if user has purchased this template
+    const purchaseCheck = await pool.query(`
+      SELECT p.id, t.name, t.workflow_json 
+      FROM purchases p 
+      JOIN templates t ON p.template_id = t.id 
+      WHERE p.user_id = $1 AND t.id = $2
+    `, [req.user.id, templateId]);
+
+    if (purchaseCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Template not purchased' });
+    }
+
+    const template = purchaseCheck.rows[0];
+    
+    // Return the workflow JSON as a downloadable file
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${template.name.replace(/[^a-zA-Z0-9]/g, '_')}.json"`);
+    res.send(JSON.stringify(template.workflow_json, null, 2));
+    
+    console.log('✅ Template downloaded:', template.name, 'by user:', req.user.username);
+    
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ error: 'Download failed' });
+  }
+});
+
 // Stripe checkout endpoint
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
