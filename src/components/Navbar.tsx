@@ -34,6 +34,7 @@ const useCurrentUser = () => {
  // Function to refresh token
  const refreshToken = useCallback(async () => {
    try {
+     console.log('🔄 Attempting token refresh...');
      const response = await fetch('/api/auth/refresh', {
        method: 'POST',
        credentials: 'include',
@@ -42,16 +43,20 @@ const useCurrentUser = () => {
        }
      });
 
+     console.log('🔄 Token refresh response status:', response.status);
+
      if (response.ok) {
        const data = await response.json();
        if (data.token) {
          localStorage.setItem('token', data.token);
+         console.log('✅ Token refresh successful');
          return true;
        }
      }
+     console.log('❌ Token refresh failed');
      return false;
    } catch (error) {
-     console.error('Token refresh failed:', error);
+     console.error('❌ Token refresh failed:', error);
      return false;
    }
  }, []);
@@ -60,13 +65,16 @@ const useCurrentUser = () => {
  const checkSession = useCallback(async (retryCount = 0) => {
    try {
      const token = localStorage.getItem('token');
+     console.log('🔐 Checking session, token exists:', !!token);
      
      if (!token) {
+       console.log('🔐 No token found, setting user to null');
        setUser(null);
        setIsLoading(false);
        return;
      }
 
+     console.log('🔐 Making session check request...');
      const response = await fetch('/api/auth/profile/session', {
        method: 'GET',
        credentials: 'include',
@@ -76,6 +84,8 @@ const useCurrentUser = () => {
        }
      });
 
+     console.log('🔐 Session check response status:', response.status);
+
      // If unauthorized and we haven't tried refreshing yet
      if (response.status === 401 && retryCount === 0) {
        console.log('🔄 Token expired, attempting refresh...');
@@ -83,9 +93,11 @@ const useCurrentUser = () => {
        
        if (refreshSuccess) {
          // Retry the session check with new token
+         console.log('🔄 Retrying session check with new token...');
          return checkSession(1);
        } else {
          // Refresh failed, clear auth data
+         console.log('❌ Refresh failed, clearing auth data');
          localStorage.removeItem('token');
          localStorage.removeItem('devhub_user');
          localStorage.removeItem('admin_auth');
@@ -98,6 +110,7 @@ const useCurrentUser = () => {
 
      if (response.ok) {
        const data = await response.json();
+       console.log('✅ Session check successful, user data:', data.user ? 'present' : 'missing');
        if (data.user) {
          const userData = {
            id: data.user.id,
@@ -108,6 +121,7 @@ const useCurrentUser = () => {
            role: data.user.role || (data.user.isAdmin ? 'admin' : 'user')
          };
          
+         console.log('✅ Setting user data:', userData.email);
          setUser(userData);
          setAuthError(null);
          
@@ -122,26 +136,30 @@ const useCurrentUser = () => {
      throw new Error(`Session check failed with status: ${response.status}`);
      
    } catch (error) {
-     console.error('Session check error:', error);
+     console.error('❌ Session check error:', error);
      
      // Fallback to localStorage data if available
      const savedUser = localStorage.getItem('devhub_user');
      const adminAuth = localStorage.getItem('admin_auth');
      
+     console.log('🔐 Falling back to localStorage, savedUser exists:', !!savedUser);
+     
      if (savedUser) {
        try {
          const userData = JSON.parse(savedUser);
+         console.log('✅ Using localStorage user data:', userData.email);
          setUser({
            ...userData,
            isAdmin: userData.isAdmin || adminAuth === 'true'
          });
          setAuthError('Using offline data. Some features may be limited.');
        } catch (parseError) {
-         console.error('Error parsing saved user:', parseError);
+         console.error('❌ Error parsing saved user:', parseError);
          setUser(null);
          setAuthError('Authentication error. Please sign in again.');
        }
      } else {
+       console.log('❌ No localStorage data available');
        setUser(null);
        setAuthError('Unable to verify authentication. Please sign in.');
      }
@@ -153,8 +171,11 @@ const useCurrentUser = () => {
  useEffect(() => {
    const checkUser = async () => {
      try {
+       console.log('🔐 Starting user check...');
+       
        // ✅ NEW: First check global auth checker
        if (window.authChecker && window.authChecker.isAuthenticated && window.authChecker.user) {
+         console.log('✅ Using global auth checker');
          const authUser = window.authChecker.user;
          setUser({
            id: authUser.id,
@@ -170,10 +191,11 @@ const useCurrentUser = () => {
 
        // ✅ ENHANCED: Check session endpoint directly
        try {
+         console.log('🔐 Checking session endpoint...');
          await checkSession();
          return;
        } catch (sessionError) {
-         console.log('Session check failed, checking localStorage...');
+         console.log('❌ Session check failed, checking localStorage...');
        }
 
        // ✅ FALLBACK: Check localStorage
@@ -194,13 +216,15 @@ const useCurrentUser = () => {
          if (savedUser) {
            try {
              userData = JSON.parse(savedUser);
+             console.log('✅ Parsed saved user data:', userData.email);
            } catch (error) {
-             console.error('Error parsing devhub_user:', error);
+             console.error('❌ Error parsing devhub_user:', error);
            }
          }
 
          // ✅ FIXED: Handle admin_auth case
          if (adminAuth === 'true' || userData?.isAdmin) {
+           console.log('✅ Setting admin user');
            setUser({
              id: userData?.id || 'admin',
              email: userData?.email || 'admin@devhubconnect.com',
@@ -210,6 +234,7 @@ const useCurrentUser = () => {
              role: 'admin'
            });
          } else if (userData) {
+           console.log('✅ Setting regular user');
            setUser({
              id: userData.id,
              email: userData.email,
@@ -219,13 +244,15 @@ const useCurrentUser = () => {
              role: userData.isAdmin ? 'admin' : 'user'
            });
          } else {
+           console.log('❌ No valid user data found');
            setUser(null);
          }
        } else {
+         console.log('❌ No token or saved user found');
          setUser(null);
        }
      } catch (error) {
-       console.error('Error reading user data:', error);
+       console.error('❌ Error reading user data:', error);
        setUser(null);
      } finally {
        setIsLoading(false);
@@ -237,6 +264,7 @@ const useCurrentUser = () => {
    // Check auth status every 30 seconds
    const authInterval = setInterval(() => {
      if (user) {
+       console.log('🔐 30-second auth check...');
        checkSession();
      }
    }, 30000);
@@ -244,6 +272,7 @@ const useCurrentUser = () => {
    // ✅ NEW: Listen for auth checker changes
    const checkInterval = setInterval(() => {
      if (window.authChecker && window.authChecker.isAuthenticated !== !!user) {
+       console.log('🔐 Auth checker state changed');
        checkUser();
      }
    }, 2000);
@@ -251,6 +280,7 @@ const useCurrentUser = () => {
    // Listen for storage changes (when user logs in/out in another tab)
    const handleStorageChange = (e) => {
      if (e.key === 'token' || e.key === 'devhub_user') {
+       console.log('🔐 Storage changed:', e.key);
        checkSession();
      }
    };
@@ -258,6 +288,7 @@ const useCurrentUser = () => {
    // Listen for focus events to check auth when user returns to tab
    const handleFocus = () => {
      if (user) {
+       console.log('🔐 Window focus - checking auth...');
        checkSession();
      }
    };
@@ -283,9 +314,12 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
  // Use prop user if provided, otherwise use detected user
  const user = propUser || detectedUser;
 
+ console.log('🔐 Navbar render - user:', user ? user.email : 'none', 'authError:', authError);
+
  // ✅ FIXED: Use AuthProvider's logout function and global auth checker
  const handleSignOut = async () => {
    try {
+     console.log('🔐 Signing out...');
      if (window.authChecker) {
        await window.authChecker.logout();
      } else if (onSignOut) {
@@ -296,11 +330,12 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
        logout();
      }
    } catch (error) {
-     console.error('Logout error:', error);
+     console.error('❌ Logout error:', error);
    }
  };
 
  const handleRefreshAuth = async () => {
+   console.log('🔐 Manual auth refresh triggered');
    setIsRefreshing(true);
    await refreshAuth();
    setIsRefreshing(false);
@@ -421,10 +456,6 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
                    </DropdownMenuItem>
                  </DropdownMenuContent>
                </DropdownMenu>
-               <span className="text-sm text-gray-700 hidden sm:inline">
-                 Welcome, {user.name || 'User'}!
-                 {authError && <span className="text-amber-600 ml-1">⚠</span>}
-               </span>
              </div>
            ) : (
              <div data-auth="sign-in" className="flex items-center space-x-2">
