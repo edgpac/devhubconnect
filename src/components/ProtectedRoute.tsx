@@ -23,7 +23,21 @@ const useAuth = (): AuthContextType => {
   React.useEffect(() => {
     const checkAuth = () => {
       try {
-        // ✅ ENHANCED: First check session auth from AuthProvider
+        // ✅ ENHANCED: First check global auth checker
+        if (window.authChecker && window.authChecker.isAuthenticated && window.authChecker.user) {
+          const authUser = window.authChecker.user;
+          console.log('🔐 Global Auth Found:', authUser.username);
+          setUser({
+            id: authUser.id,
+            email: authUser.email || '',
+            role: 'user',
+            isAdmin: false
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        // ✅ ENHANCED: Second check session auth from AuthProvider
         if (sessionUser && sessionToken) {
           console.log('🔐 Session Auth Found:', sessionUser.email);
           setUser({
