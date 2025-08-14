@@ -7,8 +7,8 @@ import {
  DropdownMenuItem,
  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, ShoppingBag, HelpCircle, Shield } from "lucide-react";
-import { useState, useEffect } from "react";
+import { LogOut, ShoppingBag, HelpCircle, Shield, RefreshCw } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/components/context/AuthProvider";
 
 interface User {
@@ -29,6 +29,126 @@ interface NavbarProps {
 const useCurrentUser = () => {
  const [user, setUser] = useState<User | null>(null);
  const [isLoading, setIsLoading] = useState(true);
+ const [authError, setAuthError] = useState<string | null>(null);
+
+ // Function to refresh token
+ const refreshToken = useCallback(async () => {
+   try {
+     const response = await fetch('/api/auth/refresh', {
+       method: 'POST',
+       credentials: 'include',
+       headers: {
+         'Content-Type': 'application/json'
+       }
+     });
+
+     if (response.ok) {
+       const data = await response.json();
+       if (data.token) {
+         localStorage.setItem('token', data.token);
+         return true;
+       }
+     }
+     return false;
+   } catch (error) {
+     console.error('Token refresh failed:', error);
+     return false;
+   }
+ }, []);
+
+ // Enhanced session check with retry logic
+ const checkSession = useCallback(async (retryCount = 0) => {
+   try {
+     const token = localStorage.getItem('token');
+     
+     if (!token) {
+       setUser(null);
+       setIsLoading(false);
+       return;
+     }
+
+     const response = await fetch('/api/auth/profile/session', {
+       method: 'GET',
+       credentials: 'include',
+       headers: {
+         'Content-Type': 'application/json',
+         'Authorization': `Bearer ${token}`
+       }
+     });
+
+     // If unauthorized and we haven't tried refreshing yet
+     if (response.status === 401 && retryCount === 0) {
+       console.log('🔄 Token expired, attempting refresh...');
+       const refreshSuccess = await refreshToken();
+       
+       if (refreshSuccess) {
+         // Retry the session check with new token
+         return checkSession(1);
+       } else {
+         // Refresh failed, clear auth data
+         localStorage.removeItem('token');
+         localStorage.removeItem('devhub_user');
+         localStorage.removeItem('admin_auth');
+         setUser(null);
+         setAuthError('Session expired. Please sign in again.');
+         setIsLoading(false);
+         return;
+       }
+     }
+
+     if (response.ok) {
+       const data = await response.json();
+       if (data.user) {
+         const userData = {
+           id: data.user.id,
+           email: data.user.email || '',
+           name: data.user.username || data.user.name || data.user.email?.split('@')[0] || 'User',
+           avatar: data.user.avatar_url,
+           isAdmin: data.user.isAdmin || data.user.role === 'admin',
+           role: data.user.role || (data.user.isAdmin ? 'admin' : 'user')
+         };
+         
+         setUser(userData);
+         setAuthError(null);
+         
+         // Update localStorage with fresh data
+         localStorage.setItem('devhub_user', JSON.stringify(userData));
+         setIsLoading(false);
+         return;
+       }
+     }
+
+     // If we get here, session check failed
+     throw new Error(`Session check failed with status: ${response.status}`);
+     
+   } catch (error) {
+     console.error('Session check error:', error);
+     
+     // Fallback to localStorage data if available
+     const savedUser = localStorage.getItem('devhub_user');
+     const adminAuth = localStorage.getItem('admin_auth');
+     
+     if (savedUser) {
+       try {
+         const userData = JSON.parse(savedUser);
+         setUser({
+           ...userData,
+           isAdmin: userData.isAdmin || adminAuth === 'true'
+         });
+         setAuthError('Using offline data. Some features may be limited.');
+       } catch (parseError) {
+         console.error('Error parsing saved user:', parseError);
+         setUser(null);
+         setAuthError('Authentication error. Please sign in again.');
+       }
+     } else {
+       setUser(null);
+       setAuthError('Unable to verify authentication. Please sign in.');
+     }
+     
+     setIsLoading(false);
+   }
+ }, [refreshToken]);
 
  useEffect(() => {
    const checkUser = async () => {
@@ -50,29 +170,8 @@ const useCurrentUser = () => {
 
        // ✅ ENHANCED: Check session endpoint directly
        try {
-         const response = await fetch('/api/auth/profile/session', {
-           method: 'GET',
-           credentials: 'include',
-           headers: {
-             'Content-Type': 'application/json'
-           }
-         });
-
-         if (response.ok) {
-           const data = await response.json();
-           if (data.user) {
-             setUser({
-               id: data.user.id,
-               email: data.user.email || '',
-               name: data.user.username || data.user.email?.split('@')[0] || 'User',
-               avatar: data.user.avatar_url,
-               isAdmin: false,
-               role: 'user'
-             });
-             setIsLoading(false);
-             return;
-           }
-         }
+         await checkSession();
+         return;
        } catch (sessionError) {
          console.log('Session check failed, checking localStorage...');
        }
@@ -135,6 +234,13 @@ const useCurrentUser = () => {
 
    checkUser();
 
+   // Check auth status every 30 seconds
+   const authInterval = setInterval(() => {
+     if (user) {
+       checkSession();
+     }
+   }, 30000);
+
    // ✅ NEW: Listen for auth checker changes
    const checkInterval = setInterval(() => {
      if (window.authChecker && window.authChecker.isAuthenticated !== !!user) {
@@ -143,23 +249,36 @@ const useCurrentUser = () => {
    }, 2000);
 
    // Listen for storage changes (when user logs in/out in another tab)
-   const handleStorageChange = () => {
-     checkUser();
+   const handleStorageChange = (e) => {
+     if (e.key === 'token' || e.key === 'devhub_user') {
+       checkSession();
+     }
+   };
+
+   // Listen for focus events to check auth when user returns to tab
+   const handleFocus = () => {
+     if (user) {
+       checkSession();
+     }
    };
 
    window.addEventListener('storage', handleStorageChange);
+   window.addEventListener('focus', handleFocus);
    return () => {
      window.removeEventListener('storage', handleStorageChange);
+     window.removeEventListener('focus', handleFocus);
      clearInterval(checkInterval);
+     clearInterval(authInterval);
    };
- }, [user]);
+ }, [user, checkSession]);
 
- return { user, isLoading };
+ return { user, isLoading, authError, refreshAuth: checkSession };
 };
 
 export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
- const { user: detectedUser, isLoading } = useCurrentUser();
+ const { user: detectedUser, isLoading, authError, refreshAuth } = useCurrentUser();
  const { logout } = useAuth();
+ const [isRefreshing, setIsRefreshing] = useState(false);
  
  // Use prop user if provided, otherwise use detected user
  const user = propUser || detectedUser;
@@ -179,6 +298,12 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
    } catch (error) {
      console.error('Logout error:', error);
    }
+ };
+
+ const handleRefreshAuth = async () => {
+   setIsRefreshing(true);
+   await refreshAuth();
+   setIsRefreshing(false);
  };
 
  if (isLoading && !propUser) {
@@ -221,6 +346,20 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
            
            {user ? (
              <div data-auth="user-info" className="flex items-center space-x-4">
+               {/* Show auth error indicator */}
+               {authError && (
+                 <Button
+                   variant="ghost"
+                   size="sm"
+                   onClick={handleRefreshAuth}
+                   disabled={isRefreshing}
+                   className="text-amber-600 hover:text-amber-700"
+                   title={authError}
+                 >
+                   <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                 </Button>
+               )}
+               
                <DropdownMenu>
                  <DropdownMenuTrigger asChild>
                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -235,9 +374,25 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
                          <Shield className="h-2 w-2 text-white" />
                        </div>
                      )}
+                     {/* Show warning indicator for auth issues */}
+                     {authError && (
+                       <div className="absolute -bottom-1 -right-1 h-3 w-3 bg-amber-500 border-2 border-white rounded-full" />
+                     )}
                    </Button>
                  </DropdownMenuTrigger>
                  <DropdownMenuContent className="w-56" align="end" forceMount>
+                   {/* Show auth status */}
+                   {authError && (
+                     <DropdownMenuItem 
+                       onClick={handleRefreshAuth}
+                       disabled={isRefreshing}
+                       className="text-amber-600 border-b"
+                     >
+                       <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                       <span className="text-xs">Refresh Session</span>
+                     </DropdownMenuItem>
+                   )}
+                   
                    {user.isAdmin && (
                      <>
                        <DropdownMenuItem asChild>
@@ -268,6 +423,7 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
                </DropdownMenu>
                <span className="text-sm text-gray-700 hidden sm:inline">
                  Welcome, {user.name || 'User'}!
+                 {authError && <span className="text-amber-600 ml-1">⚠</span>}
                </span>
              </div>
            ) : (
