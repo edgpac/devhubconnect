@@ -51,16 +51,32 @@ export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
     navigate(`/template/${template.id}`);
   };
 
-  // ✅ NEW: Real download functionality
+  // ✅ NEW: Real download functionality with DEBUG logging
   const handleDownload = async () => {
+    // ✅ ADD THESE DEBUG LINES
+    console.log('🐛 DEBUG: Full template object:', template);
+    console.log('🐛 DEBUG: Template ID:', template.id);
+    console.log('🐛 DEBUG: Template ID type:', typeof template.id);
+    console.log('🐛 DEBUG: Template purchased:', template.purchased);
+
     if (!template.purchased) {
       handlePurchase();
       return;
     }
 
+    // ✅ ADD VALIDATION
+    if (!template.id || template.id === 'undefined') {
+      console.error('❌ Template ID is undefined or invalid');
+      alert('Error: Template ID is missing');
+      return;
+    }
+
     setIsDownloading(true);
     try {
-      const response = await fetch(`/api/templates/${template.id}/download`, {
+      const downloadUrl = `/api/templates/${template.id}/download`;
+      console.log('🐛 DEBUG: Download URL:', downloadUrl);
+
+      const response = await fetch(downloadUrl, {
         credentials: 'include',
       });
 
