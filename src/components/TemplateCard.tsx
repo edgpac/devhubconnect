@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Star, Download, ShoppingCart, Eye } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getDeterministicRandom } from "@/lib/utils";
+import { useState } from "react";
 
 interface Template {
   id: number;
@@ -28,6 +29,7 @@ interface TemplateCardProps {
 
 export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
   const navigate = useNavigate();
+  const [isDownloading, setIsDownloading] = useState(false);
   
   // Generate deterministic fake numbers if real data isn't available
   const downloadCount = template.downloads || template.downloadCount || 
@@ -47,6 +49,60 @@ export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
   const handlePurchase = () => {
     // Navigate to template detail page where they can purchase
     navigate(`/template/${template.id}`);
+  };
+
+  // ✅ NEW: Real download functionality
+  const handleDownload = async () => {
+    if (!template.purchased) {
+      handlePurchase();
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      const response = await fetch(`/api/templates/${template.id}/download`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Please sign in to download templates');
+        } else if (response.status === 403) {
+          throw new Error('Template not purchased');
+        } else {
+          throw new Error('Failed to download template');
+        }
+      }
+
+      // Get the filename from the response headers
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `${template.name.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      console.log('✅ Template downloaded:', template.name);
+    } catch (error) {
+      console.error('Download error:', error);
+      alert(`Download failed: ${error.message}`);
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -110,9 +166,15 @@ export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
                 : "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg"
             }`}
             variant={template.purchased ? "outline" : "default"}
-            onClick={handlePurchase}
+            onClick={handleDownload}
+            disabled={isDownloading}
           >
-            {template.purchased ? (
+            {isDownloading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                Downloading...
+              </>
+            ) : template.purchased ? (
               <>
                 <Download className="h-4 w-4 mr-2" />
                 Download
