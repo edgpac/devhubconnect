@@ -885,7 +885,7 @@ app.get('/api/user/purchases', async (req, res) => {
 });
 
 // ✅ NEW: Chat endpoint for AI assistance (missing from simple-server.mjs)
-app.post('/api/ask-ai', async (req, res) => {
+  app.post('/api/ask-ai', async (req, res) => {
   const { prompt, history, templateContext } = req.body;
 
   if (!prompt) {
@@ -937,13 +937,39 @@ Once I know your setup, I'll provide specific step-by-step instructions for depl
       });
     }
 
-    // Handle specific setup questions
+    // ✅ IMPROVED: More intelligent response handling based on specific questions
+    const userPrompt = prompt.toLowerCase();
     let response = '';
-    
-    if (prompt.toLowerCase().includes('credentials') || prompt.toLowerCase().includes('switch')) {
-      response = `🔧 **Switch Node Configuration Help**
-      
-The Switch node in n8n is for conditional routing and doesn't require external credentials:
+
+    // Handle specific node configuration questions
+    if (userPrompt.includes('set node') || (userPrompt.includes('set') && userPrompt.includes('credentials'))) {
+      response = `🔧 **Set Node Configuration**
+
+The Set node is used to create or modify data in your workflow and doesn't require external credentials:
+
+**Setup Steps:**
+1. **Open Set Node**: Click the Set node in your workflow
+2. **Choose Operation**: 
+   - "Set" to create/modify fields
+   - "Remove" to delete fields
+   - "Keep Only" to filter fields
+3. **Add Fields**: Click "Add Field" to define what data to set
+4. **Configure Values**: 
+   - Manual values: Type directly
+   - Expressions: Use \`{{ $json.fieldName }}\` to reference data
+   - Functions: Use JavaScript expressions
+
+**Common Use Cases:**
+- Setting variables: \`tradingSignal = "BUY"\`
+- Calculating values: \`profit = {{ $json.sellPrice - $json.buyPrice }}\`
+- Formatting data for APIs
+
+What specific data are you trying to set or modify?`;
+
+    } else if (userPrompt.includes('switch node') || (userPrompt.includes('switch') && userPrompt.includes('credentials'))) {
+      response = `🔧 **Switch Node Configuration**
+
+The Switch node routes data based on conditions and doesn't require external credentials:
 
 **Setup Steps:**
 1. **Open Switch Node**: Click the Switch node in your workflow
@@ -951,25 +977,91 @@ The Switch node in n8n is for conditional routing and doesn't require external c
 3. **Add Conditions**: 
    - Expression mode: Write JavaScript like \`{{ $json.price > 100 }}\`
    - Rules mode: Set up condition-based rules with operators
-4. **Add Outputs**: Click "Add Routing Rule" for multiple paths
+4. **Add Outputs**: Click "Add Routing Rule" for different paths
 5. **Label Outputs**: Name them clearly (e.g., "Buy Signal", "Sell Signal")
-6. **Test**: Use sample data to verify routing works
 
 **Common Trading Conditions:**
 - Price-based: \`{{ parseFloat($json.price) > threshold }}\`
 - Signal-based: \`{{ $json.signal === 'buy' }}\`
 - Time-based: \`{{ new Date().getHours() >= 9 }}\`
 
-What specific condition are you trying to set up?`;
-      
-    } else if (prompt.toLowerCase().includes('webhook') || prompt.toLowerCase().includes('api')) {
+What specific routing condition do you need help with?`;
+
+    } else if (userPrompt.includes('open switch node') || userPrompt.includes('click the switch node')) {
+      response = `🎯 **How to Access the Switch Node**
+
+To open/click the Switch node in your n8n workflow:
+
+**Visual Steps:**
+1. **Import your template** into n8n first
+2. **Look for a diamond-shaped node** labeled "Switch" in your workflow
+3. **Double-click the Switch node** to open its configuration panel
+4. **The settings panel** will appear on the right side
+
+**If you can't find the Switch node:**
+- Use **Ctrl/Cmd + F** to search for "Switch" in the workflow
+- Check if the template imported correctly
+- Look for nodes with conditional logic (diamond shapes)
+
+**Alternative:**
+- Right-click the Switch node → "Open" 
+- Or single-click to select, then press Enter
+
+Are you having trouble finding the Switch node in your imported template?`;
+
+    } else if (userPrompt.includes('if node') || (userPrompt.includes('if') && userPrompt.includes('credentials'))) {
+      response = `🔧 **IF Node Configuration**
+
+The IF node is for conditional logic and doesn't require external credentials:
+
+**Setup Steps:**
+1. **Open IF Node**: Click the IF node in your workflow
+2. **Set Condition**: Define what to check
+   - Value 1: Data to compare (e.g., \`{{ $json.price }}\`)
+   - Operation: Choose comparison (>, <, =, contains, etc.)
+   - Value 2: What to compare against
+3. **Configure Outputs**: 
+   - True path: What happens when condition is met
+   - False path: What happens when condition fails
+
+**Trading Examples:**
+- Price check: \`{{ $json.currentPrice }} > {{ $json.buyThreshold }}\`
+- Signal validation: \`{{ $json.signal }} = "BUY"\`
+- Time checks: \`{{ $now.hour }} >= 9\`
+
+What condition are you trying to set up?`;
+
+    } else if (userPrompt.includes('openai') || userPrompt.includes('langchain')) {
+      response = `🔑 **OpenAI & LangChain Credentials Setup**
+
+For the OpenAI and LangChain nodes, you DO need credentials:
+
+**OpenAI Setup:**
+1. **Get API Key**: Go to platform.openai.com → API Keys
+2. **In n8n**: Go to Credentials → Add Credential → OpenAI
+3. **Enter API Key**: Paste your OpenAI API key
+4. **Test Connection**: Verify it works
+
+**LangChain Memory Setup:**
+1. **No external credentials** needed for memory buffer
+2. **Configure in node**: Set memory window size
+3. **Connect to OpenAI**: Link with your OpenAI credential
+
+**Important:**
+- Keep your OpenAI API key secure
+- Monitor usage to avoid unexpected charges
+- Test with small requests first
+
+Need help getting your OpenAI API key?`;
+
+    } else if (userPrompt.includes('webhook') || userPrompt.includes('api')) {
       response = `🔗 **Webhook & API Configuration**
 
 For webhook setup in your trading agent:
 
 **1. Webhook Trigger Node:**
 - Set HTTP method (POST/GET)
-- Configure endpoint URL
+- Configure endpoint URL  
 - Set up authentication if needed
 
 **2. API Request Nodes:**
@@ -982,9 +1074,9 @@ For webhook setup in your trading agent:
 - Check endpoint connectivity
 - Validate response data structure
 
-Need help with a specific API integration or webhook configuration?`;
-      
-    } else if (prompt.toLowerCase().includes('activate') || prompt.toLowerCase().includes('deploy')) {
+Need help with a specific API integration?`;
+
+    } else if (userPrompt.includes('activate') || userPrompt.includes('deploy')) {
       response = `⚡ **Template Activation & Deployment**
 
 **Step-by-step activation:**
@@ -1000,29 +1092,34 @@ Need help with a specific API integration or webhook configuration?`;
 - Webhook not receiving data → Check endpoint URL and method
 - Execution errors → Review node configuration and test data
 
-What specific step are you having trouble with?`;
-      
+What specific activation step are you stuck on?`;
+
     } else {
+      // Default helpful response
       response = `💬 **DevHubConnect Setup Assistant**
 
-I can help you with your n8n template deployment:
+I can help you with your n8n template deployment. What specifically do you need help with?
 
-**🔧 Configuration Help:**
-- Switch node setup and conditional routing
-- Credential configuration for service nodes
-- API key setup and authentication
+**Available Help Topics:**
+🔧 **Node Configuration:**
+- Switch node setup and routing conditions
+- Set node for data manipulation  
+- IF node for conditional logic
+- OpenAI/LangChain credential setup
 
-**⚙️ Technical Support:**
+⚙️ **Technical Support:**
+- Finding and opening nodes in n8n
 - Webhook configuration and testing
-- Node connection and data flow
+- Template import and activation
 - Error troubleshooting and debugging
 
-**📊 Template-Specific Guidance:**
-- AI trading agent setup
-- Workflow activation and monitoring
-- Performance optimization
+**Ask me something like:**
+- "How do I open the Switch node?"
+- "Help with Set node configuration"
+- "I need OpenAI credentials setup"
+- "How to activate my workflow?"
 
-What specific aspect of your template setup do you need help with?`;
+What would you like help with?`;
     }
 
     console.log('✅ Chat response generated successfully');
@@ -1034,73 +1131,4 @@ What specific aspect of your template setup do you need help with?`;
       error: 'Chat service temporarily unavailable. Please try again.' 
     });
   }
-});
-
-// ✅ IMPROVED: Enhanced generate-setup-instructions with better error handling
-app.post('/api/generate-setup-instructions', async (req, res) => {
-  const { workflow, templateId, purchaseId } = req.body;
-
-  if (!workflow || !templateId) {
-    return res.status(400).json({ error: 'Workflow and templateId are required.' });
-  }
-
-  try {
-    console.log('📋 Generating setup instructions for:', templateId);
-    
-    // Analyze the workflow to generate specific instructions
-    const nodeTypes = workflow.nodes?.map((node) => node.type).filter(Boolean) || [];
-    const uniqueServices = [...new Set(nodeTypes)].slice(0, 5);
-
-    const instructions = `🔧 **Setup Instructions for ${templateId}**
-
-**Step 1: Environment Setup**
-- Ensure you have n8n installed and running
-- Access your n8n instance (Cloud or self-hosted)
-
-**Step 2: Import Template**
-- In n8n, go to "Workflows" → "Import from JSON"
-- Paste the template JSON you downloaded
-- Click "Import"
-
-**Step 3: Configure Credentials**
-${uniqueServices.map(service => {
-  const cleanService = service.replace('n8n-nodes-base.', '');
-  return `• Set up credentials for ${cleanService}`;
-}).join('\n')}
-- Test all connections to ensure they work
-
-**Step 4: Activate Workflow**
-- Click the "Activate" toggle in n8n
-- Monitor the execution log for any errors
-
-**Template contains:** ${workflow.nodes?.length || 0} nodes
-**Services detected:** ${uniqueServices.length > 0 ? uniqueServices.map(s => s.replace('n8n-nodes-base.', '')).join(', ') : 'None'}
-
-💬 **Need specific help?** Ask me about:
-- Switch node configuration and conditional routing
-- Credential setup for specific services  
-- Webhook configuration and testing
-- Troubleshooting execution errors
-
-You can now ask me questions about this template or request specific help with the setup process.`;
-
-    console.log('✅ Setup instructions generated successfully');
-    res.json({ 
-      success: true,
-      instructions: instructions 
-    });
-
-  } catch (error) {
-    console.error('❌ Error generating setup instructions:', error);
-    res.status(500).json({ error: 'Failed to generate setup instructions.' });
-  }
-});
-
-// Catch-all handler for React routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`✅ Server running on 0.0.0.0:${port}`);
 });
