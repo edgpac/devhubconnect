@@ -24,7 +24,7 @@ export const API_ENDPOINTS = {
   RECOMMENDATIONS: `${API_BASE_URL}/api/recommendations`,
   
   // Purchase endpoints
-  PURCHASES: `${API_BASE_URL}/api/purchases`,
+  PURCHASES: `${API_BASE_URL}/api/user/purchases`,
   
   // Stripe endpoints
   CREATE_CHECKOUT: `${API_BASE_URL}/api/stripe/create-checkout-session`,
