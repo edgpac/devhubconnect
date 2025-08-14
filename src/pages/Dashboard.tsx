@@ -71,14 +71,16 @@ export const Dashboard = () => {
        if (response.ok) {
          const data = await response.json();
          if (data.success) {
+           // ✅ FIXED: Use the new nested structure
            setPurchasedTemplates(data.purchases.map(purchase => ({
-             id: purchase.templateId,
-             name: purchase.templateName,
-             price: purchase.amountPaid,
-             purchased: true,
-             status: purchase.status,
-             purchasedAt: purchase.purchasedAt,
-             description: purchase.templateDescription
+             // Use template data directly from the nested structure
+             ...purchase.template,          // ✅ Spread all template properties
+             purchased: true,               // ✅ Mark as purchased
+             // Add purchase metadata if needed
+             purchaseInfo: purchase.purchaseInfo,
+             purchasedAt: purchase.purchaseInfo.purchasedAt,
+             amountPaid: purchase.purchaseInfo.amountPaid,
+             status: purchase.purchaseInfo.status
            })));
          }
        }
@@ -142,7 +144,7 @@ export const Dashboard = () => {
    }
  };
 
- const totalSpent = purchasedTemplates.reduce((sum, template) => sum + template.price, 0);
+ const totalSpent = purchasedTemplates.reduce((sum, template) => sum + (template.amountPaid || template.price || 0), 0);
 
  const handlePreferencesUpdate = (newPreferences: any) => {
    updatePreferences(newPreferences);
