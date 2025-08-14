@@ -70,22 +70,36 @@ export const Dashboard = () => {
        });
        if (response.ok) {
          const data = await response.json();
+         console.log('🐛 DEBUG: Raw API response:', data);
+         
          if (data.success) {
-           // ✅ FIXED: Use the new nested structure
-           setPurchasedTemplates(data.purchases.map(purchase => ({
-             // Use template data directly from the nested structure
-             ...purchase.template,          // ✅ Spread all template properties
-             purchased: true,               // ✅ Mark as purchased
-             // Add purchase metadata if needed
-             purchaseInfo: purchase.purchaseInfo,
-             purchasedAt: purchase.purchaseInfo.purchasedAt,
-             amountPaid: purchase.purchaseInfo.amountPaid,
-             status: purchase.purchaseInfo.status
-           })));
+           console.log('🐛 DEBUG: First purchase:', data.purchases[0]);
+           
+           // ✅ FIXED: Use safe access with optional chaining
+           setPurchasedTemplates(data.purchases.map(purchase => {
+             console.log('🐛 DEBUG: Processing purchase:', purchase);
+             
+             return {
+               // Use template data directly from the nested structure
+               ...purchase.template,          // ✅ Spread all template properties
+               purchased: true,               // ✅ Mark as purchased
+               // ✅ FIXED: Add safe access with optional chaining
+               purchaseInfo: purchase.purchaseInfo || {},
+               purchasedAt: purchase.purchaseInfo?.purchasedAt,
+               amountPaid: purchase.purchaseInfo?.amountPaid || purchase.template?.price || 0,
+               status: purchase.purchaseInfo?.status || 'completed'
+             };
+           }));
+         } else {
+           console.error('❌ API returned success: false', data);
          }
+       } else {
+         console.error('❌ API response not ok:', response.status, response.statusText);
        }
      } catch (error) {
-       console.error('Error fetching purchases:', error);
+       console.error('❌ Error fetching purchases:', error);
+       // ✅ FUTURE DEBUG: Add user-friendly error handling
+       toast.error('Failed to load your templates. Please try refreshing the page.');
      } finally {
        setIsLoadingPurchases(false);
      }
@@ -144,7 +158,11 @@ export const Dashboard = () => {
    }
  };
 
- const totalSpent = purchasedTemplates.reduce((sum, template) => sum + (template.amountPaid || template.price || 0), 0);
+ // ✅ FIXED: Safe calculation with fallback values
+ const totalSpent = purchasedTemplates.reduce((sum, template) => {
+   const amount = template.amountPaid || template.price || 0;
+   return sum + amount;
+ }, 0);
 
  const handlePreferencesUpdate = (newPreferences: any) => {
    updatePreferences(newPreferences);
@@ -161,6 +179,13 @@ export const Dashboard = () => {
    trendingBoost: metadata?.trending_boost_applied || false,
    filtersApplied: Object.keys(metadata?.filters_applied || {}).length,
    totalRecommendations: metadata?.total || 0,
+ };
+
+ // ✅ FUTURE DEBUG: Add retry function for failed purchases
+ const retryFetchPurchases = () => {
+   setIsLoadingPurchases(true);
+   // Re-trigger the useEffect by updating a dependency
+   window.location.reload();
  };
 
  return (
@@ -335,7 +360,16 @@ export const Dashboard = () => {
                  ))
                ) : (
                  <div className="col-span-full text-center py-8 text-gray-600">
-                   No templates purchased yet. Browse our collection to get started!
+                   <div>No templates purchased yet. Browse our collection to get started!</div>
+                   {/* ✅ FUTURE DEBUG: Add retry button for failed loads */}
+                   <Button 
+                     variant="outline" 
+                     size="sm" 
+                     onClick={retryFetchPurchases}
+                     className="mt-4"
+                   >
+                     Retry Loading Templates
+                   </Button>
                  </div>
                )}
              </div>
