@@ -883,6 +883,142 @@ app.get('/api/user/purchases', async (req, res) => {
   }
 });
 
+// ✅ GET CONVERSATION SUMMARY
+function getConversationSummary(history) {
+  if (!history || history.length === 0) return 'New conversation';
+  
+  const recentMessages = history.slice(-3).filter(msg => msg.role === 'user');
+  if (recentMessages.length === 0) return 'New conversation';
+  
+  const lastQuestions = recentMessages.map(msg => msg.content.substring(0, 50)).join(' | ');
+  return `Recent questions: ${lastQuestions}`;
+}
+
+// ✅ STRUCTURED FALLBACK RESPONSES
+function generateStructuredFallback(prompt, templateContext, history) {
+  const userPrompt = prompt.toLowerCase();
+  const templateId = templateContext?.templateId || '';
+  const conversationSummary = getConversationSummary(history);
+  const isAboutCredentials = conversationSummary.includes('credential') || conversationSummary.includes('openai') || conversationSummary.includes('api');
+
+  // Specific credential setup responses
+  if (userPrompt.includes('add credential') || userPrompt.includes('how do i add') || 
+      (userPrompt.includes('credential') && isAboutCredentials)) {
+    return `🔑 **How to Add Credentials in n8n**
+
+**Method 1: From the Credentials Menu**
+1. **Click "Credentials"** in the main n8n menu (left sidebar)
+2. **Click "+ Add Credential"** button (top right)
+3. **Search for the service** you need (e.g., "OpenAI")
+4. **Click on the service** from the search results
+5. **Fill in the required fields** (API Key, tokens, etc.)
+6. **Click "Test"** to verify the connection
+7. **Click "Save"** to store the credential
+
+**Method 2: From a Node**
+1. **Click on your node** that needs credentials
+2. **Find the "Credential" dropdown** (usually at the top)
+3. **Click the gear ⚙️ icon** next to the dropdown
+4. **Select "Create New"**
+5. **Choose the credential type** (e.g., OpenAI)
+6. **Fill in the fields and save**
+
+**For OpenAI specifically:**
+- Credential type: **"OpenAI"**
+- Field name: **"API Key"**
+- Value: Your \`sk-\` key from platform.openai.com
+
+**Next Step:** Once saved, select the credential from the dropdown in your node.
+
+Are you trying to add OpenAI credentials, or a different service?`;
+  }
+
+  // OpenAI specific setup
+  if (userPrompt.includes('openai') || userPrompt.includes('langchain') || userPrompt.includes('@n8n/n8n-nodes-langchain')) {
+    return `🔑 **Complete OpenAI Credential Setup Guide**
+
+**Step 1: Get Your API Key**
+1. Go to: **https://platform.openai.com/api-keys**
+2. Sign in to your OpenAI account
+3. Click **"+ Create new secret key"**
+4. **Copy the entire key** (starts with \`sk-\`)
+5. ⚠️ **Save it now** - you can't see it again!
+
+**Step 2: Add to n8n (Choose ONE method)**
+
+**Method A - Via Credentials Menu:**
+1. n8n sidebar → **"Credentials"**
+2. **"+ Add Credential"** button
+3. Search: **"OpenAI"**
+4. Paste your \`sk-\` key in **"API Key"** field
+5. **"Test"** → **"Save"**
+
+**Method B - Via Your Node:**
+1. Click your **@n8n/n8n-nodes-langchain.openAi** node
+2. **Credential dropdown** → **Gear ⚙️** → **"Create New"**
+3. Select **"OpenAI"** credential type
+4. Paste key → **Test** → **Save**
+
+**Step 3: Connect to Node**
+1. In your node, **select the credential** from dropdown
+2. **Test your workflow** with a simple message
+
+**Troubleshooting:**
+❌ "Invalid API key" → Key must start with \`sk-\`, no spaces
+❌ "Rate limit exceeded" → Add billing at platform.openai.com
+❌ "Credential not found" → Make sure you saved it properly
+
+**Current Status:** Do you have your API key, or do you need help getting one?`;
+  }
+
+  // Slack setup
+  if (userPrompt.includes('slack')) {
+    return `🔧 **Slack Credential Setup**
+
+**Step 1: Create Slack App**
+1. Go to: **https://api.slack.com/apps**
+2. **"Create New App"** → **"From scratch"**
+3. Name: **"n8n Bot"** (or your choice)
+4. Select your workspace
+
+**Step 2: Get Bot Token**
+1. Go to **"OAuth & Permissions"**
+2. Add **Bot Token Scopes**:
+   - \`channels:read\`
+   - \`chat:write\`
+   - \`im:read\`, \`im:write\`
+3. **"Install to Workspace"**
+4. **Copy "Bot User OAuth Token"** (starts with \`xoxb-\`)
+
+**Step 3: Add to n8n**
+1. Credentials → **"Slack OAuth2 API"**
+2. Paste your \`xoxb-\` token
+3. Test → Save
+
+Which step do you need help with?`;
+  }
+
+  // Generic help with better structure
+  return `💬 **n8n Setup Assistant**
+
+I'm here to help with your **${templateId}** template setup!
+
+**What I can help with:**
+🔑 **Adding Credentials** - Step-by-step for any n8n service
+🔧 **Node Configuration** - Specific UI navigation and setup
+⚡ **Workflow Activation** - Getting your template running
+🛠️ **Troubleshooting** - Fixing common errors
+
+**For specific help, try asking:**
+- "How do I add OpenAI credentials?"
+- "Where do I paste my API key?"
+- "How do I configure my Slack node?"
+- "Why won't my workflow activate?"
+
+**Current Template:** ${templateId}
+**What specific part of the setup do you need help with?**`;
+}
+
 // ✅ FIXED CHAT ENDPOINT - No Body Stream Error
 app.post('/api/ask-ai', async (req, res) => {
   const { prompt, history, templateContext } = req.body;
