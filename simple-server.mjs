@@ -2275,13 +2275,13 @@ function getNextStepGuidance(nextStep, templateId) {
 }
 
 // ✅ EXPORT FOR TESTING (this should already be there)
-module.exports = {
+export {
   app,
   server,
   conversationTracker,
   ConversationTracker,
-  generateCompletionResponse,  // ← Add this line
-  getNextStepGuidance,         // ← Add this line
+  generateCompletionResponse,
+  getNextStepGuidance,
   generateSmartFallback,
   checkLearnedResponses,
   learnFromInteraction
