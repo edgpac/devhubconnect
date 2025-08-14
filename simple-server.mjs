@@ -68,23 +68,13 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
           break;
         }
 
-        // Find or create user by email
-        let userId = null;
-        const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [customerEmail]);
+        // ✅ ENHANCED: Use smart user function to find or create user
+        const userResult = await pool.query(`
+          SELECT find_or_create_user($1, $2, NULL, NULL) as user_id
+        `, [customerEmail, customerEmail.split('@')[0]]);
         
-        if (userResult.rows.length > 0) {
-          userId = userResult.rows[0].id;
-          console.log('👤 Found existing user:', customerEmail);
-        } else {
-          // Create user record for purchaser
-          const newUserResult = await pool.query(`
-            INSERT INTO users (id, email, username, created_at)
-            VALUES (gen_random_uuid(), $1, $2, NOW())
-            RETURNING id
-          `, [customerEmail, customerEmail.split('@')[0]]);
-          userId = newUserResult.rows[0].id;
-          console.log('👤 Created new user for purchase:', customerEmail);
-        }
+        const userId = userResult.rows[0].user_id;
+        console.log('👤 Found/created user for purchase:', customerEmail);
 
         // Record the purchase - FIXED: Remove id field to let database auto-generate
         const purchaseResult = await pool.query(`
@@ -129,34 +119,34 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-// GitHub OAuth Strategy
+// ✅ ENHANCED: GitHub OAuth Strategy with smart user function
 passport.use(new GitHubStrategy({
   clientID: process.env.GITHUB_CLIENT_ID,
   clientSecret: process.env.GITHUB_CLIENT_SECRET,
   callbackURL: `${process.env.FRONTEND_URL}/api/auth/github/callback`
 }, async (accessToken, refreshToken, profile, done) => {
   try {
-    // Check if user exists
-    const userQuery = await pool.query('SELECT * FROM users WHERE github_id = $1', [profile.id]);
+    const githubEmail = profile.emails?.[0]?.value;
+    const githubUsername = profile.username || `user_${profile.id}`;
+    const githubId = profile.id;
+    const avatarUrl = profile.photos?.[0]?.value || 'https://github.com/identicons/default.png';
+
+    console.log('🔗 GitHub OAuth: Finding/creating user for:', githubUsername, githubEmail);
+
+    // ✅ ENHANCED: Use smart user function for GitHub OAuth
+    const userResult = await pool.query(`
+      SELECT find_or_create_user($1, $2, $3, $4) as user_id
+    `, [githubEmail, githubUsername, githubId, avatarUrl]);
     
-    if (userQuery.rows.length > 0) {
-      // User exists, return user
-      return done(null, userQuery.rows[0]);
-    } else {
-      // Create new user with UUID for id and fallbacks for missing data
-      const newUserQuery = await pool.query(`
-        INSERT INTO users (id, github_id, username, email, avatar_url, created_at)
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())
-        RETURNING *
-      `, [
-        profile.id,
-        profile.username || `user_${profile.id}`,
-        profile.emails?.[0]?.value || null,
-        profile.photos?.[0]?.value || 'https://github.com/identicons/default.png'
-      ]);
-      
-      return done(null, newUserQuery.rows[0]);
-    }
+    const userId = userResult.rows[0].user_id;
+    
+    // Get the full user record
+    const fullUserResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = fullUserResult.rows[0];
+    
+    console.log('✅ GitHub OAuth successful for user:', user.username, user.email);
+    return done(null, user);
+    
   } catch (error) {
     console.error('GitHub OAuth error:', error);
     return done(error, null);
