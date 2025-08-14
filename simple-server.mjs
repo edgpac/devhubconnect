@@ -86,13 +86,13 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
           console.log('👤 Created new user for purchase:', customerEmail);
         }
 
-        // Record the purchase
+        // Record the purchase - FIXED: Remove id field to let database auto-generate
         const purchaseResult = await pool.query(`
           INSERT INTO purchases (
-            id, user_id, template_id, stripe_session_id, 
+            user_id, template_id, stripe_session_id, 
             amount_paid, currency, status, purchased_at
           ) VALUES (
-            gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW()
+            $1, $2, $3, $4, $5, $6, NOW()
           ) RETURNING *
         `, [
           userId,
