@@ -348,7 +348,9 @@ app.get('/api/templates/:id/download', async (req, res) => {
     }
 
     const templateId = parseInt(req.params.id);
-    
+    if (isNaN(templateId)) {
+     return res.status(400).json({ error: 'Invalid template ID' });
+    }
     // Check if user has purchased this template
     const purchaseCheck = await pool.query(`
       SELECT p.id, t.name, t.workflow_json 
