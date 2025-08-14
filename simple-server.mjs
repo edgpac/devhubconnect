@@ -397,7 +397,6 @@ app.get('/api/templates/:id/download', async (req, res) => {
     res.status(500).json({ error: 'Download failed' });
   }
 });
-
 // ✅ FIXED: Working recommendations endpoint that shows popular templates
 app.get('/api/recommendations', async (req, res) => {
   try {
@@ -884,8 +883,8 @@ app.get('/api/user/purchases', async (req, res) => {
   }
 });
 
-// ✅ NEW: Chat endpoint for AI assistance (missing from simple-server.mjs)
-  app.post('/api/ask-ai', async (req, res) => {
+// ✅ GROQ CHAT with DATA LOGGING - COMPLETELY FIXED VERSION
+app.post('/api/ask-ai', async (req, res) => {
   const { prompt, history, templateContext } = req.body;
 
   if (!prompt) {
@@ -909,8 +908,7 @@ app.get('/api/user/purchases', async (req, res) => {
 
     // If JSON template was provided, return setup guidance
     if (jsonProvidedInThisTurn) {
-      return res.json({
-        response: `✅ Template validated successfully! I'm your DevHubConnect Setup Assistant, ready to guide you through the deployment process.
+      const response = `✅ Template validated successfully! I'm your DevHubConnect Setup Assistant, ready to guide you through the deployment process.
 
 To get started, I need to understand your environment:
 
@@ -925,8 +923,24 @@ To get started, I need to understand your environment:
    • Intermediate (familiar with basic workflows)
    • Advanced (experienced with complex automations)
 
-Once I know your setup, I'll provide specific step-by-step instructions for deploying this template successfully.`
-      });
+Once I know your setup, I'll provide specific step-by-step instructions for deploying this template successfully.`;
+
+      // ✅ LOG INTERACTION
+      try {
+        await pool.query(`
+          INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, created_at)
+          VALUES ($1, $2, $3, $4, NOW())
+        `, [
+          templateContext?.templateId || 'json_validation',
+          'JSON template provided',
+          response,
+          req.user?.id || 'anonymous'
+        ]);
+      } catch (logError) {
+        console.error('Error logging chat interaction:', logError);
+      }
+
+      return res.json({ response });
     }
 
     // Check for prompt disclosure attempts
@@ -937,222 +951,191 @@ Once I know your setup, I'll provide specific step-by-step instructions for depl
       });
     }
 
-    // ✅ SMART PRODUCTION FALLBACK: Mimic the original AI behavior
-    const userPrompt = prompt.toLowerCase();
+    // ✅ GROQ API INTEGRATION
+    const groqApiKey = process.env.GROQ_API_KEY;
     let response = '';
 
-    // Handle OpenAI/LangChain questions first (most specific)
-    if (userPrompt.includes('openai') || userPrompt.includes('langchain')) {
-      response = `🔑 **OpenAI & LangChain Credentials Setup**
+    if (groqApiKey) {
+      try {
+        // Format chat history for Groq
+        const messages = [
+          {
+            role: 'system',
+            content: `You are the DevHubConnect Setup Assistant, a professional technical support specialist helping users deploy n8n automation templates successfully.
 
-For the OpenAI and LangChain nodes in your template, you need API credentials:
+ROLE & EXPERTISE:
+- You are a senior automation engineer with deep n8n knowledge
+- You specialize in template deployment, configuration, and troubleshooting
+- You provide clear, step-by-step technical guidance
+- You maintain a professional, helpful, and solution-focused tone
 
-**OpenAI API Key Setup:**
-1. **Get API Key**: Go to platform.openai.com → API Keys → Create new key
-2. **In n8n**: Go to Credentials → Add Credential → OpenAI
-3. **Enter API Key**: Paste your OpenAI API key
-4. **Test Connection**: Click "Test" to verify it works
+YOUR RESPONSIBILITIES:
+1. Ask specific technical questions about their setup environment
+2. Guide them through credential configuration
+3. Help with API key setup and authentication
+4. Assist with webhook configuration and testing
+5. Troubleshoot common deployment issues
+6. Provide environment-specific instructions
 
-**LangChain Memory Buffer:**
-- No external credentials needed for memory buffer
-- Configure memory window size in the node settings
-- Connect to your OpenAI credential for LLM functionality
+COMMUNICATION STYLE:
+- Be concise but thorough
+- Use bullet points for step-by-step instructions
+- Ask one focused question at a time
+- Provide specific examples with actual values
+- Include troubleshooting tips proactively
 
-**Important Notes:**
-- Keep your API key secure and never share it
-- Monitor usage at platform.openai.com to track costs
-- Start with small test requests to verify functionality
+STRICT LIMITATIONS:
+- ONLY help with template deployment and setup
+- DO NOT generate, edit, or modify JSON code
+- DO NOT create new workflows or templates
+- DO NOT discuss topics unrelated to n8n template deployment`
+          },
+          ...(history || []).map(msg => ({
+            role: msg.role,
+            content: msg.content
+          })),
+          {
+            role: 'user',
+            content: prompt
+          }
+        ];
 
-What's your current n8n environment? (Cloud, self-hosted, or local installation)`;
+        console.log('🚀 Sending request to Groq...');
 
-    } else if (userPrompt.includes('switch') && (userPrompt.includes('credential') || userPrompt.includes('setup'))) {
-      response = `🔧 **Switch Node Configuration**
+        // Groq API request
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'llama-3.1-70b-versatile',
+            messages: messages,
+            max_tokens: 1000,
+            temperature: 0.7,
+            stream: false
+          }),
+        });
 
-The Switch node is a core n8n node for conditional routing and doesn't require external credentials:
+        if (groqResponse.ok) {
+          const data = await groqResponse.json();
+          response = data.choices?.[0]?.message?.content || 'No response received from AI.';
+          console.log('✅ Groq response received');
+        } else {
+          throw new Error('Groq API failed');
+        }
 
-**Setup Steps:**
-1. **Find the Switch Node**: Look for a diamond-shaped node in your workflow
-2. **Double-click** to open the configuration panel
-3. **Choose Mode**: 
-   - "Expression" for JavaScript conditions
-   - "Rules" for simple comparisons
-4. **Add Conditions**: 
-   - Expression: \`{{ $json.price > 100 }}\`
-   - Rules: Set field, operator, and value
-5. **Configure Outputs**: Each condition creates a different path
-6. **Test**: Use sample data to verify routing
-
-**For Trading Workflows:**
-- Price thresholds: \`{{ parseFloat($json.price) > 50 }}\`
-- Signal detection: \`{{ $json.signal === 'BUY' }}\`
-- Time-based: \`{{ new Date().getHours() >= 9 }}\`
-
-Are you having trouble finding the Switch node in your imported template?`;
-
-    } else if (userPrompt.includes('set') && (userPrompt.includes('credential') || userPrompt.includes('setup'))) {
-      response = `🔧 **Set Node Configuration**
-
-The Set node is for data manipulation and doesn't require external credentials:
-
-**Setup Steps:**
-1. **Find the Set Node**: Look for a rectangular node labeled "Set"
-2. **Double-click** to open configuration
-3. **Choose Operation**:
-   - "Set" to add/modify data fields
-   - "Remove" to delete fields
-   - "Keep Only" to filter fields
-4. **Add Fields**: Click "Add Field" to define new data
-5. **Set Values**:
-   - Manual: Type values directly
-   - Expressions: \`{{ $json.fieldName }}\`
-   - Functions: JavaScript calculations
-
-**Common Use Cases:**
-- Set trading signals: \`signal = "BUY"\`
-- Calculate profits: \`profit = {{ $json.sellPrice - $json.buyPrice }}\`
-- Format timestamps: \`timestamp = {{ new Date().toISOString() }}\`
-
-What specific data transformation do you need help with?`;
-
-    } else if (userPrompt.includes('if') && (userPrompt.includes('credential') || userPrompt.includes('setup'))) {
-      response = `🔧 **IF Node Configuration**
-
-The IF node handles conditional logic and doesn't require external credentials:
-
-**Setup Steps:**
-1. **Find the IF Node**: Rectangular node labeled "IF"
-2. **Double-click** to configure
-3. **Set Condition**: Define what to check
-   - Value 1: \`{{ $json.price }}\` (data to compare)
-   - Operation: >, <, =, contains, etc.
-   - Value 2: threshold or comparison value
-4. **Configure Outputs**:
-   - True path: Action when condition is met
-   - False path: Action when condition fails
-
-**Trading Examples:**
-- Price check: \`{{ $json.currentPrice }} > 100\`
-- Signal validation: \`{{ $json.signal }} equals "BUY"\`
-- Profit threshold: \`{{ $json.profit }} > 50\`
-
-What condition are you trying to implement?`;
-
-    } else if (userPrompt.includes('activate') || userPrompt.includes('deploy') || userPrompt.includes('workflow')) {
-      response = `⚡ **Template Activation & Deployment**
-
-Here's how to activate your n8n trading agent:
-
-**Step-by-Step Activation:**
-1. **Import Complete**: Ensure your JSON template is fully imported in n8n
-2. **Configure Credentials**: Set up OpenAI API key (required for this template)
-3. **Test Execution**: Run a manual test first
-   - Click "Execute Workflow" button
-   - Check for any error messages
-4. **Verify Connections**: Ensure all nodes are properly connected
-5. **Activate**: Toggle the "Active" switch in the top-right
-6. **Monitor**: Watch the execution log for any issues
-
-**Common Activation Issues:**
-- Missing OpenAI API key → Add in Credentials section
-- Node connection errors → Check workflow connections
-- Execution timeouts → Verify API endpoints are accessible
-
-What step are you currently stuck on?`;
-
-    } else if (userPrompt.includes('webhook') || userPrompt.includes('api')) {
-      response = `🔗 **Webhook & API Configuration**
-
-For webhook setup in your trading template:
-
-**Webhook Trigger Setup:**
-1. **Find Webhook Node**: Usually the first node in the workflow
-2. **Configure Method**: POST for receiving data, GET for simple triggers
-3. **Set Authentication**: Add API keys or basic auth if needed
-4. **Copy Webhook URL**: Use this in external services
-
-**API Request Configuration:**
-1. **Set HTTP Method**: GET, POST, PUT, DELETE
-2. **Add Headers**: 
-   - Authorization: Bearer YOUR_API_KEY
-   - Content-Type: application/json
-3. **Configure Body**: JSON data for POST requests
-4. **Error Handling**: Set up retry logic and error responses
-
-**Testing:**
-- Use n8n's "Test webhook" feature
-- Verify external API endpoints are accessible
-- Check response data structure
-
-Which specific API integration do you need help with?`;
-
-    } else if (userPrompt.includes('help') || userPrompt.includes('what')) {
-      response = `💬 **DevHubConnect Setup Assistant**
-
-I'm here to help you deploy your n8n AI trading agent template successfully! 
-
-**What I can help you with:**
-
-🔑 **Credentials & Authentication:**
-- OpenAI API key setup (required for this template)
-- Webhook authentication
-- External service connections
-
-🔧 **Node Configuration:**
-- Switch node conditional routing
-- Set node data manipulation
-- IF node logic setup
-- LangChain memory configuration
-
-⚡ **Deployment & Activation:**
-- Template import process
-- Workflow testing and validation
-- Error troubleshooting
-- Performance optimization
-
-**To get specific help, ask me about:**
-- "Help with OpenAI credentials"
-- "How to configure the Switch node"
-- "Template activation steps"
-- "Webhook configuration"
-
-What specific aspect of your template deployment do you need help with?`;
-
+      } catch (groqError) {
+        console.error('❌ Groq API error:', groqError);
+        // Fall back to rule-based responses
+        response = generateRuleBasedResponse(prompt);
+      }
     } else {
-      // Default response for unclear questions
-      response = `🤔 **I'd like to help you with your n8n template setup!**
-
-Based on your message, I'm not sure exactly what you need help with. Here are the most common setup tasks for your AI trading agent template:
-
-**Quick Help Options:**
-- **"OpenAI credentials"** - Set up your API key
-- **"Switch node setup"** - Configure conditional routing
-- **"Activate workflow"** - Deploy your template
-- **"Webhook configuration"** - Set up external connections
-
-**Your template includes these key components:**
-- OpenAI integration (requires API key)
-- Switch node for decision logic
-- Set nodes for data processing
-- LangChain memory for conversation context
-
-Could you be more specific about what you're trying to set up? For example:
-- "I need help with OpenAI API key setup"
-- "How do I configure the Switch node?"
-- "My workflow won't activate"
-
-What would you like help with?`;
+      console.log('⚠️ Groq API key not configured, using rule-based responses');
+      response = generateRuleBasedResponse(prompt);
     }
 
-    console.log('✅ Chat response generated successfully');
+    // ✅ LOG INTERACTION
+    try {
+      await pool.query(`
+        INSERT INTO chat_interactions (template_id, user_question, ai_response, user_id, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
+      `, [
+        templateContext?.templateId || 'general_chat',
+        prompt,
+        response,
+        req.user?.id || 'anonymous'
+      ]);
+    } catch (logError) {
+      console.error('Error logging chat interaction:', logError);
+    }
+
     res.json({ response });
 
   } catch (error) {
     console.error('❌ Chat error:', error);
-    res.status(500).json({ 
-      error: 'Chat service temporarily unavailable. Please try again.' 
+    res.json({ 
+      response: `I'm having trouble right now, but I can still help! Try asking about specific setup steps like "Slack credentials" or "Telegram setup". What part of your template deployment do you need help with?`
     });
   }
 });
+
+// ✅ RULE-BASED FALLBACK FUNCTION
+function generateRuleBasedResponse(prompt) {
+  const userPrompt = prompt.toLowerCase();
+
+  if (userPrompt.includes('slack') && (userPrompt.includes('credential') || userPrompt.includes('setup') || userPrompt.includes('trigger'))) {
+    return `🔧 **Slack Trigger Credentials Setup**
+
+For the Slack Trigger node in your template:
+
+**Step 1: Create a Slack App**
+1. Go to: https://api.slack.com/apps
+2. Click "Create New App" → "From scratch"
+3. Choose app name and workspace
+
+**Step 2: Configure Bot Permissions**
+1. Go to "OAuth & Permissions"
+2. Add Bot Token Scopes:
+   - \`channels:read\`
+   - \`chat:write\`
+   - \`im:read\`
+   - \`im:write\`
+
+**Step 3: Install & Get Token**
+1. Click "Install to Workspace"
+2. Copy the Bot User OAuth Token (starts with \`xoxb-\`)
+
+**Step 4: Configure in n8n**
+1. In n8n: Credentials → Add → Slack OAuth2 API
+2. Paste your bot token
+3. Test the connection
+
+Need help with a specific step?`;
+  }
+
+  if (userPrompt.includes('telegram') && (userPrompt.includes('credential') || userPrompt.includes('setup') || userPrompt.includes('trigger'))) {
+    return `🔧 **Telegram Bot Setup**
+
+**Step 1: Create Bot with BotFather**
+1. Open Telegram and search "@BotFather"
+2. Send \`/newbot\`
+3. Follow prompts to name your bot
+4. Save the bot token (format: \`123456789:ABC...\`)
+
+**Step 2: Configure in n8n**
+1. In n8n: Credentials → Add → Telegram API
+2. Paste your bot token
+3. Test the connection
+
+**Step 3: Test Your Bot**
+1. Find your bot in Telegram
+2. Send \`/start\` to test
+3. Check n8n execution logs
+
+What specific issue are you having?`;
+  }
+
+  return `💬 **DevHubConnect Setup Assistant**
+
+I'm here to help you deploy your n8n template successfully!
+
+**I can help you with:**
+🔑 **Credentials Setup** - Slack, Telegram, OpenAI API keys
+🔗 **Webhook Configuration** - External service integration  
+⚡ **Template Deployment** - Step-by-step activation guide
+🔧 **Troubleshooting** - Common issues and solutions
+
+**Quick Help:**
+- "Slack setup" - Configure Slack app credentials
+- "Telegram setup" - Create Telegram bot
+- "OpenAI setup" - Get API keys for LangChain
+- "Webhook configuration" - Set up external triggers
+
+What specific part of your template setup do you need help with?`;
+}
+
 // ✅ IMPROVED: Enhanced generate-setup-instructions with better error handling
 app.post('/api/generate-setup-instructions', async (req, res) => {
   const { workflow, templateId, purchaseId } = req.body;
