@@ -1655,16 +1655,564 @@ app.post('/api/ai/feedback', async (req, res) => {
   }
 });
 
+// ✅ API ENDPOINT: Template-Specific Intelligence
+app.get('/api/ai/template-intelligence/:templateId', async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    
+    const templateStats = await pool.query(`
+      SELECT 
+        template_id,
+        common_questions,
+        success_rate,
+        last_updated,
+        (
+          SELECT COUNT(*) FROM chat_interactions 
+          WHERE template_id = $1 
+          AND created_at >= NOW() - INTERVAL '30 days'
+        ) as recent_interactions,
+        (
+          SELECT COUNT(DISTINCT user_id) FROM chat_interactions 
+          WHERE template_id = $1 
+          AND created_at >= NOW() - INTERVAL '30 days'
+        ) as unique_users
+      FROM template_intelligence 
+      WHERE template_id = $1
+    `, [templateId]);
+
+    const commonIssues = await pool.query(`
+      SELECT 
+        user_question,
+        COUNT(*) as frequency,
+        AVG(CASE WHEN user_feedback = 'helpful' THEN 1 ELSE 0 END) as helpfulness_rate,
+        MAX(created_at) as last_asked
+      FROM chat_interactions 
+      WHERE template_id = $1 
+      AND created_at >= NOW() - INTERVAL '30 days'
+      AND question_category IN ('troubleshooting', 'configuration', 'credentials')
+      GROUP BY user_question
+      HAVING COUNT(*) >= 2
+      ORDER BY frequency DESC, helpfulness_rate ASC
+      LIMIT 10
+    `, [templateId]);
+
+    const userJourney = await pool.query(`
+      SELECT 
+        question_category,
+        interaction_type,
+        COUNT(*) as step_frequency,
+        AVG(learning_score) as avg_success_score,
+        string_agg(DISTINCT LEFT(user_question, 100), ' | ') as example_questions
+      FROM chat_interactions 
+      WHERE template_id = $1 
+      AND created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY question_category, interaction_type
+      ORDER BY step_frequency DESC
+    `, [templateId]);
+
+    res.json({
+      templateStats: templateStats.rows[0] || { template_id: templateId, message: 'No data yet' },
+      commonIssues: commonIssues.rows,
+      userJourney: userJourney.rows,
+      recommendations: generateTemplateRecommendations(templateStats.rows[0], commonIssues.rows)
+    });
+  } catch (error) {
+    console.error('Error fetching template intelligence:', error);
+    res.status(500).json({ error: 'Failed to fetch template intelligence' });
+  }
+});
+
+function generateTemplateRecommendations(templateStats, commonIssues) {
+  const recommendations = [];
+  
+  if (commonIssues.length > 0) {
+    const topIssue = commonIssues[0];
+    recommendations.push({
+      type: 'common_issue',
+      priority: 'high',
+      message: `Most frequent issue: "${topIssue.user_question.substring(0, 80)}..." - Consider adding preventive guidance.`
+    });
+  }
+  
+  if (templateStats && templateStats.success_rate < 80) {
+    recommendations.push({
+      type: 'success_rate',
+      priority: 'medium',
+      message: `Success rate is ${templateStats.success_rate}% - Review setup instructions for clarity.`
+    });
+  }
+  
+  if (templateStats && templateStats.recent_interactions > 50) {
+    recommendations.push({
+      type: 'popular_template',
+      priority: 'info',
+      message: `High activity template with ${templateStats.recent_interactions} recent interactions - Monitor for new patterns.`
+    });
+  }
+  
+  return recommendations;
+}
+
+// ✅ API ENDPOINT: Conversation Reset
+app.post('/api/ai/reset-conversation', async (req, res) => {
+  try {
+    const { templateId, userId } = req.body;
+    const key = `${userId}_${templateId}`;
+    
+    // Clear conversation state
+    conversationStates.delete(key);
+    
+    // Log the reset
+    await logChatInteraction(
+      templateId,
+      'Conversation reset requested',
+      'Conversation state cleared - starting fresh',
+      userId,
+      'conversation_reset'
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'Conversation reset successfully',
+      newState: {
+        startTime: Date.now(),
+        interactions: 0,
+        completedSteps: [],
+        lastActivity: Date.now()
+      }
+    });
+  } catch (error) {
+    console.error('Error resetting conversation:', error);
+    res.status(500).json({ error: 'Failed to reset conversation' });
+  }
+});
+
+// ✅ API ENDPOINT: AI Performance Analytics
+app.get('/api/ai/performance-analytics', async (req, res) => {
+  try {
+    const { timeframe = '30' } = req.query; // days
+    
+    const performanceData = await pool.query(`
+      WITH daily_stats AS (
+        SELECT 
+          DATE(created_at) as day,
+          COUNT(*) as total_interactions,
+          COUNT(CASE WHEN interaction_type = 'learned_response' THEN 1 END) as learned_responses,
+          COUNT(CASE WHEN interaction_type LIKE '%groq%' THEN 1 END) as api_calls,
+          COUNT(CASE WHEN interaction_type = 'conversation_completion' THEN 1 END) as completions,
+          AVG(learning_score) as avg_effectiveness
+        FROM chat_interactions 
+        WHERE created_at >= NOW() - INTERVAL '${timeframe} days'
+        GROUP BY DATE(created_at)
+        ORDER BY day DESC
+      ),
+      cost_analysis AS (
+        SELECT 
+          SUM(CASE WHEN interaction_type LIKE '%groq%' THEN 1 ELSE 0 END) as total_api_calls,
+          SUM(CASE WHEN interaction_type = 'learned_response' THEN 1 ELSE 0 END) as saved_api_calls,
+          COUNT(*) as total_interactions
+        FROM chat_interactions 
+        WHERE created_at >= NOW() - INTERVAL '${timeframe} days'
+      )
+      SELECT 
+        (SELECT json_agg(daily_stats.*) FROM daily_stats) as daily_trends,
+        (SELECT row_to_json(cost_analysis.*) FROM cost_analysis) as cost_savings
+    `);
+
+    const topTemplates = await pool.query(`
+      SELECT 
+        template_id,
+        COUNT(*) as interaction_count,
+        COUNT(DISTINCT user_id) as unique_users,
+        COUNT(CASE WHEN interaction_type = 'conversation_completion' THEN 1 END) as completion_count,
+        ROUND(
+          COUNT(CASE WHEN interaction_type = 'conversation_completion' THEN 1 END) * 100.0 / 
+          NULLIF(COUNT(DISTINCT user_id), 0), 
+          2
+        ) as completion_rate,
+        AVG(learning_score) as avg_effectiveness
+      FROM chat_interactions 
+      WHERE created_at >= NOW() - INTERVAL '${timeframe} days'
+      AND template_id != 'general_chat'
+      GROUP BY template_id
+      ORDER BY interaction_count DESC
+      LIMIT 10
+    `);
+
+    const userEngagement = await pool.query(`
+      SELECT 
+        COUNT(DISTINCT user_id) as total_users,
+        AVG(user_interactions) as avg_interactions_per_user,
+        MAX(user_interactions) as max_interactions_per_user,
+        COUNT(CASE WHEN user_interactions >= 5 THEN 1 END) as engaged_users
+      FROM (
+        SELECT 
+          user_id,
+          COUNT(*) as user_interactions
+        FROM chat_interactions 
+        WHERE created_at >= NOW() - INTERVAL '${timeframe} days'
+        GROUP BY user_id
+      ) user_stats
+    `);
+
+    res.json({
+      performanceData: performanceData.rows[0],
+      topTemplates: topTemplates.rows,
+      userEngagement: userEngagement.rows[0],
+      metadata: {
+        timeframe: `${timeframe} days`,
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching performance analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch performance analytics' });
+  }
+});
+
+// ✅ API ENDPOINT: Export Conversation Data
+app.get('/api/ai/export-conversations/:templateId', async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    const { format = 'json', timeframe = '30' } = req.query;
+    
+    const conversations = await pool.query(`
+      SELECT 
+        id,
+        template_id,
+        user_question,
+        ai_response,
+        user_id,
+        created_at,
+        interaction_type,
+        question_category,
+        learning_score,
+        user_feedback
+      FROM chat_interactions 
+      WHERE template_id = $1 
+      AND created_at >= NOW() - INTERVAL '${timeframe} days'
+      ORDER BY created_at DESC
+    `, [templateId]);
+
+    if (format === 'csv') {
+      const csv = [
+        'ID,Template,Question,Response,User,Date,Type,Category,Score,Feedback',
+        ...conversations.rows.map(row => 
+          `"${row.id}","${row.template_id}","${row.user_question.replace(/"/g, '""')}","${row.ai_response.replace(/"/g, '""')}","${row.user_id}","${row.created_at}","${row.interaction_type}","${row.question_category}","${row.learning_score}","${row.user_feedback || ''}"`
+        )
+      ].join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${templateId}_conversations_${timeframe}days.csv"`);
+      res.send(csv);
+    } else {
+      res.json({
+        templateId,
+        timeframe: `${timeframe} days`,
+        totalConversations: conversations.rows.length,
+        exportedAt: new Date().toISOString(),
+        conversations: conversations.rows
+      });
+    }
+  } catch (error) {
+    console.error('Error exporting conversations:', error);
+    res.status(500).json({ error: 'Failed to export conversations' });
+  }
+});
+
+// ✅ API ENDPOINT: AI Health Check
+app.get('/api/ai/health', async (req, res) => {
+  try {
+    const healthChecks = {
+      database: false,
+      groqApi: false,
+      learningSystem: false,
+      conversationIntelligence: false
+    };
+
+    // Test database connection
+    try {
+      await pool.query('SELECT 1');
+      healthChecks.database = true;
+    } catch (error) {
+      console.error('Database health check failed:', error);
+    }
+
+    // Test Groq API
+    if (process.env.GROQ_API_KEY) {
+      try {
+        const testResponse = await fetch('https://api.groq.com/openai/v1/models', {
+          headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` }
+        });
+        healthChecks.groqApi = testResponse.ok;
+      } catch (error) {
+        console.error('Groq API health check failed:', error);
+      }
+    }
+
+    // Test learning system
+    try {
+      const recentLearning = await pool.query(`
+        SELECT COUNT(*) as learned_count 
+        FROM chat_interactions 
+        WHERE interaction_type = 'learned_response' 
+        AND created_at >= NOW() - INTERVAL '24 hours'
+      `);
+      healthChecks.learningSystem = true;
+    } catch (error) {
+      console.error('Learning system health check failed:', error);
+    }
+
+    // Test conversation intelligence
+    try {
+      const conversationStatesCount = conversationStates.size;
+      healthChecks.conversationIntelligence = conversationStatesCount >= 0; // Always true if accessible
+    } catch (error) {
+      console.error('Conversation intelligence health check failed:', error);
+    }
+
+    const overallHealth = Object.values(healthChecks).every(check => check);
+
+    res.json({
+      status: overallHealth ? 'healthy' : 'degraded',
+      timestamp: new Date().toISOString(),
+      checks: healthChecks,
+      version: '2.0.0-enhanced',
+      features: [
+        'Learning System',
+        'Conversation Intelligence', 
+        'Smart Completion Detection',
+        'Cost Optimization',
+        'Performance Analytics'
+      ]
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// ✅ MIDDLEWARE: Conversation Intelligence Cleanup
+// Clean up old conversation states periodically
+setInterval(() => {
+  const now = Date.now();
+  const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+  
+  for (const [key, state] of conversationStates.entries()) {
+    if (now - state.lastActivity > maxAge) {
+      conversationStates.delete(key);
+      console.log(`🧹 Cleaned up old conversation state: ${key.substring(0, 20)}...`);
+    }
+  }
+}, 60 * 60 * 1000); // Run every hour
+
+// ✅ MIDDLEWARE: Learning System Optimization
+// Periodically optimize learned responses
+setInterval(async () => {
+  try {
+    console.log('🧠 Running learning system optimization...');
+    
+    // Remove low-quality learned responses
+    const cleanupResult = await pool.query(`
+      DELETE FROM chat_interactions 
+      WHERE interaction_type = 'learned_response'
+      AND learning_score < 3
+      AND created_at < NOW() - INTERVAL '7 days'
+    `);
+    
+    if (cleanupResult.rowCount > 0) {
+      console.log(`🧹 Cleaned up ${cleanupResult.rowCount} low-quality learned responses`);
+    }
+    
+    // Update template intelligence
+    await pool.query(`
+      INSERT INTO template_intelligence (template_id, success_rate, last_updated)
+      SELECT 
+        template_id,
+        AVG(CASE WHEN interaction_type = 'conversation_completion' THEN 100.0 ELSE 50.0 END),
+        NOW()
+      FROM chat_interactions 
+      WHERE created_at >= NOW() - INTERVAL '7 days'
+      GROUP BY template_id
+      ON CONFLICT (template_id) DO UPDATE SET
+        success_rate = EXCLUDED.success_rate,
+        last_updated = EXCLUDED.last_updated
+    `);
+    
+    console.log('✅ Learning system optimization completed');
+  } catch (error) {
+    console.error('❌ Learning system optimization error:', error);
+  }
+}, 6 * 60 * 60 * 1000); // Run every 6 hours
+
+// ✅ ENHANCED ERROR HANDLING MIDDLEWARE
+app.use((error, req, res, next) => {
+  console.error('🚨 Unhandled error:', error);
+  
+  // Log error for learning
+  if (req.body && req.body.templateContext) {
+    logChatInteraction(
+      req.body.templateContext.templateId || 'error',
+      req.body.prompt || 'Unknown request',
+      `Error occurred: ${error.message}`,
+      req.user?.id || 'anonymous',
+      'system_error'
+    ).catch(console.error);
+  }
+  
+  res.status(500).json({
+    error: 'An unexpected error occurred',
+    message: 'Our AI system encountered an issue. Please try again.',
+    timestamp: new Date().toISOString(),
+    requestId: req.headers['x-request-id'] || 'unknown'
+  });
+});
+
+// ✅ GRACEFUL SHUTDOWN HANDLER
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Received SIGINT. Graceful shutdown starting...');
+  
+  try {
+    // Save conversation states to database before shutdown
+    console.log('💾 Saving conversation states...');
+    for (const [key, state] of conversationStates.entries()) {
+      const [userId, templateId] = key.split('_');
+      await pool.query(`
+        INSERT INTO conversation_states (user_id, template_id, state_data, last_activity)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (user_id, template_id) DO UPDATE SET
+          state_data = EXCLUDED.state_data,
+          last_activity = EXCLUDED.last_activity
+      `, [userId, templateId, JSON.stringify(state), new Date(state.lastActivity)]);
+    }
+    
+    // Close database connections
+    console.log('🗄️ Closing database connections...');
+    await pool.end();
+    
+    console.log('✅ Graceful shutdown completed');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+    process.exit(1);
+  }
+});
+
 // Catch-all handler for React routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// ✅ SERVER STARTUP - The part you were looking for!
-const server = app.listen(port, '0.0.0.0', () => {
+// ✅ SERVER STARTUP WITH ENHANCED FEATURES
+const server = app.listen(port, '0.0.0.0', async () => {
+  console.log('\n🚀 ========================================');
+  console.log('   DEVHUBCONNECT AI SYSTEM STARTING');
+  console.log('========================================');
   console.log(`✅ Server running on 0.0.0.0:${port}`);
   console.log(`🔑 Groq API Key configured: ${!!process.env.GROQ_API_KEY}`);
   console.log(`💳 Stripe configured: ${!!process.env.STRIPE_SECRET_KEY}`);
   console.log(`🗄️ Database URL configured: ${!!process.env.DATABASE_URL}`);
-  console.log(`🧠 AI Learning System: ACTIVE - Reducing API costs over time`);
+  console.log('');
+  console.log('🧠 AI FEATURES ACTIVE:');
+  console.log('   ✅ Learning System - Reduces API costs over time');
+  console.log('   ✅ Conversation Intelligence - Tracks user progress');
+  console.log('   ✅ Smart Completion Detection - Knows when users are done');
+  console.log('   ✅ Cost Optimization - Uses learned responses first');
+  console.log('   ✅ Performance Analytics - Monitors system effectiveness');
+  console.log('   ✅ Template Intelligence - Learns template-specific patterns');
+  console.log('');
+  
+  try {
+    // Load conversation states from database
+    console.log('💾 Loading saved conversation states...');
+    const savedStates = await pool.query(`
+      SELECT user_id, template_id, state_data, last_activity 
+      FROM conversation_states 
+      WHERE last_activity >= NOW() - INTERVAL '24 hours'
+    `);
+    
+    savedStates.rows.forEach(row => {
+      const key = `${row.user_id}_${row.template_id}`;
+      conversationStates.set(key, {
+        ...JSON.parse(row.state_data),
+        lastActivity: new Date(row.last_activity).getTime()
+      });
+    });
+    
+    console.log(`✅ Loaded ${savedStates.rows.length} conversation states`);
+    
+    // Display learning statistics
+    const learningStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_interactions,
+        COUNT(CASE WHEN interaction_type = 'learned_response' THEN 1 END) as learned_responses,
+        COUNT(CASE WHEN interaction_type = 'conversation_completion' THEN 1 END) as completed_conversations,
+        COUNT(DISTINCT template_id) as active_templates
+      FROM chat_interactions 
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+    `);
+    
+    const stats = learningStats.rows[0];
+    console.log('📊 LEARNING SYSTEM STATS (30 days):');
+    console.log(`   💬 Total Interactions: ${stats.total_interactions}`);
+    console.log(`   🎓 Learned Responses: ${stats.learned_responses}`);
+    console.log(`   🎯 Completed Conversations: ${stats.completed_conversations}`);
+    console.log(`   📋 Active Templates: ${stats.active_templates}`);
+    
+    if (stats.total_interactions > 0) {
+      const costSavings = ((stats.learned_responses / stats.total_interactions) * 100).toFixed(1);
+      console.log(`   💰 API Cost Savings: ${costSavings}%`);
+    }
+    
+  } catch (error) {
+    console.error('⚠️ Error loading initial data:', error.message);
+  }
+  
+  console.log('');
+  console.log('🌐 ENDPOINTS AVAILABLE:');
+  console.log('   POST /api/ask-ai-enhanced - Enhanced chat with conversation intelligence');
+  console.log('   POST /api/ask-ai - Original chat endpoint (legacy)');
+  console.log('   GET  /api/ai/learning-stats - Learning system statistics');
+  console.log('   GET  /api/ai/conversation-stats - Conversation intelligence metrics');
+  console.log('   GET  /api/ai/performance-analytics - Detailed performance data');
+  console.log('   GET  /api/ai/template-intelligence/:id - Template-specific insights');
+  console.log('   GET  /api/ai/health - System health check');
+  console.log('   POST /api/ai/feedback - User feedback for learning');
+  console.log('   POST /api/ai/reset-conversation - Reset conversation state');
+  console.log('   POST /api/ai/mark-complete - Manual completion trigger');
+  console.log('');
+  console.log('🎯 CONVERSATION INTELLIGENCE ACTIVE:');
+  console.log('   • Tracks user progress through setup steps');
+  console.log('   • Detects when users have sufficient information');
+  console.log('   • Offers completion when appropriate');
+  console.log('   • Prevents endless question loops');
+  console.log('   • Guides users efficiently to deployment');
+  console.log('');
+  console.log('✅ System fully initialized and ready for requests!');
+  console.log('========================================\n');
 });
+
+// ✅ SERVER ERROR HANDLING
+server.on('error', (error) => {
+  console.error('🚨 Server error:', error);
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${port} is already in use. Please use a different port.`);
+    process.exit(1);
+  }
+});
+
+// ✅ EXPORT FOR TESTING
+module.exports = {
+  app,
+  server,
+  conversationTracker,
+  ConversationTracker,
+  generateCompletionResponse,
+  generateSmartFallback,
+  checkLearnedResponses,
+  learnFromInteraction
+};
