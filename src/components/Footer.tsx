@@ -10,7 +10,7 @@ const Footer = () => {
         </div>
         <div className="max-w-xl">
           <p className="mb-4">
-            <strong>Disclaimer:</strong> The automation templates provided by DevHubConnect are made available for informational and productivity purposes only. DevHubConnect does not guarantee the accuracy, reliability, or suitability of these templates. Use is at your own risk. DevHubConnect is not liable for any damages or losses resulting from their use.
+            <strong>Disclaimer:</strong> The automation templates provided by DevHubConnect are made available for informational and productivity purposes only. DevHubConnect does not guarantee the accuracy, reliability, completeness, or suitability of these templates for any particular purpose. Templates are provided "as-is" without any warranties. Users are responsible for testing and validating templates before deployment. Use is at your own risk. DevHubConnect is not liable for any damages, losses, security breaches, or issues resulting from their use.
           </p>
           
           {/* Legal Links */}
