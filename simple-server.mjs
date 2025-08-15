@@ -260,10 +260,10 @@ app.get('/health', (req, res) => {
 app.get('/api/auth/github', passport.authenticate('github', { scope: ['user:email'] }));
 
 app.get('/api/auth/github/callback', 
-  passport.authenticate('github', { failureRedirect: '/login' }),
+  passport.authenticate('github', { failureRedirect: '/auth' }),
   (req, res) => {
     // Successful authentication, redirect to frontend
-    res.redirect(`${process.env.FRONTEND_URL}/?auth=success`);
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
   }
 );
 
