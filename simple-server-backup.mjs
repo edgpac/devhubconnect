@@ -66,7 +66,7 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
     case 'checkout.session.completed':
       const session = event.data.object;
       console.log('🎉 Payment successful for session:', session.id);
-    
+      
       try {
         const templateId = session.metadata.templateId;
         const customerEmail = session.customer_details.email;
@@ -88,30 +88,15 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
           break;
         }
 
-        // ✅ FIXED: Find existing GitHub user by email FIRST, then create if needed
-        let userId;
+        // ✅ ENHANCED: Use smart user function to find or create user
+        const userResult = await pool.query(`
+          SELECT find_or_create_user($1, $2, NULL, NULL) as user_id
+        `, [customerEmail, customerEmail.split('@')[0]]);
         
-        // Step 1: Try to find existing user by email
-        const existingUserResult = await pool.query(
-          'SELECT id FROM users WHERE email = $1 LIMIT 1',
-          [customerEmail]
-        );
+        const userId = userResult.rows[0].user_id;
+        console.log('👤 Found/created user for purchase:', customerEmail);
 
-        if (existingUserResult.rows.length > 0) {
-          // Found existing user - use their ID
-          userId = existingUserResult.rows[0].id;
-          console.log('✅ Found existing user for email:', customerEmail, 'ID:', userId);
-        } else {
-          // No existing user - create new one using the smart function
-          const userResult = await pool.query(`
-            SELECT find_or_create_user($1, $2, NULL, NULL) as user_id
-          `, [customerEmail, customerEmail.split('@')[0]]);
-          
-          userId = userResult.rows[0].user_id;
-          console.log('👤 Created new user for purchase:', customerEmail, 'ID:', userId);
-        }
-
-        // Record the purchase (keep this part the same)
+        // Record the purchase - FIXED: Remove id field to let database auto-generate
         const purchaseResult = await pool.query(`
           INSERT INTO purchases (
             user_id, template_id, stripe_session_id, 
@@ -134,7 +119,7 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
         console.error('❌ Error recording purchase:', error);
       }
       break;
-    
+
     default:
       console.log(`Unhandled event type: ${event.type}`);
   }
@@ -222,6 +207,7 @@ function convertFieldNames(template) {
     stripePriceId: template.stripe_price_id
   };
 }
+
 function parseWorkflowDetails(workflowJson) {
   try {
     if (!workflowJson) return { steps: 0, apps: [], hasWorkflow: false };
@@ -1072,9 +1058,6 @@ async function checkLearnedResponses(prompt, templateId) {
 // Learn from successful interactions
 async function learnFromInteraction(question, response, templateId, isSuccessful) {
   try {
-    // Convert boolean to number to avoid PostgreSQL type issues
-    const successRate = isSuccessful ? 100.0 : 0.0;
-    
     // Store the successful pattern
     await pool.query(`
       INSERT INTO template_intelligence (
@@ -1086,7 +1069,7 @@ async function learnFromInteraction(question, response, templateId, isSuccessful
       VALUES (
         $1,
         jsonb_build_array($2),
-        $3,
+        CASE WHEN $3 THEN 100.0 ELSE 0.0 END,
         NOW()
       )
       ON CONFLICT (template_id) DO UPDATE SET
@@ -1095,7 +1078,7 @@ async function learnFromInteraction(question, response, templateId, isSuccessful
           ELSE template_intelligence.common_questions || jsonb_build_array($2)
         END,
         last_updated = NOW()
-    `, [templateId, question, successRate]);
+    `, [templateId, question, isSuccessful]);
 
     console.log('🧠 Learned from interaction:', { question: question.substring(0, 50), templateId, isSuccessful });
   } catch (error) {
