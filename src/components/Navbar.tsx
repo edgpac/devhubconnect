@@ -479,7 +479,7 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
              <div data-auth="sign-in" className="flex items-center">
                <Button 
                  onClick={handleGitHubAuth}
-                 className="bg-gray-900 hover:bg-gray-800 text-white"
+                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
                  data-auth="github"
                  data-auth-nav="true"
                >
