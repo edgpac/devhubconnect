@@ -14,7 +14,10 @@ import {
   ArrowRight,
   CheckCircle,
   AlertCircle,
-  Info
+  Info,
+  Github,
+  Shield,
+  Lock
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -30,7 +33,7 @@ export const GuidancePage = () => {
             How to Use DevHubConnect
           </h1>
           <p className="text-xl text-blue-100">
-            Your complete guide to discovering, purchasing, and using automation templates
+            Your complete guide to discovering, purchasing, and using automation templates securely
           </p>
         </div>
       </section>
@@ -47,7 +50,7 @@ export const GuidancePage = () => {
                 Quick Start Guide
               </CardTitle>
               <CardDescription>
-                Get started in 3 simple steps
+                Get started in 3 simple steps with secure GitHub authentication
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -63,8 +66,8 @@ export const GuidancePage = () => {
                   <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <span className="text-purple-600 font-bold text-lg">2</span>
                   </div>
-                  <h3 className="font-semibold mb-2">Preview & Purchase</h3>
-                  <p className="text-sm text-gray-600">Click on templates to see detailed previews, then purchase securely</p>
+                  <h3 className="font-semibold mb-2">Sign In & Purchase</h3>
+                  <p className="text-sm text-gray-600">Sign in with GitHub to securely purchase templates - authentication required</p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -159,76 +162,98 @@ export const GuidancePage = () => {
           <Card className="mb-8">
             <CardHeader>
               <CardTitle className="flex items-center">
-                <User className="w-6 h-6 mr-2 text-green-600" />
-                Account Management
+                <Github className="w-6 h-6 mr-2 text-gray-900" />
+                GitHub Authentication
               </CardTitle>
+              <CardDescription>
+                Secure, one-click authentication powered by GitHub
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-start space-x-3">
+                <Github className="w-5 h-5 mt-1 text-gray-500" />
+                <div>
+                  <h4 className="font-semibold">Sign In with GitHub</h4>
+                  <p className="text-gray-600">Click "Continue with GitHub" to sign in securely. Your GitHub account is used to create and access your DevHubConnect profile automatically.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-3">
+                <Shield className="w-5 h-5 mt-1 text-gray-500" />
+                <div>
+                  <h4 className="font-semibold">Automatic Account Creation</h4>
+                  <p className="text-gray-600">No separate registration needed! Your account is created automatically when you first sign in with GitHub, using your GitHub profile information.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-3">
                 <User className="w-5 h-5 mt-1 text-gray-500" />
                 <div>
-                  <h4 className="font-semibold">Creating an Account</h4>
-                  <p className="text-gray-600">Click "Sign Up" in the top-right corner to create your account. You'll need this to purchase and access templates.</p>
+                  <h4 className="font-semibold">Profile & Dashboard Access</h4>
+                  <p className="text-gray-600">After signing in, you'll see your GitHub username in the top-right corner. Click it to access "My Templates" and view your purchases.</p>
                 </div>
               </div>
-              
-              <div className="flex items-start space-x-3">
-                <CheckCircle className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Signing In</h4>
-                  <p className="text-gray-600">Use "Sign In" to access your existing account. Once logged in, you'll see your profile menu in the top-right corner.</p>
+
+              <div className="bg-green-50 p-4 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <CheckCircle className="w-5 h-5 mr-2 text-green-600" />
+                  <span className="font-semibold text-green-900">Why GitHub?</span>
                 </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <ShoppingCart className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Dashboard Access</h4>
-                  <p className="text-gray-600">After signing in, click on your profile picture and select "My Templates" to view all your purchased automation templates.</p>
-                </div>
+                <p className="text-green-800">GitHub authentication ensures your purchases are securely linked to your account and prevents any payment/access issues. It's the most reliable way to protect your investment.</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Purchasing */}
+          {/* Secure Purchasing */}
           <Card className="mb-8">
             <CardHeader>
               <CardTitle className="flex items-center">
-                <CreditCard className="w-6 h-6 mr-2 text-orange-600" />
-                Purchasing Templates
+                <Lock className="w-6 h-6 mr-2 text-red-600" />
+                Secure Template Purchasing
               </CardTitle>
+              <CardDescription>
+                Protected checkout process with authentication verification
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-start space-x-3">
-                <MousePointer className="w-5 h-5 mt-1 text-gray-500" />
+                <Lock className="w-5 h-5 mt-1 text-gray-500" />
                 <div>
-                  <h4 className="font-semibold">Purchase Process</h4>
-                  <p className="text-gray-600">On any template detail page, click the "Purchase Template" button to start the secure checkout process.</p>
+                  <h4 className="font-semibold">Authentication Required</h4>
+                  <p className="text-gray-600">You MUST be signed in with GitHub to purchase templates. This ensures your purchase is properly linked to your account and prevents any loss of access.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-3">
+                <Shield className="w-5 h-5 mt-1 text-gray-500" />
+                <div>
+                  <h4 className="font-semibold">Duplicate Purchase Prevention</h4>
+                  <p className="text-gray-600">Our system automatically prevents you from purchasing the same template twice, protecting you from accidental duplicate charges.</p>
                 </div>
               </div>
               
               <div className="flex items-start space-x-3">
                 <CreditCard className="w-5 h-5 mt-1 text-gray-500" />
                 <div>
-                  <h4 className="font-semibold">Payment Security</h4>
-                  <p className="text-gray-600">All payments are processed securely through Stripe. We never store your payment information on our servers.</p>
+                  <h4 className="font-semibold">Secure Payment Processing</h4>
+                  <p className="text-gray-600">All payments are processed securely through Stripe with end-to-end encryption. Your payment information is never stored on our servers.</p>
                 </div>
               </div>
               
               <div className="flex items-start space-x-3">
                 <Download className="w-5 h-5 mt-1 text-gray-500" />
                 <div>
-                  <h4 className="font-semibold">Instant Access</h4>
-                  <p className="text-gray-600">After successful payment, templates are immediately available in your dashboard for download and use.</p>
+                  <h4 className="font-semibold">Instant Secure Access</h4>
+                  <p className="text-gray-600">After successful payment, templates are immediately available in your dashboard, securely linked to your GitHub account for lifetime access.</p>
                 </div>
               </div>
               
-              <div className="bg-orange-50 p-4 rounded-lg">
+              <div className="bg-red-50 p-4 rounded-lg">
                 <div className="flex items-center mb-2">
-                  <AlertCircle className="w-5 h-5 mr-2 text-orange-600" />
-                  <span className="font-semibold text-orange-900">Important</span>
+                  <AlertCircle className="w-5 h-5 mr-2 text-red-600" />
+                  <span className="font-semibold text-red-900">Critical Security Notice</span>
                 </div>
-                <p className="text-orange-800">You must be signed in to purchase templates. Create an account first if you don't have one.</p>
+                <p className="text-red-800">Purchasing without being signed in is not possible. This security measure protects your money and ensures you can always access your purchased templates.</p>
               </div>
             </CardContent>
           </Card>
@@ -238,31 +263,74 @@ export const GuidancePage = () => {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <ShoppingCart className="w-6 h-6 mr-2 text-indigo-600" />
-                Your Dashboard
+                Your Secure Dashboard
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-start space-x-3">
-                <Eye className="w-5 h-5 mt-1 text-gray-500" />
+                <Github className="w-5 h-5 mt-1 text-gray-500" />
                 <div>
-                  <h4 className="font-semibold">Viewing Purchased Templates</h4>
-                  <p className="text-gray-600">Your dashboard shows all templates you've purchased. Each one includes the full workflow data and documentation.</p>
+                  <h4 className="font-semibold">GitHub-Linked Templates</h4>
+                  <p className="text-gray-600">Your dashboard shows all templates purchased with your GitHub account. Each purchase is securely linked to prevent any access issues.</p>
                 </div>
               </div>
               
               <div className="flex items-start space-x-3">
                 <Download className="w-5 h-5 mt-1 text-gray-500" />
                 <div>
-                  <h4 className="font-semibold">Using Your Templates</h4>
-                  <p className="text-gray-600">From your dashboard, you can view detailed workflow information and export data for use in your automation tools.</p>
+                  <h4 className="font-semibold">Download & Use Templates</h4>
+                  <p className="text-gray-600">From your dashboard, you can download template files, view detailed workflow information, and access setup instructions for your automation tools.</p>
                 </div>
               </div>
               
               <div className="flex items-start space-x-3">
                 <CheckCircle className="w-5 h-5 mt-1 text-gray-500" />
                 <div>
-                  <h4 className="font-semibold">Lifetime Access</h4>
-                  <p className="text-gray-600">Once purchased, templates remain in your dashboard forever. You can access them anytime you're signed in.</p>
+                  <h4 className="font-semibold">Permanent Access</h4>
+                  <p className="text-gray-600">Once purchased, templates remain in your dashboard forever. As long as you can access your GitHub account, you can access your templates.</p>
+                </div>
+              </div>
+
+              <div className="bg-indigo-50 p-4 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Info className="w-5 h-5 mr-2 text-indigo-600" />
+                  <span className="font-semibold text-indigo-900">Access Your Dashboard</span>
+                </div>
+                <p className="text-indigo-800">After signing in with GitHub, look for your username/avatar in the top-right corner and click "My Templates" to view your purchased automation templates.</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Troubleshooting */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <AlertCircle className="w-6 h-6 mr-2 text-yellow-600" />
+                Troubleshooting & Common Issues
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start space-x-3">
+                <Lock className="w-5 h-5 mt-1 text-gray-500" />
+                <div>
+                  <h4 className="font-semibold">Can't Purchase Templates</h4>
+                  <p className="text-gray-600">If purchase buttons don't work, make sure you're signed in with GitHub first. Unauthenticated users cannot make purchases for security reasons.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-3">
+                <Search className="w-5 h-5 mt-1 text-gray-500" />
+                <div>
+                  <h4 className="font-semibold">Don't See Your Templates</h4>
+                  <p className="text-gray-600">Templates are linked to your GitHub account. Make sure you're signed in with the same GitHub account you used to make the purchase.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-3">
+                <Github className="w-5 h-5 mt-1 text-gray-500" />
+                <div>
+                  <h4 className="font-semibold">GitHub Sign-In Issues</h4>
+                  <p className="text-gray-600">If GitHub authentication fails, try clearing your browser cache or using an incognito/private browsing window.</p>
                 </div>
               </div>
             </CardContent>
@@ -272,7 +340,7 @@ export const GuidancePage = () => {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <AlertCircle className="w-6 h-6 mr-2 text-red-600" />
+                <Info className="w-6 h-6 mr-2 text-blue-600" />
                 Need More Help?
               </CardTitle>
             </CardHeader>
@@ -283,13 +351,13 @@ export const GuidancePage = () => {
               
               <div className="space-y-3">
                 <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <User className="w-5 h-5 text-gray-500" />
-                  <span className="text-gray-700">Check your account settings for profile and billing information</span>
+                  <Github className="w-5 h-5 text-gray-500" />
+                  <span className="text-gray-700">Ensure you're signed in with GitHub before attempting any purchases</span>
                 </div>
                 
                 <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <Search className="w-5 h-5 text-gray-500" />
-                  <span className="text-gray-700">Use the search function to find specific types of templates</span>
+                  <Shield className="w-5 h-5 text-gray-500" />
+                  <span className="text-gray-700">Check that your GitHub account email matches your purchase email</span>
                 </div>
                 
                 <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
@@ -305,10 +373,10 @@ export const GuidancePage = () => {
                     Start Browsing Templates
                   </Button>
                 </Link>
-                <Link to="/register">
+                <Link to="/auth">
                   <Button variant="outline">
-                    <User className="w-4 h-4 mr-2" />
-                    Create Account
+                    <Github className="w-4 h-4 mr-2" />
+                    Sign In with GitHub
                   </Button>
                 </Link>
               </div>
