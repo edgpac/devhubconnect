@@ -172,21 +172,36 @@ const useCurrentUser = () => {
    const checkUser = async () => {
      try {
        console.log('🔐 Starting user check...');
+       console.log('🔐 Auth checker status:', {
+         exists: !!window.authChecker,
+         isAuthenticated: window.authChecker?.isAuthenticated,
+         hasUser: !!window.authChecker?.user,
+         userData: window.authChecker?.user
+       });
        
        // ✅ NEW: First check global auth checker
        if (window.authChecker && window.authChecker.isAuthenticated && window.authChecker.user) {
          console.log('✅ Using global auth checker');
+         console.log('🔐 Auth checker user data:', window.authChecker.user);
          const authUser = window.authChecker.user;
-         setUser({
-           id: authUser.id,
-           email: authUser.email || '',
-           name: authUser.username || authUser.email?.split('@')[0] || 'User',
-           avatar: authUser.avatar_url,
-           isAdmin: false, // GitHub users are regular users by default
-           role: 'user'
-         });
-         setIsLoading(false);
-         return;
+         
+         // Skip if user data is empty or invalid
+         if (!authUser.id && !authUser.email) {
+           console.log('❌ Auth checker user data is empty, falling back to session check');
+         } else {
+           const userData = {
+             id: authUser.id,
+             email: authUser.email || '',
+             name: authUser.username || authUser.email?.split('@')[0] || 'User',
+             avatar: authUser.avatar_url,
+             isAdmin: false, // GitHub users are regular users by default
+             role: 'user'
+           };
+           console.log('✅ Setting auth checker user:', userData.email);
+           setUser(userData);
+           setIsLoading(false);
+           return;
+         }
        }
 
        // ✅ ENHANCED: Check session endpoint directly
