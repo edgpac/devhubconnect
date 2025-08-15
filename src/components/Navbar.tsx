@@ -7,7 +7,7 @@ import {
  DropdownMenuItem,
  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, ShoppingBag, HelpCircle, Shield, RefreshCw } from "lucide-react";
+import { LogOut, ShoppingBag, HelpCircle, Shield, RefreshCw, Github } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/components/context/AuthProvider";
 
@@ -352,6 +352,12 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
    setIsRefreshing(false);
  };
 
+ // ✅ NEW: Handle GitHub authentication
+ const handleGitHubAuth = () => {
+   console.log('🔐 Redirecting to GitHub OAuth...');
+   window.location.href = '/api/auth/github';
+ };
+
  if (isLoading && !propUser) {
    // Show loading state only if no prop user provided
    return (
@@ -469,19 +475,17 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
                </DropdownMenu>
              </div>
            ) : (
-             <div data-auth="sign-in" className="flex items-center space-x-2">
-               <Link to="/login">
-                 <Button 
-                   variant="ghost"
-                   data-auth="sign-in"
-                   data-auth-nav="true"
-                 >
-                   Sign In
-                 </Button>
-               </Link>
-               <Link to="/register">
-                 <Button>Sign Up</Button>
-               </Link>
+             // ✅ UPDATED: Single GitHub authentication button
+             <div data-auth="sign-in" className="flex items-center">
+               <Button 
+                 onClick={handleGitHubAuth}
+                 className="bg-gray-900 hover:bg-gray-800 text-white"
+                 data-auth="github"
+                 data-auth-nav="true"
+               >
+                 <Github className="mr-2 h-4 w-4" />
+                 Continue with GitHub
+               </Button>
              </div>
            )}
          </div>
