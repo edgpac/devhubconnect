@@ -6,6 +6,7 @@ import Stripe from 'stripe';
 import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GitHubStrategy } from 'passport-github2';
+import crypto from 'crypto';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -657,7 +658,7 @@ app.post('/api/admin/login', async (req, res) => {
     
     if (password === adminPassword) {
       // Generate secure admin session token
-      const crypto = require('crypto');
+      
       const token = `admin-${Date.now()}-${crypto.randomBytes(16).toString('hex')}`;
       
       console.log('✅ Admin login successful');
