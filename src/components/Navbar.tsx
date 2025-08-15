@@ -185,9 +185,9 @@ const useCurrentUser = () => {
          console.log('🔐 Auth checker user data:', window.authChecker.user);
          const authUser = window.authChecker.user;
          
-         // Skip if user data is empty or invalid
-         if (!authUser.id && !authUser.email) {
-           console.log('❌ Auth checker user data is empty, falling back to session check');
+         // Skip if user data is incomplete (missing email)
+         if (!authUser.id || !authUser.email) {
+           console.log('❌ Auth checker user data incomplete (missing email), falling back to session check');
          } else {
            const userData = {
              id: authUser.id,
