@@ -70,10 +70,6 @@ export const AuthPage = () => {
         const fakeToken = "github-auth-token";
         login(fakeToken, userData.user);
         
-        toast.success("Authentication successful!", {
-          description: "Redirecting to dashboard..."
-        });
-        
         // Clear URL parameters
         window.history.replaceState({}, document.title, window.location.pathname);
         
@@ -94,10 +90,6 @@ export const AuthPage = () => {
   const handleGithubAuth = () => {
     setIsLoading(true);
     setAuthError(null);
-    
-    toast.info("Redirecting to GitHub OAuth...", {
-      description: "Please wait..."
-    });
     
     // Store the intended destination in sessionStorage for after OAuth
     if (from !== '/dashboard') {
