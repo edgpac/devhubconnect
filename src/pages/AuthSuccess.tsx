@@ -25,13 +25,9 @@ export const AuthSuccess = () => {
 
           if (response.ok) {
             const data = await response.json();
-            
+                        
             // Use complete user data from API
             login("session", data.user);
-            
-            toast.success("GitHub login successful!", {
-              description: `Welcome ${data.user.name || userEmail}!`
-            });
 
             // Redirect to dashboard where user can see their purchases
             navigate('/dashboard');
