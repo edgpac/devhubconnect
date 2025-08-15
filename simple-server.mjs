@@ -581,6 +581,16 @@ app.post('/api/admin/fix-images', async (req, res) => {
 // Stripe checkout endpoint
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
+    // 🔒 CRITICAL: Check if user is authenticated BEFORE allowing purchase
+    if (!req.user) {
+      console.log('❌ Unauthorized checkout attempt - user not logged in');
+      return res.status(401).json({ 
+        error: 'Authentication required',
+        message: 'You must be logged in to purchase templates',
+        redirectToLogin: true
+      });
+    }
+
     if (!stripe) {
       return res.status(500).json({ error: 'Stripe not configured' });
     }
@@ -592,7 +602,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       return res.status(400).json({ error: 'Invalid template ID provided for checkout' });
     }
     
-    console.log('🛒 Creating checkout for template ID:', templateId);
+    console.log('🛒 Creating authenticated checkout for user:', req.user.email || req.user.username, 'template:', templateId);
     
     // Handle both string and numeric IDs
     let dbTemplateId = templateId;
@@ -609,9 +619,26 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     }
     
     const template = result.rows[0];
-    console.log('✅ Creating checkout for:', template.name, 'Price:', template.price);
     
-    // Create Stripe checkout session
+    // 🔒 SECURITY: Check if user already owns this template
+    const existingPurchase = await pool.query(`
+      SELECT id FROM purchases 
+      WHERE user_id = $1 AND template_id = $2 AND status = 'completed'
+    `, [req.user.id, dbTemplateId]);
+    
+    if (existingPurchase.rows.length > 0) {
+      console.log('⚠️ User already owns this template:', req.user.email, template.name);
+      return res.status(409).json({ 
+        error: 'Template already purchased',
+        message: 'You already own this template. Check your dashboard.',
+        alreadyOwned: true
+      });
+    }
+    
+    console.log('✅ Creating checkout for authenticated user:', req.user.email || req.user.username);
+    console.log('✅ Template:', template.name, 'Price:', template.price);
+    
+    // 🔒 SECURE: Include user information in Stripe metadata for linking
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [{
@@ -626,18 +653,32 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
         quantity: 1,
       }],
       mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard?purchase=success`,
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard?purchase=success&template=${templateId}`,
       cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/template/${templateId}`,
       metadata: {
         templateId: templateId.toString(),
+        userId: req.user.id,                    // 🔒 CRITICAL: Link to authenticated user
+        userEmail: req.user.email || '',       // 🔒 BACKUP: Email for verification
+        userName: req.user.username || ''      // 🔒 BACKUP: Username for verification
       },
+      customer_email: req.user.email,          // 🔒 PREFILL: User's email
     });
     
-    console.log('✅ Stripe session created:', session.id);
-    res.json({ sessionId: session.id, url: session.url });
+    console.log('✅ Secure Stripe session created:', session.id);
+    console.log('🔗 Linked to user:', req.user.id, req.user.email);
+    
+    res.json({ 
+      sessionId: session.id, 
+      url: session.url,
+      userVerified: true,
+      templateName: template.name
+    });
+    
   } catch (error) {
-    console.error('Stripe error:', error);
-    res.status(500).json({ error: 'Failed to create checkout session' });
+    console.error('❌ Stripe checkout error:', error);
+    res.status(500).json({ 
+      error: 'Failed to create checkout session',
+      message: 'Please try again or contact support if the issue persists' });
   }
 });
 
