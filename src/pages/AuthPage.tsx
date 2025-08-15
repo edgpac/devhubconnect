@@ -1,56 +1,128 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Github, Mail, Eye, EyeOff } from "lucide-react";
+import { useEffect, useState } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Github, ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from "sonner";
-import { API_ENDPOINTS } from '../config/api';
 
 // ✅ Corrected useAuth import based on actual file path
 import { useAuth } from "@/components/context/AuthProvider";
 
 export const AuthPage = () => {
-  const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // ✅ Use login from context
   const { login } = useAuth();
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsLoading(true);
+  // Get the redirect path from location state or default to dashboard
+  const from = location.state?.from || '/dashboard';
 
-    // ✅ Simulated login with context
-    await new Promise(resolve => setTimeout(resolve, 1500));
+  useEffect(() => {
+    // Check if user is already authenticated
+    checkAuthStatus();
+    
+    // Handle GitHub OAuth callback if we're on the callback route
+    const urlParams = new URLSearchParams(window.location.search);
+    const authSuccess = urlParams.get('auth');
+    const error = urlParams.get('error');
+    
+    if (authSuccess === 'success') {
+      // GitHub OAuth was successful, redirect to intended destination
+      handleAuthSuccess();
+    } else if (error) {
+      setAuthError('Authentication failed. Please try again.');
+      setIsLoading(false);
+    }
+  }, []);
 
-    const fakeToken = "abc123";
-    const fakeUser = {
-      id: "user-1",
-      email: "test@example.com",
-      name: "Test User"
-    };
+  const checkAuthStatus = async () => {
+    try {
+      const response = await fetch('/api/auth/user', {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        // User is already authenticated, redirect to dashboard or intended page
+        navigate(from, { replace: true });
+      }
+    } catch (error) {
+      console.log('User not authenticated');
+    }
+  };
 
-    login(fakeToken, fakeUser); // ✅ Save to AuthProvider
-
-    toast.success("Authentication successful!", {
-      description: "Redirecting to dashboard..."
-    });
-
-    setIsLoading(false);
+  const handleAuthSuccess = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Verify authentication with backend
+      const response = await fetch('/api/auth/user', {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const userData = await response.json();
+        console.log('✅ Authentication successful:', userData.user?.username || userData.user?.email);
+        
+        // ✅ Save to AuthProvider
+        const fakeToken = "github-auth-token";
+        login(fakeToken, userData.user);
+        
+        toast.success("Authentication successful!", {
+          description: "Redirecting to dashboard..."
+        });
+        
+        // Clear URL parameters
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Navigate to intended destination
+        navigate(from, { replace: true });
+      } else {
+        setAuthError('Authentication verification failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Auth verification error:', error);
+      setAuthError('Something went wrong. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // ✅ FIX: Updated handleGithubAuth to redirect to backend's GitHub OAuth initiation endpoint
   const handleGithubAuth = () => {
+    setIsLoading(true);
+    setAuthError(null);
+    
     toast.info("Redirecting to GitHub OAuth...", {
       description: "Please wait..."
     });
+    
+    // Store the intended destination in sessionStorage for after OAuth
+    if (from !== '/dashboard') {
+      sessionStorage.setItem('auth_redirect', from);
+    }
+    
     // Redirect to your backend's GitHub OAuth initiation route
     // This route on your backend will then redirect to GitHub's authorization page.
     window.location.href = "/api/auth/github";
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md border-0 shadow-xl">
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center space-y-4">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <p className="text-sm text-gray-600">Signing you in...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
@@ -69,132 +141,27 @@ export const AuthPage = () => {
           <CardHeader className="text-center pb-4">
             <CardTitle className="text-2xl">Welcome</CardTitle>
             <CardDescription>
-              Sign in to access premium automation templates
+              Sign in with GitHub to access premium automation templates
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="signin" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="signin">Sign In</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="signin" className="space-y-4 mt-6">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="your@email.com"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="••••••••"
-                        required
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
-                    disabled={isLoading}
-                    data-auth="sign-in"
-                  >
-                    {isLoading ? "Signing in..." : "Sign In"}
-                  </Button>
-                </form>
-              </TabsContent>
-
-              <TabsContent value="signup" className="space-y-4 mt-6">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input
-                      id="name"
-                      type="text"
-                      placeholder="John Doe"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="your@email.com"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="signup-password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="••••••••"
-                        required
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Creating account..." : "Create Account"}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
-
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
+            {authError && (
+              <div className="mb-4 p-3 rounded-md bg-red-50 border border-red-200">
+                <p className="text-sm text-red-700">{authError}</p>
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-gray-500">Or continue with</span>
-              </div>
-            </div>
+            )}
 
             {/* ✅ FIXED: Added data-auth attributes for the GitHub button */}
             <Button
               variant="outline"
-              className="w-full"
+              className="w-full bg-gray-900 hover:bg-gray-800 text-white border-gray-900"
               onClick={handleGithubAuth}
+              disabled={isLoading}
               data-auth="github"
               data-auth-primary="sign-in"
             >
               <Github className="mr-2 h-4 w-4" />
-              GitHub
+              Continue with GitHub
             </Button>
 
             {/* ✅ ADDED: User info display area (hidden by default) */}
@@ -206,10 +173,25 @@ export const AuthPage = () => {
               {/* User info will be populated by the auth checker */}
             </div>
 
-            <div className="text-center mt-6 text-sm text-gray-600">
-              <Link to="/" className="hover:text-blue-600 transition-colors">
-                ← Back to marketplace
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-gray-500">Secure GitHub Authentication</span>
+              </div>
+            </div>
+
+            <div className="text-center space-y-2">
+              <Link to="/" className="inline-flex items-center text-sm text-gray-600 hover:text-blue-600 transition-colors">
+                <ArrowLeft className="mr-1 h-3 w-3" />
+                Back to marketplace
               </Link>
+              
+              <div className="text-xs text-gray-500 space-y-1">
+                <p>By continuing, you agree to our Terms of Service</p>
+                <p>Your GitHub profile will be used to create your account</p>
+              </div>
             </div>
           </CardContent>
         </Card>
