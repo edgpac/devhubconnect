@@ -66,7 +66,7 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
     case 'checkout.session.completed':
       const session = event.data.object;
       console.log('🎉 Payment successful for session:', session.id);
-      
+    
       try {
         const templateId = session.metadata.templateId;
         const customerEmail = session.customer_details.email;
@@ -88,15 +88,30 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
           break;
         }
 
-        // ✅ ENHANCED: Use smart user function to find or create user
-        const userResult = await pool.query(`
-          SELECT find_or_create_user($1, $2, NULL, NULL) as user_id
-        `, [customerEmail, customerEmail.split('@')[0]]);
+        // ✅ FIXED: Find existing GitHub user by email FIRST, then create if needed
+        let userId;
         
-        const userId = userResult.rows[0].user_id;
-        console.log('👤 Found/created user for purchase:', customerEmail);
+        // Step 1: Try to find existing user by email
+        const existingUserResult = await pool.query(
+          'SELECT id FROM users WHERE email = $1 LIMIT 1',
+          [customerEmail]
+        );
 
-        // Record the purchase - FIXED: Remove id field to let database auto-generate
+        if (existingUserResult.rows.length > 0) {
+          // Found existing user - use their ID
+          userId = existingUserResult.rows[0].id;
+          console.log('✅ Found existing user for email:', customerEmail, 'ID:', userId);
+        } else {
+          // No existing user - create new one using the smart function
+          const userResult = await pool.query(`
+            SELECT find_or_create_user($1, $2, NULL, NULL) as user_id
+          `, [customerEmail, customerEmail.split('@')[0]]);
+          
+          userId = userResult.rows[0].user_id;
+          console.log('👤 Created new user for purchase:', customerEmail, 'ID:', userId);
+        }
+
+        // Record the purchase (keep this part the same)
         const purchaseResult = await pool.query(`
           INSERT INTO purchases (
             user_id, template_id, stripe_session_id, 
@@ -119,7 +134,7 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
         console.error('❌ Error recording purchase:', error);
       }
       break;
-
+    
     default:
       console.log(`Unhandled event type: ${event.type}`);
   }
@@ -207,7 +222,6 @@ function convertFieldNames(template) {
     stripePriceId: template.stripe_price_id
   };
 }
-
 function parseWorkflowDetails(workflowJson) {
   try {
     if (!workflowJson) return { steps: 0, apps: [], hasWorkflow: false };
