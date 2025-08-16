@@ -312,7 +312,7 @@ app.get('/api/templates', async (req, res) => {
       FROM templates 
       WHERE is_public = true 
       ORDER BY rating DESC, download_count DESC 
-      LIMIT 50
+      LIMIT 1000
     `);
     res.json({ success: true, templates: result.rows });
   } catch (error) {
