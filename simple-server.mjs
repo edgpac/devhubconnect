@@ -176,11 +176,23 @@ app.get('/api/auth/github/callback', passport.authenticate('github', { failureRe
     
     console.log(`✅ GitHub OAuth successful for user: ${req.user.username} ${req.user.email} (${userRole})`);
     
-    // ✅ Send ALL users to main dashboard
-    res.redirect(frontendUrl + '/dashboard');
+    // ✅ FIXED: Send users to auth/success for proper login processing
+    const params = new URLSearchParams({
+      success: 'true',
+      userId: req.user.id,
+      userName: req.user.username || '',
+      userEmail: req.user.email || ''
+    });
+
+    res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
   } catch (error) {
     console.error('❌ GitHub OAuth error:', error);
-    res.redirect(frontendUrl + '/dashboard');
+    // On error, still try to process through auth/success
+    const params = new URLSearchParams({
+      success: 'false',
+      error: 'oauth_error'
+    });
+    res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
   }
 });
 
