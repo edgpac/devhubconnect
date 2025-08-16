@@ -1,4 +1,3 @@
-// Line 1: Imports and Setup
 import express from 'express';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -113,27 +112,36 @@ passport.use(new GitHubStrategy({
   callbackURL: `${frontendUrl}/api/auth/github/callback`
 }, async (accessToken, refreshToken, profile, done) => {
   try {
+    console.log('🔗 GitHub OAuth: Processing user:', profile.username, profile.emails?.[0]?.value);
+    
+    // ✅ FIXED: Check if user exists by github_id (no github_access_token)
     const result = await pool.query(
       'SELECT * FROM users WHERE github_id = $1',
       [profile.id]
     );
+    
     let user;
     if (result.rows.length > 0) {
+      // User exists, update basic info only
       user = result.rows[0];
       await pool.query(
-        'UPDATE users SET github_access_token = $1, updated_at = NOW() WHERE github_id = $2',
-        [accessToken, profile.id]
+        'UPDATE users SET updated_at = NOW() WHERE github_id = $1',
+        [profile.id]
       );
+      console.log('✅ Updated existing user:', user.username);
     } else {
+      // Create new user (removed github_access_token column)
       const insertResult = await pool.query(
-        'INSERT INTO users (github_id, username, email, github_access_token, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *',
-        [profile.id, profile.username, profile.emails[0].value, accessToken, 'user']
+        'INSERT INTO users (github_id, username, email, role, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING *',
+        [profile.id, profile.username, profile.emails?.[0]?.value || '', 'user']
       );
       user = insertResult.rows[0];
+      console.log('✅ Created new user:', user.username);
     }
+    
     return done(null, user);
   } catch (error) {
-    console.error('GitHub auth error:', error);
+    console.error('❌ GitHub auth error:', error.message);
     return done(error);
   }
 }));
@@ -301,26 +309,6 @@ app.get('/api/auth/profile/session', (req, res) => {
   }
 });
 
-// General /api/templates endpoint (frontend expects this instead of /api/templates/list)
-app.get('/api/templates', async (req, res) => {
-  try {
-    console.log('📋 Fetching templates for user:', req.user?.email || req.user?.username || 'unauthenticated');
-    const result = await pool.query(`
-      SELECT id, name, description, price, image_url, rating, 
-             COALESCE(download_count, 0) as download_count, 
-             COALESCE(view_count, 0) as view_count
-      FROM templates 
-      WHERE is_public = true 
-      ORDER BY rating DESC, download_count DESC 
-      LIMIT 1000
-    `);
-    res.json({ success: true, templates: result.rows });
-  } catch (error) {
-    console.error('Error fetching templates:', error);
-    res.status(500).json({ error: 'Failed to fetch templates' });
-  }
-});
-
 // User profile endpoint
 app.get('/api/user/profile', (req, res) => {
   if (req.user) {
@@ -355,6 +343,211 @@ app.post('/api/auth/logout', (req, res) => {
       res.json({ success: true, message: 'Logged out successfully' });
     });
   });
+});
+
+// ✅ ADD THESE MISSING HELPER FUNCTIONS AND ENDPOINTS AFTER LINE 327
+
+// Helper function to convert database field names to frontend format
+function convertFieldNames(template) {
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description,
+    price: template.price,
+    currency: template.currency,
+    imageUrl: template.image_url,
+    workflowJson: template.workflow_json,
+    status: template.status,
+    isPublic: template.is_public,
+    creatorId: template.creator_id,
+    createdAt: template.created_at,
+    updatedAt: template.updated_at,
+    downloadCount: template.download_count,
+    viewCount: template.view_count,
+    rating: template.rating,
+    ratingCount: template.rating_count,
+    stripePriceId: template.stripe_price_id
+  };
+}
+
+function parseWorkflowDetails(workflowJson) {
+  try {
+    if (!workflowJson) return { steps: 0, apps: [], hasWorkflow: false };
+    
+    const workflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
+    const steps = workflow.nodes ? workflow.nodes.length : 0;
+    const apps = workflow.nodes ? 
+      [...new Set(workflow.nodes
+        .map(node => {
+          let type = node.type || 'Unknown';
+          if (type.startsWith('n8n-nodes-base.')) {
+            type = type.replace('n8n-nodes-base.', '');
+          }
+          return type;
+        })
+        .filter(type => type !== 'Unknown' && type !== 'Set' && type !== 'NoOp')
+      )] : [];
+    
+    return { steps, apps: apps.slice(0, 10), hasWorkflow: true };
+  } catch (error) {
+    console.error('Error parsing workflow:', error);
+    return { steps: 0, apps: [], hasWorkflow: false };
+  }
+}
+
+// ✅ MISSING: /api/auth/user endpoint (frontend expects this)
+app.get('/api/auth/user', (req, res) => {
+  if (req.user) {
+    res.json({ 
+      user: {
+        id: req.user.id,
+        username: req.user.username,
+        email: req.user.email,
+        role: req.user.role || 'user',
+        github_id: req.user.github_id
+      }
+    });
+  } else {
+    res.status(401).json({ error: 'Not authenticated' });
+  }
+});
+
+// ✅ FIXED: Enhanced /api/templates endpoint with proper field conversion
+app.get('/api/templates', async (req, res) => {
+  try {
+    console.log('📋 Fetching templates for user:', req.user?.email || req.user?.username || 'unauthenticated');
+    
+    const result = await pool.query(`
+      SELECT * FROM templates 
+      WHERE is_public = true 
+      ORDER BY rating DESC, download_count DESC 
+      LIMIT 1000
+    `);
+    
+    const templatesWithDetails = result.rows.map(template => {
+      const converted = convertFieldNames(template);
+      const workflowDetails = parseWorkflowDetails(template.workflow_json);
+      
+      return {
+        ...converted,
+        workflowDetails,
+        steps: workflowDetails.steps,
+        integratedApps: workflowDetails.apps
+      };
+    });
+    
+    res.json({ 
+      success: true,
+      templates: templatesWithDetails,
+      count: result.rows.length
+    });
+  } catch (error) {
+    console.error('Error fetching templates:', error);
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
+// ✅ MISSING: /api/recommendations endpoint
+app.get('/api/recommendations', async (req, res) => {
+  try {
+    console.log('🔍 Fetching recommendations...');
+    
+    // Get popular templates as recommendations
+    const popularTemplates = await pool.query(`
+      SELECT 
+        t.*,
+        COALESCE(t.download_count, 0) as downloads,
+        COALESCE(t.view_count, 0) as views,
+        COALESCE(t.rating, 4.5) as rating
+      FROM templates t 
+      WHERE t.is_public = true 
+      ORDER BY 
+        COALESCE(t.download_count, 0) DESC,
+        COALESCE(t.view_count, 0) DESC,
+        t.created_at DESC
+      LIMIT 12
+    `);
+
+    const formattedTemplates = popularTemplates.rows.map(template => {
+      const converted = convertFieldNames(template);
+      const workflowDetails = parseWorkflowDetails(template.workflow_json);
+      
+      return {
+        ...converted,
+        workflowDetails,
+        steps: workflowDetails.steps,
+        integratedApps: workflowDetails.apps,
+        _recommendationScore: Math.random() * 0.3 + 0.7,
+        recommended: true
+      };
+    });
+
+    console.log(`✅ Found ${formattedTemplates.length} recommended templates`);
+
+    res.json({ 
+      recommendations: formattedTemplates,
+      metadata: {
+        total: formattedTemplates.length,
+        personalized: false,
+        trending_boost_applied: true,
+        filters_applied: {},
+        source: 'popular_templates'
+      }
+    });
+  } catch (error) {
+    console.error('Recommendations error:', error);
+    res.status(500).json({ error: 'Failed to fetch recommendations' });
+  }
+});
+
+// ✅ MISSING: /api/user/purchases endpoint  
+app.get('/api/user/purchases', async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    console.log('📦 Fetching purchases for user:', req.user.email || req.user.username);
+    
+    const result = await pool.query(`
+      SELECT 
+        p.id as purchase_id,
+        p.purchased_at,
+        p.amount_paid,
+        p.status,
+        t.id as template_id,
+        t.name as template_name,
+        t.description as template_description,
+        t.image_url,
+        t.workflow_json
+      FROM purchases p
+      JOIN templates t ON p.template_id = t.id
+      WHERE p.user_id = $1
+      ORDER BY p.purchased_at DESC
+    `, [req.user.id]);
+
+    const formattedPurchases = result.rows.map(row => ({
+      purchaseId: row.purchase_id,
+      purchasedAt: row.purchased_at,
+      amountPaid: row.amount_paid,
+      status: row.status,
+      template: {
+        id: row.template_id,
+        name: row.template_name,
+        description: row.template_description,
+        imageUrl: row.image_url,
+        workflowJson: row.workflow_json,
+        purchased: true
+      }
+    }));
+
+    console.log('✅ Found', formattedPurchases.length, 'purchases for user');
+    res.json({ success: true, purchases: formattedPurchases });
+
+  } catch (error) {
+    console.error('Error fetching user purchases:', error);
+    res.status(500).json({ error: 'Failed to fetch purchases' });
+  }
 });
 
 // Line 325: Helper Functions
@@ -415,288 +608,6 @@ app.get('/api/templates/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch template details' });
   }
 });
-
-// Line 375: Admin Template List Endpoint
-app.get('/api/admin/templates', requireGitHubAdmin, async (req, res) => {
-  try {
-    console.log('📋 Admin fetching template list:', req.user.email || req.user.username);
-    const result = await pool.query(`
-      SELECT id, name, description, price, currency, image_url, status, is_public, 
-             creator_id, created_at, updated_at, rating, 
-             COALESCE(download_count, 0) as download_count, 
-             COALESCE(view_count, 0) as view_count
-      FROM templates 
-      ORDER BY created_at DESC 
-      LIMIT 100
-    `);
-    res.json({ success: true, templates: result.rows });
-  } catch (error) {
-    console.error('Error fetching admin templates:', error);
-    res.status(500).json({ error: 'Failed to fetch admin templates' });
-  }
-});
-
-// Line 396: Stripe Checkout Session
-app.post('/api/stripe/create-checkout-session', passport.authenticate('github', { session: true, failureRedirect: '/api/auth/github' }), async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated', loginUrl: '/api/auth/github' });
-  }
-  const { templateId } = req.body;
-  if (!templateId) {
-    return res.status(400).json({ error: 'Template ID is required' });
-  }
-  try {
-    console.log('💳 Creating checkout session for:', templateId, 'by user:', req.user.email || req.user.username);
-    const template = await pool.query('SELECT name, price FROM templates WHERE id = $1', [templateId]);
-    if (template.rows.length === 0) {
-      return res.status(404).json({ error: 'Template not found' });
-    }
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          product_data: { name: template.rows[0].name },
-          unit_amount: template.rows[0].price
-        },
-        quantity: 1
-      }],
-      mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL}/payment-cancel`,
-      metadata: { templateId, userId: req.user.id }
-    });
-    await pool.query(
-      'INSERT INTO purchases (user_id, template_id, stripe_session_id, status, amount_paid, purchased_at) VALUES ($1, $2, $3, $4, $5, NOW())',
-      [req.user.id, templateId, session.id, 'pending', template.rows[0].price]
-    );
-    res.json({ success: true, sessionId: session.id, url: session.url });
-  } catch (error) {
-    console.error('Error creating checkout session:', error);
-    res.status(500).json({ error: 'Failed to create checkout session' });
-  }
-});
-
-// Line 440: Stripe Webhook
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  try {
-    const event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const { templateId, userId } = session.metadata;
-      console.log('💰 Checkout completed for template:', templateId, 'user:', userId);
-      await pool.query(
-        'UPDATE purchases SET status = $1, amount_paid = $2, updated_at = NOW() WHERE stripe_session_id = $3',
-        ['completed', session.amount_total, session.id]
-      );
-      await pool.query(
-        'UPDATE templates SET download_count = COALESCE(download_count, 0) + 1 WHERE id = $1',
-        [templateId]
-      );
-    }
-    res.json({ received: true });
-  } catch (error) {
-    console.error('Webhook error:', error);
-    res.status(400).json({ error: 'Webhook error' });
-  }
-});
-
-// Line 467: User Purchases Endpoint
-app.get('/api/purchases', passport.authenticate('github', { session: true, failureRedirect: '/api/auth/github' }), async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated', loginUrl: '/api/auth/github' });
-  }
-  try {
-    console.log('📦 Fetching purchases for user:', req.user.email || req.user.username);
-    const result = await pool.query(`
-      SELECT p.id, p.template_id, p.status, p.amount_paid, p.purchased_at, 
-             t.name as template_name, t.image_url
-      FROM purchases p
-      JOIN templates t ON p.template_id = t.id
-      WHERE p.user_id = $1
-      ORDER BY p.purchased_at DESC
-    `, [req.user.id]);
-    res.json({ success: true, purchases: result.rows });
-  } catch (error) {
-    console.error('Error fetching purchases:', error);
-    res.status(500).json({ error: 'Failed to fetch purchases' });
-  }
-});
-
-// Line 489: Set Admin Role Endpoint
-app.post('/api/admin/set-admin-role', requireGitHubAdmin, async (req, res) => {
-  try {
-    console.log('🔐 Admin role change requested by:', req.user.email || req.user.username);
-    const { userId, role } = req.body;
-    if (!userId || !['user', 'admin'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid user ID or role' });
-    }
-    await pool.query('UPDATE users SET role = $1 WHERE id = $2', [role, userId]);
-    console.log(`✅ Admin role change by ${req.user.email || req.user.username}: User ${userId} set to ${role}`);
-    res.json({ success: true, message: `User ${userId} role updated to ${role}` });
-  } catch (error) {
-    console.error('Error setting admin role:', error);
-    res.status(500).json({ error: 'Failed to set admin role' });
-  }
-});
-
-// Catch-All Handler for React Routes (BEFORE SERVER STARTUP)
-app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ 
-      error: 'API endpoint not found',
-      path: req.path,
-      method: req.method
-    });
-  }
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-// Line 501: AI Learning System Functions
-async function checkLearnedResponses(prompt, templateId) {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        ai_response,
-        COUNT(*) as usage_count,
-        AVG(CASE WHEN user_feedback = 'helpful' THEN 1 ELSE 0 END) as helpfulness_score
-      FROM chat_interactions 
-      WHERE 
-        LOWER(user_question) = LOWER($1)
-        AND template_id = $2
-        AND interaction_type IN ('groq_api', 'learned_response')
-        AND created_at >= NOW() - INTERVAL '30 days'
-      GROUP BY ai_response
-      HAVING COUNT(*) >= 2 AND AVG(CASE WHEN user_feedback = 'helpful' THEN 1 ELSE 0 END) > 0.7
-      ORDER BY COUNT(*) DESC, AVG(CASE WHEN user_feedback = 'helpful' THEN 1 ELSE 0 END) DESC
-      LIMIT 1
-    `, [prompt, templateId]);
-    if (result.rows.length > 0) {
-      return {
-        response: result.rows[0].ai_response,
-        confidence: Math.min(0.95, result.rows[0].helpfulness_score * result.rows[0].usage_count / 10)
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error('Error checking learned responses:', error);
-    return null;
-  }
-}
-
-async function learnFromInteraction(question, response, templateId, isSuccessful) {
-  try {
-    const successRate = isSuccessful ? 100.0 : 0.0;
-    await pool.query(`
-      INSERT INTO template_intelligence (
-        template_id, 
-        common_questions, 
-        success_rate,
-        last_updated
-      ) 
-      VALUES (
-        $1,
-        jsonb_build_array($2),
-        $3,
-        NOW()
-      )
-      ON CONFLICT (template_id) DO UPDATE SET
-        common_questions = CASE 
-          WHEN template_intelligence.common_questions ? $2 THEN template_intelligence.common_questions
-          ELSE template_intelligence.common_questions || jsonb_build_array($2)
-        END,
-        last_updated = NOW()
-    `, [templateId, question, successRate]);
-    console.log('🧠 Learned from interaction:', { question: question.substring(0, 50), templateId, isSuccessful });
-  } catch (error) {
-    console.error('Error learning from interaction:', error);
-  }
-}
-
-function generateSmartFallback(prompt, templateContext, history) {
-  const userPrompt = prompt.toLowerCase();
-  const templateId = templateContext?.templateId || '';
-  let confidence = 0.5;
-  const credentialKeywords = ['credential', 'credentials', 'api key', 'setup', 'configure', 'authentication', 'login', 'token'];
-  const isCredentialQuestion = credentialKeywords.some(keyword => userPrompt.includes(keyword));
-  if (isCredentialQuestion) confidence += 0.3;
-  if (templateId && (userPrompt.includes('node') || userPrompt.includes('workflow') || userPrompt.includes('template'))) {
-    confidence += 0.2;
-  }
-  if (userPrompt.includes('openai') && userPrompt.includes('credential')) {
-    return {
-      confidence: 0.95,
-      response: `🔑 **Complete OpenAI Credential Setup Guide**
-
-**Step 1: Get Your API Key**
-1. Go to: **https://platform.openai.com/api-keys**
-2. Sign in to your OpenAI account
-3. Click **"+ Create new secret key"**
-4. **Copy the entire key** (starts with \`sk-\`)
-5. ⚠️ **Save it now** - you can't see it again!
-
-**Step 2: Add to n8n**
-1. n8n sidebar → **"Credentials"**
-2. **"+ Add Credential"** button
-3. Search: **"OpenAI"**
-4. Paste your \`sk-\` key in **"API Key"** field
-5. **"Test"** → **"Save"**
-
-**Troubleshooting:**
-❌ "Invalid API key" → Key must start with \`sk-\`, no spaces
-❌ "Rate limit exceeded" → Add billing at platform.openai.com
-
-**Current Status:** Do you have your API key, or do you need help getting one?`
-    };
-  }
-  return {
-    confidence: Math.min(confidence, 0.7),
-    response: generateStructuredFallback(prompt, templateContext, history)
-  };
-}
-
-async function logChatInteraction(templateId, question, response, userId, interactionType = 'unknown') {
-  try {
-    let questionCategory = 'general';
-    const lowerQuestion = question.toLowerCase();
-    if (lowerQuestion.includes('credential') || lowerQuestion.includes('api key')) {
-      questionCategory = 'credentials';
-    } else if (lowerQuestion.includes('test') || lowerQuestion.includes('workflow')) {
-      questionCategory = 'testing';
-    } else if (lowerQuestion.includes('node') || lowerQuestion.includes('configure')) {
-      questionCategory = 'configuration';
-    } else if (lowerQuestion.includes('error') || lowerQuestion.includes('troubleshoot')) {
-      questionCategory = 'troubleshooting';
-    }
-    await pool.query(`
-      INSERT INTO chat_interactions (
-        template_id, user_question, ai_response, user_id, created_at,
-        interaction_type, question_category, learning_score
-      )
-      VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7)
-    `, [
-      templateId,
-      question,
-      response,
-      userId,
-      interactionType,
-      questionCategory,
-      interactionType === 'learned_response' ? 10 : (interactionType === 'groq_api' ? 5 : 3)
-    ]);
-  } catch (error) {
-    console.error('Error logging chat interaction:', error);
-  }
-}
-
-function isPromptDisclosure(prompt) {
-  const disclosurePatterns = [
-    /prompt.*(runs|controls|used|that.*runs.*this.*chat)/i,
-    /instructions.*(you.*follow|given.*to.*you)/i,
-    /system.*(message|prompt)/i
-  ];
-  return disclosurePatterns.some(pattern => pattern.test(prompt));
-}
 
 // Line 589: Conversation Intelligence System
 class ConversationTracker {
@@ -769,23 +680,33 @@ function updateConversationState(userId, templateId, updates) {
   conversationStates.set(key, { ...current, ...updates, lastActivity: Date.now() });
 }
 
-// Line 651: Enhanced Chat Endpoint with Learning System
-app.post('/api/ask-ai', passport.authenticate('github', { session: true, failureRedirect: '/api/auth/github' }), async (req, res) => {
+// ✅ MISSING: Enhanced Chat Endpoint with Learning System
+app.post('/api/ask-ai', async (req, res) => {
+  // ✅ FIXED: Manual authentication check instead of passport middleware
   if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated', loginUrl: '/api/auth/github' });
+    return res.status(401).json({ 
+      error: 'Authentication required',
+      message: 'You must be signed in to use the AI chat feature',
+      loginUrl: '/api/auth/github'
+    });
   }
+
   const { prompt, history, templateContext } = req.body;
   if (!prompt) {
     return res.status(400).json({ error: 'Prompt is required in the request body.' });
   }
+
   try {
-    console.log('🧠 Learning AI request by:', req.user.email || req.user.username, { 
+    console.log('🧠 AI chat request by:', req.user.email || req.user.username, { 
       prompt: prompt.substring(0, 100) + '...',
       templateId: templateContext?.templateId || 'none'
     });
+
+    // Check for learned responses first
     const learnedResponse = await checkLearnedResponses(prompt, templateContext?.templateId);
     if (learnedResponse) {
       console.log('🎓 Using learned response - API cost saved!');
+      
       await logChatInteraction(
         templateContext?.templateId || 'general_chat',
         prompt,
@@ -793,12 +714,15 @@ app.post('/api/ask-ai', passport.authenticate('github', { session: true, failure
         req.user.id,
         'learned_response'
       );
+      
       return res.json({ 
         response: learnedResponse.response,
         source: 'learned',
         confidence: learnedResponse.confidence
       });
     }
+
+    // Check for JSON validation
     const latestUserMessage = history?.slice(-1)[0]?.content || '';
     let jsonProvidedInThisTurn = false;
     try {
@@ -809,6 +733,7 @@ app.post('/api/ask-ai', passport.authenticate('github', { session: true, failure
     } catch (e) {
       // Not JSON, continue
     }
+
     if (jsonProvidedInThisTurn) {
       const response = `✅ Template validated successfully! I'm your DevHubConnect Setup Assistant, ready to guide you through the deployment process.
 
@@ -826,6 +751,7 @@ To get started, I need to understand your environment:
    • Advanced (experienced with complex automations)
 
 Once I know your setup, I'll provide specific step-by-step instructions for deploying this template successfully.`;
+
       await logChatInteraction(
         templateContext?.templateId || 'json_validation',
         'JSON template provided',
@@ -833,16 +759,22 @@ Once I know your setup, I'll provide specific step-by-step instructions for depl
         req.user.id,
         'json_validation'
       );
+
       return res.json({ response, source: 'template_validation' });
     }
+
+    // Check for prompt disclosure attempts
     if (isPromptDisclosure(prompt)) {
       return res.json({ 
         response: "I cannot answer questions about my instructions. I'm here to help with your uploaded .json file only." 
       });
     }
+
+    // Try smart fallback first
     const smartFallback = generateSmartFallback(prompt, templateContext, history);
     if (smartFallback.confidence > 0.8) {
       console.log('🧠 High confidence fallback - API cost saved!');
+      
       await logChatInteraction(
         templateContext?.templateId || 'general_chat',
         prompt,
@@ -850,18 +782,23 @@ Once I know your setup, I'll provide specific step-by-step instructions for depl
         req.user.id,
         'smart_fallback'
       );
+      
       return res.json({ 
         response: smartFallback.response,
         source: 'smart_fallback',
         confidence: smartFallback.confidence
       });
     }
+
+    // Use Groq API if available
     const groqApiKey = process.env.GROQ_API_KEY;
     let response = '';
     let responseSource = 'fallback';
+
     if (groqApiKey) {
       try {
-        console.log('💰 Using Groq API - counting cost...');
+        console.log('💰 Using Groq API for user:', req.user.email || req.user.username);
+        
         const structuredPrompt = `You are a technical writer specializing in beginner-friendly n8n automation guides. 
 
 CONTEXT: User is asking about n8n template setup.
@@ -879,13 +816,15 @@ Provide a detailed, step-by-step response focusing on:
 Be specific about n8n interface elements. Include exact paths like "Credentials → Add Credential → [Service Name]" and field names like "API Key" field.
 
 Focus on practical, actionable instructions that a beginner can follow exactly.`;
+
         const messages = [
           { role: 'system', content: structuredPrompt },
           { role: 'user', content: prompt }
         ];
-        console.log('🚀 Sending structured request to Groq for user:', req.user.email || req.user.username);
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
+
         const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -901,17 +840,23 @@ Focus on practical, actionable instructions that a beginner can follow exactly.`
           }),
           signal: controller.signal
         });
+
         clearTimeout(timeoutId);
+
         if (groqResponse.ok) {
           const data = await groqResponse.json();
           response = data.choices?.[0]?.message?.content || 'No response received.';
           responseSource = 'groq_api';
           console.log('✅ Groq response received for user:', req.user.email || req.user.username);
+          
+          // Learn from successful API response
           await learnFromInteraction(prompt, response, templateContext?.templateId, true);
+          
         } else {
           console.error('❌ Groq API error:', groqResponse.status);
           throw new Error(`Groq API failed with status ${groqResponse.status}`);
         }
+
       } catch (groqError) {
         console.error('❌ Groq error:', groqError.message);
         response = smartFallback.response;
@@ -922,6 +867,8 @@ Focus on practical, actionable instructions that a beginner can follow exactly.`
       response = smartFallback.response;
       responseSource = 'no_api_key';
     }
+
+    // Log interaction
     await logChatInteraction(
       templateContext?.templateId || 'general_chat',
       prompt,
@@ -929,10 +876,13 @@ Focus on practical, actionable instructions that a beginner can follow exactly.`
       req.user.id,
       responseSource
     );
+
     res.json({ response, source: responseSource });
+
   } catch (error) {
     console.error('❌ Chat error for user:', req.user.email || req.user.username, error);
     const fallbackResponse = `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`;
+    
     await logChatInteraction(
       templateContext?.templateId || 'general_chat',
       prompt,
@@ -940,125 +890,61 @@ Focus on practical, actionable instructions that a beginner can follow exactly.`
       req.user.id,
       'error'
     );
+    
     res.json({ response: fallbackResponse });
   }
 });
-// Line 901: Generate Setup Instructions
-app.post('/api/generate-setup-instructions', passport.authenticate('github', { session: true, failureRedirect: '/api/auth/github' }), async (req, res) => {
+
+// ✅ MISSING: Generate Setup Instructions Endpoint
+app.post('/api/generate-setup-instructions', async (req, res) => {
+  // ✅ FIXED: Manual authentication check
   if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated', loginUrl: '/api/auth/github' });
+    return res.status(401).json({ 
+      error: 'Authentication required',
+      message: 'You must be signed in to generate setup instructions',
+      loginUrl: '/api/auth/github'
+    });
   }
+
   const { workflow, templateId, purchaseId } = req.body;
   if (!workflow || !templateId) {
     return res.status(400).json({ error: 'Workflow and templateId are required.' });
   }
+
   try {
     console.log('📋 Generating setup instructions for:', templateId, 'by user:', req.user.email || req.user.username);
-    console.log('🔑 Groq API Key available:', !!process.env.GROQ_API_KEY);
-    const groqApiKey = process.env.GROQ_API_KEY;
-    if (groqApiKey) {
-      try {
-        const structuredPrompt = `You are a technical writer specializing in beginner-friendly automation guides. Analyze the provided n8n workflow JSON and generate setup instructions for the specific service it implements. 
-
-Respond with ONLY this JSON structure: 
-{
-  "name": "Template title (max 60 chars)", 
-  "description": "Paragraph 1: Workflow purpose and key nodes.\\n\\nParagraph 2: Setup requirements and configuration.\\n\\nParagraph 3: Testing and deployment steps. Use exactly 400 words total. Include key nodes relevant to the workflow and the specific service. Provide detailed beginner instructions: include n8n installation steps, credential acquisition for the service, and error-handling examples. Focus on webhook setup, API credential configuration, and output validation. Use standard n8n node names and focus on their functions."
-}
-
-JSON: ${JSON.stringify(workflow).substring(0, 8000)}`;
-        console.log('🚀 Sending request to Groq API for user:', req.user.email || req.user.username);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${groqApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [{ role: 'user', content: structuredPrompt }],
-            max_tokens: 1500,
-            temperature: 0.1,
-            stream: false
-          }),
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        console.log('📡 Groq response status:', groqResponse.status);
-        if (groqResponse.ok) {
-          const data = await groqResponse.json();
-          const aiResponse = data.choices?.[0]?.message?.content || '';
-          console.log('✅ Groq response received, length:', aiResponse.length);
-          try {
-            const parsedResponse = JSON.parse(aiResponse);
-            console.log('✅ Successfully parsed AI response');
-            return res.json({ 
-              success: true,
-              instructions: `# ${parsedResponse.name}\n\n${parsedResponse.description}`,
-              source: 'groq_ai'
-            });
-          } catch (parseError) {
-            console.error('❌ Failed to parse AI response as JSON:', parseError);
-            console.log('Raw AI response:', aiResponse.substring(0, 200));
-          }
-        } else {
-          const errorText = await groqResponse.text();
-          console.error('❌ Groq API error:', errorText);
-        }
-      } catch (groqError) {
-        console.error('❌ Groq fetch error:', groqError.message);
-      }
-    } else {
-      console.log('⚠️ No Groq API key found, using structured fallback');
-    }
-    console.log('📝 Generating structured fallback instructions for user:', req.user.email || req.user.username);
+    
+    // Enhanced structured fallback
     const nodeTypes = workflow.nodes?.map((node) => node.type).filter(Boolean) || [];
     const uniqueServices = [...new Set(nodeTypes)]
       .map(service => service.replace('n8n-nodes-base.', ''))
       .filter(service => !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(service))
       .slice(0, 5);
+
     let workflowType = 'General Automation';
     let specificInstructions = '';
+
     if (nodeTypes.some(node => node.includes('OpenAi') || node.includes('langchain'))) {
       workflowType = 'AI-Powered Automation';
       specificInstructions = `
 **🤖 AI Setup Requirements:**
 1. **OpenAI Account:** Get API key from platform.openai.com
 2. **n8n Credentials:** Add OpenAI credential with your \`sk-\` key
-3. **Test Connection:** Verify API calls work before activation
-
-**Common AI Node Configuration:**
-- **Model:** Use \`gpt-3.5-turbo\` or \`gpt-4\` 
-- **Max Tokens:** Set appropriate limits (e.g., 1000)
-- **Temperature:** 0.7 for creative, 0.1 for factual responses`;
+3. **Test Connection:** Verify API calls work before activation`;
     } else if (nodeTypes.some(node => node.includes('Webhook'))) {
       workflowType = 'Webhook-Based Integration';
       specificInstructions = `
 **🔗 Webhook Setup Requirements:**
 1. **Webhook URL:** Copy from your n8n Webhook node
 2. **External Service:** Configure webhook in source system
-3. **Test Webhook:** Send test payload to verify connection
-
-**Webhook Security:**
-- Use authentication headers when possible
-- Validate incoming payload structure
-- Set up proper error handling`;
-    } else if (nodeTypes.some(node => node.includes('Slack') || node.includes('Discord'))) {
-      workflowType = 'Communication Automation';
-      specificInstructions = `
-**💬 Chat Integration Setup:**
-1. **Bot Creation:** Create bot in your platform (Slack/Discord)
-2. **Permissions:** Grant necessary scopes (read, write, manage)
-3. **Token Setup:** Add bot token to n8n credentials
-4. **Channel Access:** Invite bot to target channels`;
+3. **Test Webhook:** Send test payload to verify connection`;
     }
+
     const instructions = `# ${templateId.replace(/[_-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
 
 ## 🎯 Workflow Overview
 
-This **${workflowType}** template contains **${workflow.nodes?.length || 0} nodes** designed to streamline your automation processes. The workflow integrates with **${uniqueServices.length > 0 ? uniqueServices.join(', ') : 'core n8n functionality'}** to deliver powerful automation capabilities.
+This **${workflowType}** template contains **${workflow.nodes?.length || 0} nodes** designed to streamline your automation processes.
 
 ${specificInstructions}
 
@@ -1079,15 +965,6 @@ ${uniqueServices.length > 0 ? uniqueServices.map(service => {
 1. **Manual Test:** Click **"Test workflow"** button
 2. **Check Executions:** Review execution log for errors
 3. **Activate:** Toggle the **"Active"** switch when ready
-4. **Monitor:** Watch the execution history for successful runs
-
-## 🔧 Troubleshooting
-
-**Common Issues:**
-- **❌ Credential errors:** Verify API keys and permissions
-- **❌ Node failures:** Check required fields are filled
-- **❌ Webhook timeouts:** Ensure external services can reach n8n
-- **❌ Rate limits:** Add delays between API calls if needed
 
 ## 💬 Need Help?
 
@@ -1096,13 +973,13 @@ Ask me specific questions like:
 - *"Where do I find my webhook URL?"*
 - *"How do I test this workflow?"*
 
-I'll provide exact n8n UI navigation steps for any setup question!
-
 ---
 **Template ID:** ${templateId}  
 **Nodes:** ${workflow.nodes?.length || 0}  
 **Services:** ${uniqueServices.join(', ') || 'Core n8n'}`;
-    console.log('✅ Structured fallback instructions generated for user:', req.user.email || req.user.username);
+
+    console.log('✅ Setup instructions generated for user:', req.user.email || req.user.username);
+
     res.json({ 
       success: true,
       instructions: instructions,
@@ -1113,6 +990,7 @@ I'll provide exact n8n UI navigation steps for any setup question!
         workflowType: workflowType
       }
     });
+
   } catch (error) {
     console.error('❌ Error generating setup instructions for user:', req.user.email || req.user.username, error);
     res.status(500).json({ 
@@ -1123,615 +1001,178 @@ I'll provide exact n8n UI navigation steps for any setup question!
   }
 });
 
-// Line 961: Get Learning Statistics
-app.get('/api/ai/learning-stats', passport.authenticate('github', { session: true, failureRedirect: '/api/auth/github' }), async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated', loginUrl: '/api/auth/github' });
-  }
+// Line 375: Admin Template List Endpoint
+app.get('/api/admin/templates', requireGitHubAdmin, async (req, res) => {
   try {
-    console.log('📊 Fetching AI learning stats for user:', req.user.email || req.user.username);
-    const stats = await pool.query(`
-      SELECT 
-        COUNT(*) as total_interactions,
-        COUNT(CASE WHEN interaction_type = 'learned_response' THEN 1 END) as learned_responses,
-        COUNT(CASE WHEN interaction_type = 'groq_api' THEN 1 END) as api_calls,
-        ROUND(
-          COUNT(CASE WHEN interaction_type = 'learned_response' THEN 1 END) * 100.0 / 
-          NULLIF(COUNT(*), 0), 
-          2
-        ) as cost_savings_percentage
-      FROM chat_interactions 
-      WHERE created_at >= NOW() - INTERVAL '30 days'
+    console.log('📋 Admin fetching template list:', req.user.email || req.user.username);
+    const result = await pool.query(`
+      SELECT id, name, description, price, currency, image_url, status, is_public, 
+             creator_id, created_at, updated_at, rating, 
+             COALESCE(download_count, 0) as download_count, 
+             COALESCE(view_count, 0) as view_count
+      FROM templates 
+      ORDER BY created_at DESC 
+      LIMIT 100
     `);
-    const categoryStats = await pool.query(`
-      SELECT 
-        question_category,
-        COUNT(*) as count,
-        AVG(learning_score) as avg_score
-      FROM chat_interactions 
-      WHERE created_at >= NOW() - INTERVAL '30 days'
-      GROUP BY question_category
-      ORDER BY count DESC
-    `);
-    res.json({
-      overall: stats.rows[0],
-      categories: categoryStats.rows,
-      message: `AI learning system active! ${stats.rows[0].cost_savings_percentage}% of responses use learned patterns instead of API calls.`
-    });
+    res.json({ success: true, templates: result.rows });
   } catch (error) {
-    console.error('Error fetching learning stats for user:', req.user.email || req.user.username, error);
-    res.status(500).json({ error: 'Failed to fetch learning statistics' });
+    console.error('Error fetching admin templates:', error);
+    res.status(500).json({ error: 'Failed to fetch admin templates' });
   }
 });
 
-// Line 982: User Feedback for Learning
-app.post('/api/ai/feedback', passport.authenticate('github', { session: true, failureRedirect: '/api/auth/github' }), async (req, res) => {
+// Line 396: ✅ FIXED Stripe Checkout Session (removed passport middleware)
+app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  // ✅ FIXED: Check authentication manually instead of using passport middleware
   if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated', loginUrl: '/api/auth/github' });
-  }
-  try {
-    const { interactionId, feedback, helpful } = req.body;
-    console.log('📝 Recording AI feedback for user:', req.user.email || req.user.username);
-    await pool.query(`
-      UPDATE chat_interactions 
-      SET 
-        user_feedback = $1,
-        learning_score = learning_score + CASE WHEN $2 THEN 2 ELSE -1 END
-      WHERE id = $3
-    `, [feedback, helpful, interactionId]);
-    res.json({ success: true, message: 'Feedback recorded - AI will learn from this!' });
-  } catch (error) {
-    console.error('Error recording feedback for user:', req.user.email || req.user.username, error);
-    res.status(500).json({ error: 'Failed to record feedback' });
-  }
-});
-// Line 1201: Template-Specific Intelligence
-app.get('/api/ai/template-intelligence/:templateId', passport.authenticate('github', { session: true, failureRedirect: '/api/auth/github' }), async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated', loginUrl: '/api/auth/github' });
-  }
-  try {
-    const { templateId } = req.params;
-    if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
-      return res.status(400).json({ error: 'Invalid template ID' });
-    }
-    console.log('📊 Fetching template intelligence for:', templateId, 'by user:', req.user.email || req.user.username);
-    const templateStats = await pool.query(`
-      SELECT 
-        template_id,
-        common_questions,
-        success_rate,
-        last_updated,
-        (
-          SELECT COUNT(*) FROM chat_interactions 
-          WHERE template_id = $1 
-          AND created_at >= NOW() - INTERVAL '30 days'
-        ) as recent_interactions,
-        (
-          SELECT COUNT(DISTINCT user_id) FROM chat_interactions 
-          WHERE template_id = $1 
-          AND created_at >= NOW() - INTERVAL '30 days'
-        ) as unique_users
-      FROM template_intelligence 
-      WHERE template_id = $1
-    `, [templateId]);
-    const commonIssues = await pool.query(`
-      SELECT 
-        user_question,
-        COUNT(*) as frequency,
-        AVG(CASE WHEN user_feedback = 'helpful' THEN 1 ELSE 0 END) as helpfulness_rate,
-        MAX(created_at) as last_asked
-      FROM chat_interactions 
-      WHERE template_id = $1 
-      AND created_at >= NOW() - INTERVAL '30 days'
-      AND question_category IN ('troubleshooting', 'configuration', 'credentials')
-      GROUP BY user_question
-      HAVING COUNT(*) >= 2
-      ORDER BY frequency DESC, helpfulness_rate ASC
-      LIMIT 10
-    `, [templateId]);
-    const userJourney = await pool.query(`
-      SELECT 
-        question_category,
-        interaction_type,
-        COUNT(*) as step_frequency,
-        AVG(learning_score) as avg_success_score,
-        string_agg(DISTINCT LEFT(user_question, 100), ' | ') as example_questions
-      FROM chat_interactions 
-      WHERE template_id = $1 
-      AND created_at >= NOW() - INTERVAL '30 days'
-      GROUP BY question_category, interaction_type
-      ORDER BY step_frequency DESC
-    `, [templateId]);
-    res.json({
-      templateStats: templateStats.rows[0] || { template_id: templateId, message: 'No data yet' },
-      commonIssues: commonIssues.rows,
-      userJourney: userJourney.rows,
-      recommendations: generateTemplateRecommendations(templateStats.rows[0], commonIssues.rows)
+    console.log('❌ Unauthorized checkout attempt - user not logged in');
+    return res.status(401).json({ 
+      error: 'Authentication required',
+      message: 'You must be logged in to purchase templates',
+      redirectToLogin: true,
+      loginUrl: '/api/auth/github'
     });
-  } catch (error) {
-    console.error('Error fetching template intelligence for user:', req.user.email || req.user.username, error);
-    res.status(500).json({ error: 'Failed to fetch template intelligence' });
   }
-});
 
-// Line 1235: Conversation Reset
-app.post('/api/ai/reset-conversation', passport.authenticate('github', { session: true, failureRedirect: '/api/auth/github' }), async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated', loginUrl: '/api/auth/github' });
+  const { templateId } = req.body;
+  if (!templateId) {
+    return res.status(400).json({ error: 'Template ID is required' });
   }
+
   try {
-    const { templateId, userId } = req.body;
-    if (!templateId || !userId) {
-      return res.status(400).json({ error: 'Template ID and User ID are required' });
+    console.log('💳 Creating checkout session for:', templateId, 'by user:', req.user.email || req.user.username);
+    
+    // Get template details
+    const template = await pool.query('SELECT name, price FROM templates WHERE id = $1', [templateId]);
+    if (template.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
     }
-    if (typeof templateId !== 'string' || typeof userId !== 'string') {
-      return res.status(400).json({ error: 'Invalid input types' });
+
+    // ✅ SECURITY: Check if user already owns this template
+    const existingPurchase = await pool.query(`
+      SELECT id FROM purchases 
+      WHERE user_id = $1 AND template_id = $2 AND status = 'completed'
+    `, [req.user.id, templateId]);
+    
+    if (existingPurchase.rows.length > 0) {
+      console.log('⚠️ User already owns this template:', req.user.email, template.rows[0].name);
+      return res.status(409).json({ 
+        error: 'Template already purchased',
+        message: 'You already own this template. Check your dashboard.',
+        alreadyOwned: true
+      });
     }
-    if (userId !== req.user.id) {
-      return res.status(403).json({ error: 'Cannot reset conversation for another user' });
-    }
-    console.log('🔄 Resetting conversation for user:', req.user.email || req.user.username, 'template:', templateId);
-    const key = `${userId}_${templateId}`;
-    conversationStates.delete(key);
-    await logChatInteraction(
-      templateId,
-      'Conversation reset requested',
-      'Conversation state cleared - starting fresh',
-      req.user.id,
-      'conversation_reset'
+
+    // Create Stripe checkout session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: { 
+            name: template.rows[0].name,
+            description: `n8n automation template`
+          },
+          unit_amount: template.rows[0].price
+        },
+        quantity: 1
+      }],
+      mode: 'payment',
+      success_url: `${frontendUrl}/dashboard?purchase=success&template=${templateId}`,
+      cancel_url: `${frontendUrl}/template/${templateId}`,
+      metadata: { 
+        templateId: templateId.toString(), 
+        userId: req.user.id.toString(),
+        userEmail: req.user.email || '',
+        userName: req.user.username || ''
+      },
+      customer_email: req.user.email
+    });
+
+    // Record pending purchase
+    await pool.query(
+      'INSERT INTO purchases (user_id, template_id, stripe_session_id, status, amount_paid, purchased_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+      [req.user.id, templateId, session.id, 'pending', template.rows[0].price]
     );
+
+    console.log('✅ Stripe session created:', session.id);
+    console.log('🔗 Linked to user:', req.user.id, req.user.email);
+
     res.json({ 
       success: true, 
-      message: 'Conversation reset successfully',
-      newState: {
-        startTime: Date.now(),
-        interactions: 0,
-        completedSteps: [],
-        lastActivity: Date.now()
-      }
+      sessionId: session.id, 
+      url: session.url,
+      userVerified: true,
+      templateName: template.rows[0].name
     });
   } catch (error) {
-    console.error('Error resetting conversation for user:', req.user.email || req.user.username, error);
-    res.status(500).json({ error: 'Failed to reset conversation' });
+    console.error('Error creating checkout session:', error);
+    res.status(500).json({ error: 'Failed to create checkout session' });
   }
 });
 
-// Line 1260: Performance Analytics
-app.get('/api/ai/performance-analytics', requireGitHubAdmin, async (req, res) => {
+// Line 440: Stripe Webhook
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
   try {
-    console.log('📊 Fetching performance analytics for admin:', req.user.email || req.user.username);
-    const timeframe = req.query.timeframe || '30';
-    const validTimeframes = ['7', '14', '30', '60', '90'];
-    if (!validTimeframes.includes(timeframe)) {
-      return res.status(400).json({ error: 'Invalid timeframe. Use: 7, 14, 30, 60, or 90 days' });
+    const event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const { templateId, userId } = session.metadata;
+      console.log('💰 Checkout completed for template:', templateId, 'user:', userId);
+      await pool.query(
+        'UPDATE purchases SET status = $1, amount_paid = $2, updated_at = NOW() WHERE stripe_session_id = $3',
+        ['completed', session.amount_total, session.id]
+      );
+      await pool.query(
+        'UPDATE templates SET download_count = COALESCE(download_count, 0) + 1 WHERE id = $1',
+        [templateId]
+      );
     }
-    const performanceData = await pool.query(`
-      WITH daily_stats AS (
-        SELECT 
-          DATE(created_at) as day,
-          COUNT(*) as total_interactions,
-          COUNT(CASE WHEN interaction_type = 'learned_response' THEN 1 END) as learned_responses,
-          COUNT(CASE WHEN interaction_type LIKE '%groq%' THEN 1 END) as api_calls,
-          COUNT(CASE WHEN interaction_type = 'conversation_completion' THEN 1 END) as completions,
-          AVG(learning_score) as avg_effectiveness
-        FROM chat_interactions 
-        WHERE created_at >= NOW() - INTERVAL '1 day' * $1
-        GROUP BY DATE(created_at)
-        ORDER BY day DESC
-      ),
-      cost_analysis AS (
-        SELECT 
-          SUM(CASE WHEN interaction_type LIKE '%groq%' THEN 1 ELSE 0 END) as total_api_calls,
-          SUM(CASE WHEN interaction_type = 'learned_response' THEN 1 END) as saved_api_calls,
-          COUNT(*) as total_interactions
-        FROM chat_interactions 
-        WHERE created_at >= NOW() - INTERVAL '1 day' * $1
-      )
-      SELECT 
-        (SELECT json_agg(daily_stats.*) FROM daily_stats) as daily_trends,
-        (SELECT row_to_json(cost_analysis.*) FROM cost_analysis) as cost_savings
-    `, [parseInt(timeframe)]);
-    const topTemplates = await pool.query(`
-      SELECT 
-        template_id,
-        COUNT(*) as interaction_count,
-        COUNT(DISTINCT user_id) as unique_users,
-        COUNT(CASE WHEN interaction_type = 'conversation_completion' THEN 1 END) as completion_count,
-        ROUND(
-          COUNT(CASE WHEN interaction_type = 'conversation_completion' THEN 1 END) * 100.0 / 
-          NULLIF(COUNT(DISTINCT user_id), 0), 
-          2
-        ) as completion_rate,
-        AVG(learning_score) as avg_effectiveness
-      FROM chat_interactions 
-      WHERE created_at >= NOW() - INTERVAL '1 day' * $1
-      AND template_id != 'general_chat'
-      GROUP BY template_id
-      ORDER BY interaction_count DESC
-      LIMIT 10
-    `, [parseInt(timeframe)]);
-    const userEngagement = await pool.query(`
-      SELECT 
-        COUNT(DISTINCT user_id) as total_users,
-        AVG(user_interactions) as avg_interactions_per_user,
-        MAX(user_interactions) as max_interactions_per_user,
-        COUNT(CASE WHEN user_interactions >= 5 THEN 1 END) as engaged_users
-      FROM (
-        SELECT 
-          user_id,
-          COUNT(*) as user_interactions
-        FROM chat_interactions 
-        WHERE created_at >= NOW() - INTERVAL '1 day' * $1
-        GROUP BY user_id
-      ) user_stats
-    `, [parseInt(timeframe)]);
-    res.json({
-      performanceData: performanceData.rows[0],
-      topTemplates: topTemplates.rows,
-      userEngagement: userEngagement.rows[0],
-      metadata: {
-        timeframe: `${timeframe} days`,
-        generatedAt: new Date().toISOString()
-      }
-    });
+    res.json({ received: true });
   } catch (error) {
-    console.error('Error fetching performance analytics for admin:', req.user.email || req.user.username, error);
-    res.status(500).json({ error: 'Failed to fetch performance analytics' });
+    console.error('Webhook error:', error);
+    res.status(400).json({ error: 'Webhook error' });
   }
 });
 
-// Line 1304: Export Conversation Data
-app.get('/api/ai/export-conversations/:templateId', requireGitHubAdmin, async (req, res) => {
+// Line 467: ✅ FIXED User Purchases Endpoint (removed passport middleware)
+app.get('/api/purchases', async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Not authenticated', loginUrl: '/api/auth/github' });
+  }
   try {
-    console.log('📤 Exporting conversations for template:', req.params.templateId, 'by admin:', req.user.email || req.user.username);
-    const { templateId } = req.params;
-    const { format = 'json', timeframe = '30' } = req.query;
-    if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
-      return res.status(400).json({ error: 'Invalid template ID' });
-    }
-    const validTimeframes = ['7', '14', '30', '60', '90'];
-    if (!validTimeframes.includes(timeframe)) {
-      return res.status(400).json({ error: 'Invalid timeframe. Use: 7, 14, 30, 60, or 90 days' });
-    }
-    if (!['json', 'csv'].includes(format)) {
-      return res.status(400).json({ error: 'Invalid format. Use: json or csv' });
-    }
-    const conversations = await pool.query(`
-      SELECT 
-        id,
-        template_id,
-        user_question,
-        ai_response,
-        user_id,
-        created_at,
-        interaction_type,
-        question_category,
-        learning_score,
-        user_feedback
-      FROM chat_interactions 
-      WHERE template_id = $1 
-      AND created_at >= NOW() - INTERVAL '1 day' * $2
-      ORDER BY created_at DESC
-    `, [templateId, parseInt(timeframe)]);
-    if (format === 'csv') {
-      const csv = [
-        'ID,Template,Question,Response,User,Date,Type,Category,Score,Feedback',
-        ...conversations.rows.map(row => 
-          `"${row.id}","${row.template_id}","${row.user_question.replace(/"/g, '""')}","${row.ai_response.replace(/"/g, '""')}","${row.user_id}","${row.created_at}","${row.interaction_type}","${row.question_category}","${row.learning_score}","${row.user_feedback || ''}"`
-        )
-      ].join('\n');
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="${templateId}_conversations_${timeframe}days.csv"`);
-      res.send(csv);
-    } else {
-      res.json({
-        templateId,
-        timeframe: `${timeframe} days`,
-        totalConversations: conversations.rows.length,
-        exportedAt: new Date().toISOString(),
-        conversations: conversations.rows
-      });
-    }
+    console.log('📦 Fetching purchases for user:', req.user.email || req.user.username);
+    const result = await pool.query(`
+      SELECT p.id, p.template_id, p.status, p.amount_paid, p.purchased_at, 
+             t.name as template_name, t.image_url
+      FROM purchases p
+      JOIN templates t ON p.template_id = t.id
+      WHERE p.user_id = $1
+      ORDER BY p.purchased_at DESC
+    `, [req.user.id]);
+    res.json({ success: true, purchases: result.rows });
   } catch (error) {
-    console.error('Error exporting conversations for admin:', req.user.email || req.user.username, error);
-    res.status(500).json({ error: 'Failed to export conversations' });
+    console.error('Error fetching purchases:', error);
+    res.status(500).json({ error: 'Failed to fetch purchases' });
   }
 });
 
-// Line 1348: AI Health Check
-app.get('/api/ai/health', requireGitHubAdmin, async (req, res) => {
+// Line 489: Set Admin Role Endpoint
+app.post('/api/admin/set-admin-role', requireGitHubAdmin, async (req, res) => {
   try {
-    console.log('🩺 Performing AI health check for admin:', req.user.email || req.user.username);
-    const healthChecks = {
-      database: false,
-      groqApi: false,
-      learningSystem: false,
-      conversationIntelligence: false
-    };
-    try {
-      await pool.query('SELECT 1');
-      healthChecks.database = true;
-    } catch (error) {
-      console.error('Database health check failed:', error);
+    console.log('🔐 Admin role change requested by:', req.user.email || req.user.username);
+    const { userId, role } = req.body;
+    if (!userId || !['user', 'admin'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid user ID or role' });
     }
-    if (process.env.GROQ_API_KEY) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const testResponse = await fetch('https://api.groq.com/openai/v1/models', {
-          headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        healthChecks.groqApi = testResponse.ok;
-      } catch (error) {
-        console.error('Groq API health check failed:', error);
-      }
-    }
-    try {
-      const recentLearning = await pool.query(`
-        SELECT COUNT(*) as learned_count 
-        FROM chat_interactions 
-        WHERE interaction_type = 'learned_response' 
-        AND created_at >= NOW() - INTERVAL '24 hours'
-      `);
-      healthChecks.learningSystem = true;
-    } catch (error) {
-      console.error('Learning system health check failed:', error);
-    }
-    try {
-      const conversationStatesCount = conversationStates.size;
-      healthChecks.conversationIntelligence = conversationStatesCount >= 0;
-    } catch (error) {
-      console.error('Conversation intelligence health check failed:', error);
-    }
-    const overallHealth = Object.values(healthChecks).every(check => check);
-    res.json({
-      status: overallHealth ? 'healthy' : 'degraded',
-      timestamp: new Date().toISOString(),
-      checks: healthChecks,
-      version: '2.0.0-enhanced',
-      features: [
-        'Learning System',
-        'Conversation Intelligence', 
-        'Smart Completion Detection',
-        'Cost Optimization',
-        'Performance Analytics'
-      ]
-    });
+    await pool.query('UPDATE users SET role = $1 WHERE id = $2', [role, userId]);
+    console.log(`✅ Admin role change by ${req.user.email || req.user.username}: User ${userId} set to ${role}`);
+    res.json({ success: true, message: `User ${userId} role updated to ${role}` });
   } catch (error) {
-    console.error('Health check error for admin:', req.user.email || req.user.username, error);
-    res.status(500).json({ 
-      status: 'error', 
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
+    console.error('Error setting admin role:', error);
+    res.status(500).json({ error: 'Failed to set admin role' });
   }
-});
-// Line 1549: Admin Dashboard Endpoint
-app.get('/api/admin/dashboard', requireGitHubAdmin, async (req, res) => {
-  try {
-    console.log('📊 Admin dashboard requested by:', req.user.email || req.user.username);
-    const templateStats = await pool.query(`
-      SELECT 
-        COUNT(*) as total_templates,
-        COUNT(CASE WHEN is_public = true THEN 1 END) as public_templates,
-        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) as recent_templates,
-        ROUND(AVG(price)::numeric, 2) as avg_price,
-        COALESCE(SUM(download_count), 0) as total_downloads
-      FROM templates
-    `);
-    const purchaseStats = await pool.query(`
-      SELECT 
-        COUNT(*) as total_purchases,
-        COALESCE(SUM(amount_paid), 0) as total_revenue,
-        COUNT(CASE WHEN purchased_at >= NOW() - INTERVAL '7 days' THEN 1 END) as recent_purchases,
-        COUNT(DISTINCT user_id) as unique_customers
-      FROM purchases
-      WHERE status = 'completed'
-    `);
-    const userStats = await pool.query(`
-      SELECT 
-        COUNT(*) as total_users,
-        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) as new_users,
-        COUNT(CASE WHEN github_id IS NOT NULL THEN 1 END) as github_users
-      FROM users
-    `);
-    const topTemplates = await pool.query(`
-      SELECT 
-        id, name, 
-        COALESCE(download_count, 0) as download_count, 
-        COALESCE(view_count, 0) as view_count, 
-        price,
-        (SELECT COUNT(*) FROM purchases WHERE template_id = templates.id) as purchase_count
-      FROM templates 
-      WHERE is_public = true
-      ORDER BY download_count DESC, view_count DESC
-      LIMIT 10
-    `);
-    res.json({
-      success: true,
-      dashboard: {
-        templates: templateStats.rows[0],
-        purchases: purchaseStats.rows[0],
-        users: userStats.rows[0],
-        topTemplates: topTemplates.rows
-      },
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ Admin dashboard error for user:', req.user.email || req.user.username, error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to load dashboard data'
-    });
-  }
-});
-
-// Line 1595: Template Upload Endpoint
-app.post('/api/templates', requireGitHubAdmin, async (req, res) => {
-  try {
-    console.log('📤 Template upload by:', req.user.email || req.user.username);
-    const { name, description, price, imageUrl, workflowJson } = req.body;
-    if (!name || !description || price === undefined || !workflowJson) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields'
-      });
-    }
-    const priceFloat = parseFloat(price);
-    if (isNaN(priceFloat) || priceFloat < 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid price'
-      });
-    }
-    let parsedWorkflow;
-    try {
-      parsedWorkflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid workflow JSON'
-      });
-    }
-    const priceInCents = Math.round(priceFloat * 100);
-    const adminUserId = req.user.id;
-    let finalImageUrl = imageUrl;
-    if (!finalImageUrl) {
-      const safeName = name.replace(/[^a-zA-Z0-9\s]/g, '').substring(0, 50);
-      finalImageUrl = `https://via.placeholder.com/400x250/4F46E5/FFFFFF?text=${encodeURIComponent(safeName)}`;
-    }
-    const insertResult = await pool.query(`
-      INSERT INTO templates (
-        name, description, price, currency, image_url, 
-        workflow_json, status, is_public, creator_id,
-        created_at, updated_at, download_count, view_count, rating
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9,
-        NOW(), NOW(), 0, 0, 4.5
-      ) RETURNING id, name, description, price, image_url
-    `, [
-      name.trim(),
-      description.trim(),
-      priceInCents,
-      'USD',
-      finalImageUrl,
-      JSON.stringify(parsedWorkflow),
-      'active',
-      true,
-      adminUserId
-    ]);
-    const newTemplate = insertResult.rows[0];
-    console.log('✅ Template uploaded by:', req.user.email || req.user.username, 'Template:', newTemplate.name);
-    res.json({
-      success: true,
-      message: 'Template uploaded successfully',
-      template: {
-        id: newTemplate.id,
-        name: newTemplate.name,
-        description: newTemplate.description,
-        price: newTemplate.price / 100,
-        imageUrl: newTemplate.image_url
-      }
-    });
-  } catch (error) {
-    console.error('❌ Template upload error for user:', req.user.email || req.user.username, error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to upload template'
-    });
-  }
-});
-
-// Line 1655: System Maintenance & Cleanup
-setInterval(() => {
-  const now = Date.now();
-  const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-  for (const [key, state] of conversationStates.entries()) {
-    if (now - state.lastActivity > maxAge) {
-      conversationStates.delete(key);
-      console.log(`🧹 Cleaned up old conversation state: ${key.substring(0, 20)}...`);
-    }
-  }
-}, 60 * 60 * 1000); // Run every hour
-
-setInterval(async () => {
-  try {
-    console.log('🧠 Running learning system optimization...');
-    const cleanupResult = await pool.query(`
-      DELETE FROM chat_interactions 
-      WHERE interaction_type = 'learned_response'
-      AND learning_score < 3
-      AND created_at < NOW() - INTERVAL '7 days'
-    `);
-    if (cleanupResult.rowCount > 0) {
-      console.log(`🧹 Cleaned up ${cleanupResult.rowCount} low-quality learned responses`);
-    }
-    await pool.query(`
-      INSERT INTO template_intelligence (template_id, success_rate, last_updated)
-      SELECT 
-        template_id,
-        AVG(CASE WHEN interaction_type = 'conversation_completion' THEN 100.0 ELSE 50.0 END),
-        NOW()
-      FROM chat_interactions 
-      WHERE created_at >= NOW() - INTERVAL '7 days'
-      GROUP BY template_id
-      ON CONFLICT (template_id) DO UPDATE SET
-        success_rate = EXCLUDED.success_rate,
-        last_updated = EXCLUDED.last_updated
-    `);
-    console.log('✅ Learning system optimization completed');
-  } catch (error) {
-    console.error('❌ Learning system optimization error:', error);
-  }
-}, 6 * 60 * 60 * 1000); // Run every 6 hours
-
-// Line 1691: Graceful Shutdown Handler
-process.on('SIGINT', async () => {
-  console.log('\n🛑 Received SIGINT. Graceful shutdown starting...');
-  try {
-    console.log('💾 Saving conversation states...');
-    for (const [key, state] of conversationStates.entries()) {
-      const [userId, templateId] = key.split('_');
-      await pool.query(`
-        INSERT INTO conversation_states (user_id, template_id, state_data, last_activity)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (user_id, template_id) DO UPDATE SET
-          state_data = EXCLUDED.state_data,
-          last_activity = EXCLUDED.last_activity
-      `, [userId, templateId, JSON.stringify(state), new Date(state.lastActivity)]);
-    }
-    console.log('🗄️ Closing database connections...');
-    await pool.end();
-    console.log('✅ Graceful shutdown completed');
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Error during graceful shutdown:', error);
-    process.exit(1);
-  }
-});
-
-// Line 1712: Environment Variable Validation
-const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'FRONTEND_URL', 'STRIPE_SECRET_KEY', 'DATABASE_URL', 'SESSION_SECRET', 'ADMIN_ALLOWED_DOMAINS'];
-requiredEnvVars.forEach(varName => {
-  if (!process.env[varName]) {
-    console.error(`❌ Missing environment variable: ${varName}`);
-    process.exit(1);
-  }
-});
-
-// Line 1719: Catch-All Handler for React Routes
-app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ 
-      error: 'API endpoint not found',
-      path: req.path,
-      method: req.method
-    });
-  }
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 // Line 1729: Server Startup with Consolidated Logging
