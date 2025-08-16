@@ -29,6 +29,9 @@ export const AuthSuccess = () => {
             // Use complete user data from API
             login("session", data.user);
 
+            // Show success message
+            toast.success("Login successful! Welcome to DevHub Connect");
+
             // Redirect to dashboard where user can see their purchases
             navigate('/dashboard');
           } else {
@@ -39,6 +42,11 @@ export const AuthSuccess = () => {
               email: userEmail
             };
             login("session", user);
+            
+            // Show success message
+            toast.success("Login successful! Welcome to DevHub Connect");
+            
+            // Redirect to dashboard
             navigate('/dashboard');
           }
         } catch (error) {
@@ -50,15 +58,24 @@ export const AuthSuccess = () => {
             email: userEmail
           };
           login("session", user);
+          
+          // Show success message
+          toast.success("Login successful! Welcome to DevHub Connect");
+          
+          // Redirect to dashboard
           navigate('/dashboard');
         }
       } else {
-        toast.error("Login failed");
+        console.error('Auth success failed - missing parameters:', { success, userId, userEmail });
+        toast.error("Login failed - missing authentication data");
         navigate('/login');
       }
     };
 
-    handleAuthSuccess();
+    // Add a small delay to ensure the component mounts properly
+    const timer = setTimeout(handleAuthSuccess, 100);
+    
+    return () => clearTimeout(timer);
   }, [searchParams, login, navigate]);
 
   return (
@@ -66,6 +83,7 @@ export const AuthSuccess = () => {
       <div className="text-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
         <p className="mt-4 text-gray-600">Completing login...</p>
+        <p className="mt-2 text-sm text-gray-500">Redirecting to dashboard...</p>
       </div>
     </div>
   );
