@@ -541,7 +541,7 @@ app.post('/api/admin/set-admin-role', requireGitHubAdmin, async (req, res) => {
   }
 });
 
-// Line 505: Catch-All Handler for React Routes
+// Catch-All Handler for React Routes (BEFORE SERVER STARTUP)
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ 
@@ -551,22 +551,6 @@ app.get('*', (req, res) => {
     });
   }
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-// Line 515: Server Startup
-const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`✅ Server running on 0.0.0.0:${port}`);
-  console.log(`🌐 Frontend URL: ${frontendUrl}`);
-  console.log(`🔐 GitHub OAuth: ${!!process.env.GITHUB_CLIENT_ID}`);
-  console.log(`💳 Stripe: ${!!process.env.STRIPE_SECRET_KEY}`);
-});
-
-server.on('error', (error) => {
-  console.error('🚨 Server error:', error);
-  if (error.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${port} is already in use.`);
-    process.exit(1);
-  }
 });
 
 // Line 501: AI Learning System Functions
