@@ -3,7 +3,7 @@
 
 const isDevelopment = import.meta.env.DEV;
 const productionBaseUrl = 'https://devhubconnect-production.up.railway.app';
-const developmentBaseUrl = 'https://devhubconnect-production.up.railway.app';
+const developmentBaseUrl = 'http://localhost:3000';
 
 // Use environment variable if available, otherwise fallback to environment detection
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 
