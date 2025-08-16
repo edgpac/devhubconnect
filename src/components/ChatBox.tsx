@@ -133,7 +133,7 @@ export default function ChatBox() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   /**
    * Handles the key down event for Enter key
@@ -141,7 +141,7 @@ export default function ChatBox() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') sendMessage();
   };
-
+  
   /**
    * Reset chat and template
    */

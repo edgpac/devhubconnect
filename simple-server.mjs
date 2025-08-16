@@ -176,15 +176,11 @@ app.get('/api/auth/github/callback', passport.authenticate('github', { failureRe
     
     console.log(`✅ GitHub OAuth successful for user: ${req.user.username} ${req.user.email} (${userRole})`);
     
-    // Redirect admin users to admin dashboard
-    if (userRole === 'admin') {
-      res.redirect('/admin/dashboard');
-    } else {
-      res.redirect(frontendUrl);
-    }
+    // ✅ Send ALL users to main dashboard
+    res.redirect(frontendUrl + '/dashboard');
   } catch (error) {
     console.error('❌ GitHub OAuth error:', error);
-    res.redirect(frontendUrl);
+    res.redirect(frontendUrl + '/dashboard');
   }
 });
 
