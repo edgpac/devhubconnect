@@ -180,7 +180,7 @@ passport.use(new GitHubStrategy({
     const fullUserResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
     const user = fullUserResult.rows[0];
     
-    console.log("✅ GitHub OAuth successful for user:", user.name, user.email);
+    console.log('✅ GitHub OAuth successful for user:', user.name, user.email);
     return done(null, user);
     
   } catch (error) {
@@ -218,10 +218,8 @@ function convertFieldNames(template) {
     updatedAt: template.updated_at,
     downloadCount: template.download_count,
     viewCount: template.view_count,
-    rating: template.rating,
-    ratingCount: template.rating_count,
-    stripePriceId: template.stripe_price_id
-  };
+    rating: template.rating || 4.5,
+    ratingCount: template.rating_count || 0,  };
 }
 
 function parseWorkflowDetails(workflowJson) {
@@ -406,7 +404,7 @@ app.get('/api/templates/:id/download', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${template.name.replace(/[^a-zA-Z0-9]/g, '_')}.json"`);
     res.send(JSON.stringify(template.workflow_json, null, 2));
     
-    console.log("✅ GitHub OAuth successful for user:", user.name);
+    console.log('✅ Template downloaded:', template.name, 'by user:', req.user.name);
     
   } catch (error) {
     console.error('Download error:', error);
@@ -477,7 +475,7 @@ app.post('/api/recommendations/preferences', async (req, res) => {
     const { preferences } = req.body;
     const { businessType, teamSize, industry, maxPrice, preferredCategories, workflows, integrations } = preferences;
 
-    console.log("✅ GitHub OAuth successful for user:", user.name, preferences);
+    console.log('💾 Saving user preferences for:', req.user.name, preferences);
 
     // Store preferences in user table or create a preferences table
     await pool.query(`
@@ -836,8 +834,6 @@ app.post('/api/admin/upload-template', requireAdminAuth, async (req, res) => {
     
     parsedWorkflow = JSON.parse(workflowString);
     
-    // Add your workflow processing logic here
-    // For example:
     // const template = await saveTemplate({ name, description, price, imageUrl, workflow: parsedWorkflow });
     
     return res.status(200).json({
@@ -856,76 +852,6 @@ app.post('/api/admin/upload-template', requireAdminAuth, async (req, res) => {
       if (!parsedWorkflow.nodes || !Array.isArray(parsedWorkflow.nodes)) {
         throw new Error('Invalid workflow: missing nodes array');
       }
-      function convertFieldNames(template) {
-  return {
-    id: template.id,
-    name: template.name,
-    description: template.description,
-    price: template.price,
-    currency: template.currency,
-    imageUrl: template.image_url,
-    workflowJson: template.workflow_json,
-    status: template.status,
-    isPublic: template.is_public,
-    creatorId: template.creator_id,
-    createdAt: template.created_at,
-    updatedAt: template.updated_at,
-    downloadCount: template.download_count,
-    viewCount: template.view_count,
-    rating: template.rating,
-    ratingCount: template.rating_count,
-    stripePriceId: template.stripe_price_id
-  };
-}
-
-function parseWorkflowDetails(workflowJson) {
-  try {
-    if (!workflowJson) return { steps: 0, apps: [], hasWorkflow: false };
-    
-    const workflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
-    const steps = workflow.nodes ? workflow.nodes.length : 0;
-    const apps = workflow.nodes ? 
-      [...new Set(workflow.nodes
-        .map(node => {
-          let type = node.type || 'Unknown';
-          if (type.startsWith('n8n-nodes-base.')) {
-            type = type.replace('n8n-nodes-base.', '');
-          }
-          return type;
-        })
-        .filter(type => type !== 'Unknown' && type !== 'Set' && type !== 'NoOp')
-      )] : [];
-    
-    return { steps, apps: apps.slice(0, 10), hasWorkflow: true };
-  } catch (error) {
-    console.error('Error parsing workflow:', error);
-    return { steps: 0, apps: [], hasWorkflow: false };
-  }
-}
-
-// NOW express.json() comes AFTER the webhook endpoint
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'dist')));
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-// GitHub OAuth routes
-app.get('/api/auth/github', passport.authenticate('github', { scope: ['user:email'] }));
-
-app.get('/api/auth/github/callback', 
-  passport.authenticate('github', { failureRedirect: '/auth' }),
-  (req, res) => {
-    // Successful authentication, redirect to frontend
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
-  }
-);
-
-app.get('/api/auth/user', (req, res) => {
-  if (req.user) {
-    res.json({ user: req.user });
   } else {
     res.status(401).json({ error: 'Not authenticated' });
   }
@@ -1060,7 +986,7 @@ app.get('/api/templates/:id/download', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${template.name.replace(/[^a-zA-Z0-9]/g, '_')}.json"`);
     res.send(JSON.stringify(template.workflow_json, null, 2));
     
-    console.log("✅ GitHub OAuth successful for user:", user.name);
+    console.log('✅ Template downloaded:', template.name, 'by user:', req.user.name);
     
   } catch (error) {
     console.error('Download error:', error);
@@ -1131,7 +1057,7 @@ app.post('/api/recommendations/preferences', async (req, res) => {
     const { preferences } = req.body;
     const { businessType, teamSize, industry, maxPrice, preferredCategories, workflows, integrations } = preferences;
 
-    console.log("✅ GitHub OAuth successful for user:", user.name, preferences);
+    console.log('💾 Saving user preferences for:', req.user.name, preferences);
 
     // Store preferences in user table or create a preferences table
     await pool.query(`
@@ -1738,8 +1664,7 @@ app.get('/api/admin/templates', requireAdminAuth, async (req, res) => {
       updatedAt: template.updated_at,
       downloadCount: template.download_count || 0,
       viewCount: template.view_count || 0,
-      rating: template.rating || 4.5
-    }));
+    rating: template.rating || 4.5,    }));
     
     res.json({
       success: true,
@@ -2111,8 +2036,7 @@ app.get('/api/admin/templates', requireAdminAuth, async (req, res) => {
       updatedAt: template.updated_at,
       downloadCount: template.download_count || 0,
       viewCount: template.view_count || 0,
-      rating: template.rating || 4.5
-    }));
+    rating: template.rating || 4.5,    }));
     
     res.json({
       success: true,
@@ -2202,7 +2126,7 @@ app.post('/api/admin/set-admin-role', requireAdminAuth, async (req, res) => {
         id: user.id,
         email: user.email,
         role: user.role,
-        username: user.username
+        username: user.name
       }
     });
     
@@ -2247,7 +2171,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       return res.status(400).json({ error: 'Invalid template ID provided for checkout' });
     }
     
-    console.log("✅ GitHub OAuth successful for user:", user.name, 'template:', templateId);
+    console.log('🛒 Creating authenticated checkout for user:', req.user.email || req.user.name, 'template:', templateId);
     
     // Handle both string and numeric IDs
     let dbTemplateId = templateId;
@@ -2280,7 +2204,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       });
     }
     
-    console.log("✅ GitHub OAuth successful for user:", user.name);
+    console.log('✅ Creating checkout for authenticated user:', req.user.email || req.user.name);
     console.log('✅ Template:', template.name, 'Price:', template.price);
     
     // 🔒 SECURE: Include user information in Stripe metadata for linking
@@ -2334,7 +2258,7 @@ app.get('/api/purchases', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    console.log("✅ GitHub OAuth successful for user:", user.name);
+    console.log('📋 Fetching purchases for user:', req.user.email || req.user.name);
 
     // ✅ ENHANCED: Try to find purchases by multiple methods
     let purchases = [];
@@ -2473,7 +2397,7 @@ app.get('/api/user/purchases', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    console.log("✅ GitHub OAuth successful for user:", user.name);
+    console.log('📋 Fetching purchases for user:', req.user.email || req.user.name);
 
     // ✅ ENHANCED: Try to find purchases by multiple methods
     let purchases = [];
@@ -2949,7 +2873,7 @@ app.get('/api/user/profile', async (req, res) => {
     const profileResult = await pool.query(`
       SELECT 
         u.id,
-        u.username,
+        u.name,
         u.email,
         u.github_id,
         u.avatar_url,
@@ -4373,7 +4297,7 @@ app.get('/api/templates/:id/ratings', async (req, res) => {
         r.review,
         r.created_at,
         r.updated_at,
-        u.username,
+        u.name,
         u.avatar_url
       FROM template_ratings r
       JOIN users u ON r.user_id = u.id
@@ -4404,7 +4328,7 @@ app.get('/api/templates/:id/ratings', async (req, res) => {
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         user: {
-          username: row.username,
+          username: row.name,
           avatarUrl: row.avatar_url
         }
       })),
