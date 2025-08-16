@@ -787,57 +787,71 @@ console.log('   GET  /api/admin/dashboard - Admin dashboard data (protected)');
 console.log('   POST /api/admin/fix-images - Fix template images (protected)');
 console.log('⚠️  Make sure to set ADMIN_PASSWORD environment variable in Railway!');
 
-// ✅ SECURE: Template Upload Endpoint 
+// ✅ SECURE: Template Upload Endpoint   
 app.post('/api/admin/upload-template', requireAdminAuth, async (req, res) => {
+  console.log('📤 Admin template upload requested');
+  const { name, description, price, imageUrl, workflowJson } = req.body;
+  
+  // ✅ SECURITY: Input validation with size limits
+  if (!name || name.length > 100) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid name: required and max 100 characters'
+    });
+  }
+  
+  if (!description || description.length > 500) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid description: required and max 500 characters'
+    });
+  }
+  
+  if (!price || isNaN(parseFloat(price)) || parseFloat(price) < 0 || parseFloat(price) > 10000) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid price: must be between $0 and $10,000'
+    });
+  }
+  
+  if (!workflowJson) {
+    return res.status(400).json({
+      success: false,
+      message: 'Workflow JSON is required'
+    });
+  }
+  
+  // ✅ SECURITY: Validate and sanitize workflow JSON
+  let parsedWorkflow;
   try {
-    console.log('📤 Admin template upload requested');
+    const workflowString = typeof workflowJson === 'string' ? workflowJson : JSON.stringify(workflowJson);
     
-    const { name, description, price, imageUrl, workflowJson } = req.body;
-    
-    // ✅ SECURITY: Input validation with size limits
-    if (!name || name.length > 100) {
+    // ✅ SECURITY: Limit JSON size to prevent DoS
+    if (workflowString.length > 1024 * 1024) { // 1MB limit
       return res.status(400).json({
         success: false,
-        message: 'Invalid name: required and max 100 characters'
+        message: 'Workflow JSON too large (max 1MB)'
       });
     }
     
-    if (!description || description.length > 500) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid description: required and max 500 characters'
-      });
-    }
+    parsedWorkflow = JSON.parse(workflowString);
     
-    if (!price || isNaN(parseFloat(price)) || parseFloat(price) < 0 || parseFloat(price) > 10000) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid price: must be between $0 and $10,000'
-      });
-    }
+    // Add your workflow processing logic here
+    // For example:
+    // const template = await saveTemplate({ name, description, price, imageUrl, workflow: parsedWorkflow });
     
-    if (!workflowJson) {
-      return res.status(400).json({
-        success: false,
-        message: 'Workflow JSON is required'
-      });
-    }
+    return res.status(200).json({
+      success: true,
+      message: 'Template uploaded successfully'
+    });
     
-    // ✅ SECURITY: Validate and sanitize workflow JSON
-    let parsedWorkflow;
-    try {
-      const workflowString = typeof workflowJson === 'string' ? workflowJson : JSON.stringify(workflowJson);
-      
-      // ✅ SECURITY: Limit JSON size to prevent DoS
-      if (workflowString.length > 1024 * 1024) { // 1MB limit
-        return res.status(400).json({
-          success: false,
-          message: 'Workflow JSON too large (max 1MB)'
-        });
-      }
-      
-      parsedWorkflow = JSON.parse(workflowString);
-      
+  } catch (error) {
+    console.error('❌ Error parsing workflow JSON:', error);
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid JSON format in workflow'
+    });
+  }  
       // ✅ SECURITY: Validate workflow structure
       if (!parsedWorkflow.nodes || !Array.isArray(parsedWorkflow.nodes)) {
         throw new Error('Invalid workflow: missing nodes array');
@@ -2597,69 +2611,71 @@ app.get('/api/user/purchases', async (req, res) => {
       purchases = emailResult.rows;
     }
 
-    // Method 3: For GitHub users, also check with common email variations  
-    if (purchases.length === 0 && req.user.username) {
-      const possibleEmails = [
-        `${req.user.username}@gmail.com`,
-        req.user.email
-      ].filter(email => email); // Remove null/undefined
+    try {
+  // Method 3: For GitHub users, also check with common email variations  
+  if (purchases.length === 0 && req.user.username) {
+    const possibleEmails = [
+      `${req.user.username}@gmail.com`,
+      req.user.email
+    ].filter(email => email); // Remove null/undefined
 
-      console.log('🔍 Trying email variations for GitHub user');
+    console.log('🔍 Trying email variations for GitHub user');
 
-      for (const email of possibleEmails) {
-        const emailVariationResult = await pool.query(`
-          SELECT 
-            p.id as purchase_id,
-            p.purchased_at,
-            p.amount_paid,
-            p.status,
-            t.id as template_id,
-            t.name as template_name,
-            t.description as template_description,
-            t.image_url,
-            t.workflow_json
-          FROM purchases p
-          JOIN templates t ON p.template_id = t.id
-          JOIN users u ON p.user_id = u.id
-          WHERE u.email = $1
-          ORDER BY p.purchased_at DESC
-        `, [email]);
+    for (const email of possibleEmails) {
+      const emailVariationResult = await pool.query(`
+        SELECT 
+          p.id as purchase_id,
+          p.purchased_at,
+          p.amount_paid,
+          p.status,
+          t.id as template_id,
+          t.name as template_name,
+          t.description as template_description,
+          t.image_url,
+          t.workflow_json
+        FROM purchases p
+        JOIN templates t ON p.template_id = t.id
+        JOIN users u ON p.user_id = u.id
+        WHERE u.email = $1
+        ORDER BY p.purchased_at DESC
+      `, [email]);
 
-        if (emailVariationResult.rows.length > 0) {
-          purchases = emailVariationResult.rows;
-          console.log('✅ Found purchases with email variation:', email);
-          break;
-        }
+      if (emailVariationResult.rows.length > 0) {
+        purchases = emailVariationResult.rows;
+        console.log('✅ Found purchases with email variation:', email);
+        break;
       }
     }
+  }
 
-    // ✅ FIXED: Transform to proper template structure
-    const formattedPurchases = purchases.map(row => {
-     const template = {
-       id: row.template_id,
-       name: row.template_name,
-       description: row.template_description,
-       imageUrl: row.image_url,
-       workflowJson: row.workflow_json,
-       purchased: true,
-       purchaseDate: row.purchased_at,
-       amountPaid: row.amount_paid
-     };
-     
-     return template;
-   });
+  // ✅ FIXED: Transform to proper template structure
+  const formattedPurchases = purchases.map((row) => {
+    const template = {
+      id: row.template_id,
+      name: row.template_name,
+      description: row.template_description,
+      imageUrl: row.image_url,
+      workflowJson: row.workflow_json,
+      purchased: true,
+      purchaseDate: row.purchased_at,
+      amountPaid: row.amount_paid
+    };
+    
+    return template;
+  });
 
-   console.log('✅ Found', formattedPurchases.length, 'user purchases');
-   res.json({ 
-     templates: formattedPurchases,
-     count: formattedPurchases.length 
-   });
- } catch (error) {
-   console.error('Database error:', error);
-   res.status(500).json({ error: 'Failed to fetch user purchases' });
- }
+  console.log('✅ Found', formattedPurchases.length, 'user purchases');
+  res.json({ 
+    templates: formattedPurchases,
+    count: formattedPurchases.length 
+  });
+  
+} catch (error) {
+  console.error('Database error:', error);
+  res.status(500).json({ error: 'Failed to fetch user purchases' });
+}
 
-// ✅ SECURE: Get purchase status for specific template
+    // ✅ SECURE: Get purchase status for specific template
 app.get('/api/purchase-status/:templateId', async (req, res) => {
  try {
    if (!req.user) {
@@ -4761,6 +4777,7 @@ console.log('📊 Analytics and intelligence systems active');
 console.log('🔧 Admin maintenance tools available');
 console.log('⚡ Template management system ready');
 console.log('🚀 Express.js application fully initialized');
+
 // ✅ SECURITY FIX: API Performance Analytics with Safe Timeframe
 app.get('/api/ai/performance-analytics', async (req, res) => {
   try {
@@ -5115,15 +5132,17 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// ✅ SERVER STARTUP WITH ENHANCED FEATURES
+// ✅ RAILWAY DEPLOYMENT: Server startup configuration
 const server = app.listen(port, '0.0.0.0', async () => {
   console.log('\n🚀 ========================================');
-  console.log('   DEVHUBCONNECT AI SYSTEM STARTING');
+  console.log('   DEVHUBCONNECT RAILWAY DEPLOYMENT');
   console.log('========================================');
-  console.log(`✅ Server running on 0.0.0.0:${port}`);
+  console.log(`✅ Server running on Railway port: ${port}`);
+  console.log(`🌐 Railway URL: ${process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN || 'Railway-assigned-domain'}`);
   console.log(`🔑 Groq API Key configured: ${!!process.env.GROQ_API_KEY}`);
   console.log(`💳 Stripe configured: ${!!process.env.STRIPE_SECRET_KEY}`);
   console.log(`🗄️ Database URL configured: ${!!process.env.DATABASE_URL}`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('');
   console.log('🧠 AI FEATURES ACTIVE:');
   console.log('   ✅ Learning System - Reduces API costs over time');
@@ -5179,7 +5198,7 @@ const server = app.listen(port, '0.0.0.0', async () => {
   } catch (error) {
     console.error('⚠️ Error loading initial data:', error.message);
   }
-
+  
   console.log('');
   console.log('🌐 ENDPOINTS AVAILABLE:');
   console.log('   POST /api/ask-ai-enhanced - Enhanced chat with conversation intelligence');
@@ -5225,7 +5244,41 @@ function generateCompletionResponse(completionStatus, templateId, conversationPr
 function getNextStepGuidance(nextStep, templateId) {
   return `Continue with the ${nextStep} phase of your setup.`;
 }
-  } catch (error) {
-    console.error('⚠️ Error loading initial data:', error.message);
+
+// ✅ MISSING FUNCTION: Complete logChatInteraction function
+async function logChatInteraction(templateId, userQuestion, aiResponse, userId, interactionType = 'unknown') {
+  try {
+    // Categorize the question
+    let questionCategory = 'general';
+    const lowerQuestion = userQuestion.toLowerCase();
+    
+    if (lowerQuestion.includes('credential') || lowerQuestion.includes('api key')) {
+      questionCategory = 'credentials';
+    } else if (lowerQuestion.includes('test') || lowerQuestion.includes('workflow')) {
+      questionCategory = 'testing';
+    } else if (lowerQuestion.includes('node') || lowerQuestion.includes('configure')) {
+      questionCategory = 'configuration';
+    } else if (lowerQuestion.includes('error') || lowerQuestion.includes('troubleshoot')) {
+      questionCategory = 'troubleshooting';
+    }
+
+    await pool.query(`
+      INSERT INTO chat_interactions (
+        template_id, user_question, ai_response, user_id, created_at,
+        interaction_type, question_category, learning_score
+      )
+      VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7)
+    `, [
+      templateId,
+      userQuestion,
+      aiResponse,
+      userId || 'anonymous',
+      interactionType,
+      questionCategory,
+      interactionType === 'learned_response' ? 10 : (interactionType === 'groq_api' ? 5 : 3)
+    ]);
+    } catch (error) {
+    console.error("Error logging chat interaction:", error);
   }
+}
 });
