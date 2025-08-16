@@ -7,6 +7,8 @@ import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GitHubStrategy } from 'passport-github2';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
