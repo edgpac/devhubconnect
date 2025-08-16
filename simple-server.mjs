@@ -180,7 +180,7 @@ passport.use(new GitHubStrategy({
     const fullUserResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
     const user = fullUserResult.rows[0];
     
-    console.log('✅ GitHub OAuth successful for user:', user.username, user.email);
+    console.log("✅ GitHub OAuth successful for user:", user.name, user.email);
     return done(null, user);
     
   } catch (error) {
@@ -406,7 +406,7 @@ app.get('/api/templates/:id/download', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${template.name.replace(/[^a-zA-Z0-9]/g, '_')}.json"`);
     res.send(JSON.stringify(template.workflow_json, null, 2));
     
-    console.log('✅ Template downloaded:', template.name, 'by user:', req.user.username);
+    console.log("✅ GitHub OAuth successful for user:", user.name);
     
   } catch (error) {
     console.error('Download error:', error);
@@ -477,7 +477,7 @@ app.post('/api/recommendations/preferences', async (req, res) => {
     const { preferences } = req.body;
     const { businessType, teamSize, industry, maxPrice, preferredCategories, workflows, integrations } = preferences;
 
-    console.log('💾 Saving user preferences for:', req.user.username, preferences);
+    console.log("✅ GitHub OAuth successful for user:", user.name, preferences);
 
     // Store preferences in user table or create a preferences table
     await pool.query(`
@@ -1060,7 +1060,7 @@ app.get('/api/templates/:id/download', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${template.name.replace(/[^a-zA-Z0-9]/g, '_')}.json"`);
     res.send(JSON.stringify(template.workflow_json, null, 2));
     
-    console.log('✅ Template downloaded:', template.name, 'by user:', req.user.username);
+    console.log("✅ GitHub OAuth successful for user:", user.name);
     
   } catch (error) {
     console.error('Download error:', error);
@@ -1131,7 +1131,7 @@ app.post('/api/recommendations/preferences', async (req, res) => {
     const { preferences } = req.body;
     const { businessType, teamSize, industry, maxPrice, preferredCategories, workflows, integrations } = preferences;
 
-    console.log('💾 Saving user preferences for:', req.user.username, preferences);
+    console.log("✅ GitHub OAuth successful for user:", user.name, preferences);
 
     // Store preferences in user table or create a preferences table
     await pool.query(`
@@ -2247,7 +2247,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       return res.status(400).json({ error: 'Invalid template ID provided for checkout' });
     }
     
-    console.log('🛒 Creating authenticated checkout for user:', req.user.email || req.user.username, 'template:', templateId);
+    console.log("✅ GitHub OAuth successful for user:", user.name, 'template:', templateId);
     
     // Handle both string and numeric IDs
     let dbTemplateId = templateId;
@@ -2280,7 +2280,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       });
     }
     
-    console.log('✅ Creating checkout for authenticated user:', req.user.email || req.user.username);
+    console.log("✅ GitHub OAuth successful for user:", user.name);
     console.log('✅ Template:', template.name, 'Price:', template.price);
     
     // 🔒 SECURE: Include user information in Stripe metadata for linking
@@ -2304,7 +2304,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
         templateId: templateId.toString(),
         userId: req.user.id,                    // 🔒 CRITICAL: Link to authenticated user
         userEmail: req.user.email || '',       // 🔒 BACKUP: Email for verification
-        userName: req.user.username || ''      // 🔒 BACKUP: Username for verification
+        userName: req.user.name || ''      // 🔒 BACKUP: Username for verification
       },
       customer_email: req.user.email,          // 🔒 PREFILL: User's email
     });
@@ -2334,7 +2334,7 @@ app.get('/api/purchases', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    console.log('📋 Fetching purchases for user:', req.user.email || req.user.username);
+    console.log("✅ GitHub OAuth successful for user:", user.name);
 
     // ✅ ENHANCED: Try to find purchases by multiple methods
     let purchases = [];
@@ -2395,10 +2395,10 @@ app.get('/api/purchases', async (req, res) => {
     }
 
     // Method 3: For GitHub users, also check with common email variations
-    if (purchases.length === 0 && req.user.username) {
+    if (purchases.length === 0 && req.user.name) {
       const possibleEmails = [
-        `${req.user.username}@gmail.com`,
-        `${req.user.username}shopify@gmail.com`, // Based on your pattern
+        `${req.user.name}@gmail.com`,
+        `${req.user.name}shopify@gmail.com`, // Based on your pattern
         req.user.email
       ].filter(email => email); // Remove null/undefined
 
@@ -2473,7 +2473,7 @@ app.get('/api/user/purchases', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    console.log('📋 Fetching purchases for user:', req.user.email || req.user.username);
+    console.log("✅ GitHub OAuth successful for user:", user.name);
 
     // ✅ ENHANCED: Try to find purchases by multiple methods
     let purchases = [];
@@ -2524,9 +2524,9 @@ app.get('/api/user/purchases', async (req, res) => {
     }
 
     // Method 3: For GitHub users, also check with common email variations  
-    if (purchases.length === 0 && req.user.username) {
+    if (purchases.length === 0 && req.user.name) {
       const possibleEmails = [
-        `${req.user.username}@gmail.com`,
+        `${req.user.name}@gmail.com`,
         req.user.email
       ].filter(email => email); // Remove null/undefined
 
@@ -2613,9 +2613,9 @@ app.get('/api/user/purchases', async (req, res) => {
 
     try {
   // Method 3: For GitHub users, also check with common email variations  
-  if (purchases.length === 0 && req.user.username) {
+  if (purchases.length === 0 && req.user.name) {
     const possibleEmails = [
-      `${req.user.username}@gmail.com`,
+      `${req.user.name}@gmail.com`,
       req.user.email
     ].filter(email => email); // Remove null/undefined
 
