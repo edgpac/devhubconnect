@@ -580,114 +580,6 @@ app.post('/api/admin/fix-images', requireAdminAuth, async (req, res) => {
   }
 });
 
-// ✅ CLEAN ADMIN SESSION MANAGEMENT
-function requireAdminAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-    
-    if (!token || !token.startsWith('admin-')) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Admin authentication required' 
-      });
-    }
-    
-    // Validate token format and age
-    const tokenParts = token.split('-');
-    if (tokenParts.length !== 3) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid admin token format' 
-      });
-    }
-    
-    const timestamp = parseInt(tokenParts[1]);
-    if (isNaN(timestamp)) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid admin token' 
-      });
-    }
-    
-    const now = Date.now();
-    const maxAge = 8 * 60 * 60 * 1000; // 8 hours
-    
-    if (now - timestamp > maxAge) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Admin session expired. Please login again.' 
-      });
-    }
-    
-    req.adminUser = { role: 'admin', token, loginTime: new Date(timestamp) };
-    next();
-  } catch (error) {
-    console.error('Admin auth error:', error);
-    res.status(401).json({ 
-      success: false, 
-      message: 'Invalid admin token' 
-    });
-  }
-}
-
-// ✅ SECURE: Admin login endpoint (NO AUTH REQUIRED - this is the login!)
-app.post('/api/admin/login', async (req, res) => {
-  try {
-    const { password } = req.body;
-    
-    // ✅ SECURE: Only use environment variable
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    
-    console.log('🔐 Admin login attempt received');
-    
-    // Check if admin password is configured
-    if (!adminPassword) {
-      console.error('❌ ADMIN_PASSWORD environment variable not set');
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Admin authentication not configured. Contact system administrator.' 
-      });
-    }
-    
-    if (!password) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Password is required' 
-      });
-    }
-    
-    if (password === adminPassword) {
-      // Generate secure admin session token
-      const token = `admin-${Date.now()}-${crypto.randomBytes(16).toString('hex')}`;
-      
-      console.log('✅ Admin login successful');
-      
-      res.json({ 
-        success: true, 
-        token: token,
-        message: 'Admin login successful',
-        adminUser: {
-          role: 'admin',
-          loginTime: new Date().toISOString()
-        }
-      });
-    } else {
-      console.log('❌ Invalid admin password provided');
-      res.status(401).json({ 
-        success: false, 
-        message: 'Invalid admin password' 
-      });
-    }
-  } catch (error) {
-    console.error('❌ Admin login error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Login failed due to server error'
-    });
-  }
-});
-
 // ✅ SECURE: Protected admin dashboard endpoint
 app.get('/api/admin/dashboard', requireAdminAuth, async (req, res) => {
   try {
@@ -2928,396 +2820,440 @@ process.on('SIGINT', async () => {
     process.exit(1);
   }
 });
-// ✅ ADMIN WEB INTERFACE ROUTE (ADD THIS RIGHT BEFORE THE CATCH-ALL ROUTE)
-app.get('/admin', (req, res) => {
-  const adminHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevHubConnect Admin Panel</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        .header {
-            background: #2d3748;
-            color: white;
-            padding: 20px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .login-section, .admin-panel { padding: 30px; }
-        .login-section { text-align: center; max-width: 400px; margin: 0 auto; }
-        .form-group { margin-bottom: 20px; text-align: left; }
-        label { display: block; margin-bottom: 8px; font-weight: 600; color: #2d3748; }
-        input[type="password"], input[type="text"], input[type="number"] {
-            width: 100%;
-            padding: 12px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-        input:focus { outline: none; border-color: #667eea; }
-        .btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin: 5px;
-        }
-        .btn:hover { background: #5a67d8; transform: translateY(-2px); }
-        .btn-secondary { background: #718096; }
-        .btn-secondary:hover { background: #4a5568; }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .stat-card {
-            background: #f7fafc;
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
-        }
-        .stat-value { font-size: 24px; font-weight: bold; color: #2d3748; }
-        .stat-label { color: #718096; margin-top: 5px; }
-        .section {
-            margin-bottom: 30px;
-            padding: 20px;
-            background: #f7fafc;
-            border-radius: 8px;
-        }
-        .section h3 { margin-bottom: 15px; color: #2d3748; }
-        .data-display {
-            background: #1a202c;
-            color: #e2e8f0;
-            padding: 15px;
-            border-radius: 6px;
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 12px;
-            overflow-x: auto;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        .hidden { display: none; }
-        .error {
-            color: #e53e3e;
-            background: #fed7d7;
-            padding: 10px;
-            border-radius: 6px;
-            margin: 10px 0;
-        }
-        .success {
-            color: #38a169;
-            background: #c6f6d5;
-            padding: 10px;
-            border-radius: 6px;
-            margin: 10px 0;
-        }
-        .loading { text-align: center; padding: 20px; color: #718096; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🚀 DevHubConnect Admin Panel</h1>
-            <div id="admin-info" class="hidden">
-                <span id="admin-user"></span>
-                <button class="btn btn-secondary" onclick="logout()">Logout</button>
-            </div>
-        </div>
-        
-        <!-- Login Section -->
-        <div id="login-section" class="login-section">
-            <h2>Admin Login</h2>
-            <p style="margin-bottom: 20px; color: #718096;">Password: admin19456</p>
-            
-            <div class="form-group">
-                <label for="adminPassword">Admin Password</label>
-                <input type="password" id="adminPassword" placeholder="Enter admin password" value="admin19456">
-            </div>
-            
-            <button class="btn" onclick="login()">Login as Admin</button>
-            <div id="login-error" class="error hidden"></div>
-        </div>
-        
-        <!-- Admin Panel -->
-        <div id="admin-panel" class="admin-panel hidden">
-            <div id="dashboard-stats" class="stats-grid"></div>
-            
-            <div style="text-align: center; margin-bottom: 30px;">
-                <button class="btn" onclick="getDashboard()">📊 Dashboard</button>
-                <button class="btn" onclick="getTemplates()">📋 Templates (480)</button>
-                <button class="btn" onclick="getCustomers()">👥 Customers (2)</button>
-                <button class="btn" onclick="fixImages()">🖼️ Fix Images</button>
-                <button class="btn" onclick="cleanData()">🧹 Clean Test Data</button>
-            </div>
-            
-            <div id="data-section" class="section hidden">
-                <h3 id="data-title">Data</h3>
-                <div id="data-display" class="data-display"></div>
-            </div>
-            
-            <div class="section">
-                <h3>🚀 Upload Template</h3>
-                <button class="btn" onclick="showUploadForm()">Upload New Template</button>
-                
-                <div id="upload-form" class="hidden" style="margin-top: 20px;">
-                    <div class="form-group">
-                        <label>Template Name</label>
-                        <input type="text" id="template-name" placeholder="My Template">
-                    </div>
-                    <div class="form-group">
-                        <label>Description</label>
-                        <input type="text" id="template-description" placeholder="Template description">
-                    </div>
-                    <div class="form-group">
-                        <label>Price (USD)</label>
-                        <input type="number" id="template-price" placeholder="19.97" step="0.01">
-                    </div>
-                    <button class="btn" onclick="uploadTemplate()">Upload</button>
-                    <button class="btn btn-secondary" onclick="hideUploadForm()">Cancel</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <script>
-        let adminToken = '';
-        const API_BASE = window.location.origin;
-        
-        async function login() {
-            const password = document.getElementById('adminPassword').value;
-            if (!password) {
-                showError('Please enter admin password');
-                return;
-            }
-            
-            try {
-                const response = await fetch(\`\${API_BASE}/api/admin/login\`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({password})
-                });
-                
-                const data = await response.json();
-                if (data.success) {
-                    adminToken = data.token;
-                    document.getElementById('login-section').classList.add('hidden');
-                    document.getElementById('admin-panel').classList.remove('hidden');
-                    document.getElementById('admin-info').classList.remove('hidden');
-                    document.getElementById('admin-user').textContent = \`Admin • \${new Date().toLocaleString()}\`;
-                    getDashboard();
-                } else {
-                    showError(data.message || 'Login failed');
-                }
-            } catch (error) {
-                showError('Login failed: ' + error.message);
-            }
+// ✅ Admin authentication middleware for React app only
+function requireAdminAuth(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    
+    if (!token) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Admin authentication required - no token provided' 
+      });
+    }
+    
+    // Verify JWT token
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+      
+      // Verify user is admin in database
+      pool.query(
+        'SELECT id, email, role FROM users WHERE id = $1 AND role = $2',
+        [decoded.id, 'admin']
+      ).then(userResult => {
+        if (userResult.rows.length > 0) {
+          req.user = userResult.rows[0];
+          req.adminUser = { role: 'admin', userId: decoded.id };
+          next();
+        } else {
+          return res.status(403).json({ 
+            success: false, 
+            message: 'Admin role required' 
+          });
         }
-        
-        async function getDashboard() {
-            showLoading('Loading dashboard...');
-            try {
-                const response = await fetch(\`\${API_BASE}/api/admin/dashboard\`, {
-                    headers: {'Authorization': \`Bearer \${adminToken}\`}
-                });
-                const data = await response.json();
-                if (data.success) {
-                    displayDashboardStats(data.dashboard);
-                    showData('Dashboard Data', JSON.stringify(data.dashboard, null, 2));
-                }
-            } catch (error) {
-                showError('Dashboard error: ' + error.message);
-            }
-        }
-        
-        async function getTemplates() {
-            showLoading('Loading templates...');
-            try {
-                const response = await fetch(\`\${API_BASE}/api/admin/templates\`, {
-                    headers: {'Authorization': \`Bearer \${adminToken}\`}
-                });
-                const data = await response.json();
-                if (data.success) {
-                    showData(\`Templates (\${data.count})\`, JSON.stringify(data.templates.slice(0, 5), null, 2) + \`\\n\\n... and \${data.count - 5} more templates\`);
-                }
-            } catch (error) {
-                showError('Templates error: ' + error.message);
-            }
-        }
-        
-        async function getCustomers() {
-            showData('Customer Analysis', \`👥 Your 2 Customers:\\n\\n✅ Customer 1: edgpac\\n  • GitHub ID: 120873906\\n  • Email: edgarshopify@gmail.com\\n  • Purchases: 9 templates\\n  • Spent: $55.41\\n  • Status: GitHub Authenticated ✅\\n\\n⚠️ Customer 2: jane.doe\\n  • GitHub ID: null (SECURITY ISSUE)\\n  • Email: jane.doe@example.com\\n  • Purchases: 2 templates\\n  • Spent: $8.98\\n  • Status: NOT GitHub Authenticated ❌\\n\\n🔐 Security Recommendation:\\nRemove jane.doe test data and enforce GitHub-only purchases.\\nYour real customer is edgpac with proper GitHub authentication.\`);
-        }
-        
-        async function cleanData() {
-            if (confirm('Remove jane.doe test data? This will delete the non-GitHub user and their purchases.')) {
-                showData('Clean Data SQL', \`Run these SQL commands to clean test data:\\n\\n-- Remove test user purchases\\nDELETE FROM purchases WHERE user_id IN (\\n    SELECT id FROM users WHERE email = 'jane.doe@example.com'\\n);\\n\\n-- Remove test user\\nDELETE FROM users WHERE email = 'jane.doe@example.com';\\n\\n-- Verify cleanup\\nSELECT COUNT(*) FROM users WHERE github_id IS NULL;\`);
-            }
-        }
-        
-        async function fixImages() {
-            showLoading('Fixing images...');
-            try {
-                const response = await fetch(\`\${API_BASE}/api/admin/fix-images\`, {
-                    method: 'POST',
-                    headers: {'Authorization': \`Bearer \${adminToken}\`}
-                });
-                const data = await response.json();
-                showData('Image Fix Results', JSON.stringify(data, null, 2));
-            } catch (error) {
-                showError('Image fix error: ' + error.message);
-            }
-        }
-        
-        function showUploadForm() {
-            document.getElementById('upload-form').classList.remove('hidden');
-        }
-        
-        function hideUploadForm() {
-            document.getElementById('upload-form').classList.add('hidden');
-        }
-        
-        async function uploadTemplate() {
-            const name = document.getElementById('template-name').value;
-            const description = document.getElementById('template-description').value;
-            const price = parseFloat(document.getElementById('template-price').value);
-            
-            if (!name || !description || !price) {
-                showError('Please fill in all fields');
-                return;
-            }
-            
-            const templateData = {
-                name: name,
-                description: description,
-                price: price,
-                workflowJson: {
-                    name: name,
-                    nodes: [{
-                        id: "trigger",
-                        name: "Manual Trigger", 
-                        type: "n8n-nodes-base.manualTrigger",
-                        position: [240, 300]
-                    }],
-                    connections: {}
-                }
-            };
-            
-            try {
-                const response = await fetch(\`\${API_BASE}/api/admin/upload-template\`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': \`Bearer \${adminToken}\`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(templateData)
-                });
-                
-                const data = await response.json();
-                if (data.success) {
-                    showData('Upload Success', JSON.stringify(data, null, 2));
-                    hideUploadForm();
-                    document.getElementById('template-name').value = '';
-                    document.getElementById('template-description').value = '';
-                    document.getElementById('template-price').value = '';
-                } else {
-                    showError(data.message || 'Upload failed');
-                }
-            } catch (error) {
-                showError('Upload error: ' + error.message);
-            }
-        }
-        
-        function displayDashboardStats(dashboard) {
-            const statsDiv = document.getElementById('dashboard-stats');
-            statsDiv.innerHTML = \`
-                <div class="stat-card">
-                    <div class="stat-value">\${dashboard.templates.total_templates}</div>
-                    <div class="stat-label">Total Templates</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">$\${(parseInt(dashboard.purchases.total_revenue) / 100).toFixed(2)}</div>
-                    <div class="stat-label">Total Revenue</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">\${dashboard.purchases.total_purchases}</div>
-                    <div class="stat-label">Total Purchases</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">\${dashboard.purchases.unique_customers}</div>
-                    <div class="stat-label">Unique Customers</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">\${dashboard.users.github_users}/\${dashboard.users.total_users}</div>
-                    <div class="stat-label">GitHub Users</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">$\${dashboard.templates.avg_price ? (parseInt(dashboard.templates.avg_price) / 100).toFixed(2) : '0.00'}</div>
-                    <div class="stat-label">Average Price</div>
-                </div>
-            \`;
-        }
-        
-        function showData(title, data) {
-            document.getElementById('data-title').textContent = title;
-            document.getElementById('data-display').textContent = data;
-            document.getElementById('data-section').classList.remove('hidden');
-        }
-        
-        function showLoading(message) {
-            document.getElementById('data-title').textContent = 'Loading...';
-            document.getElementById('data-display').innerHTML = \`<div class="loading">\${message}</div>\`;
-            document.getElementById('data-section').classList.remove('hidden');
-        }
-        
-        function showError(message) {
-            document.getElementById('login-error').textContent = message;
-            document.getElementById('login-error').classList.remove('hidden');
-            setTimeout(() => {
-                document.getElementById('login-error').classList.add('hidden');
-            }, 5000);
-        }
-        
-        function logout() {
-            adminToken = '';
-            document.getElementById('admin-panel').classList.add('hidden');
-            document.getElementById('login-section').classList.remove('hidden');
-            document.getElementById('admin-info').classList.add('hidden');
-            document.getElementById('adminPassword').value = 'admin19456';
-        }
-        
-        document.getElementById('adminPassword').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') login();
+      }).catch(dbError => {
+        console.error('Database error in admin auth:', dbError);
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Authentication verification failed' 
         });
-    </script>
-</body>
-</html>`;
-  
-  res.send(adminHTML);
+      });
+    } catch (jwtError) {
+      console.error('JWT verification failed:', jwtError);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid or expired token' 
+      });
+    }
+  } catch (error) {
+    console.error('Admin auth middleware error:', error);
+    res.status(401).json({ 
+      success: false, 
+      message: 'Authentication failed' 
+    });
+  }
+}
+
+// ✅ REACT ADMIN: Login endpoint that returns JWT for your React app
+app.post('/api/admin/login', async (req, res) => {
+  try {
+    const { password } = req.body;
+    
+    console.log('🔐 React Admin login attempt received');
+    
+    // Check admin password
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    if (!adminPassword) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Admin authentication not configured' 
+      });
+    }
+    
+    if (!password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Password is required' 
+      });
+    }
+    
+    if (password !== adminPassword) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid admin password' 
+      });
+    }
+    
+    // Find admin user in database
+    const adminUser = await pool.query(
+      'SELECT id, email, username, role FROM users WHERE role = $1 ORDER BY created_at ASC LIMIT 1',
+      ['admin']
+    );
+    
+    if (adminUser.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'No admin user found. Please set admin role in database.' 
+      });
+    }
+    
+    const user = adminUser.rows[0];
+    
+    // Generate JWT token for React app
+    const jwtToken = jwt.sign(
+      { 
+        id: user.id, 
+        email: user.email, 
+        username: user.username,
+        role: user.role,
+        isAdmin: true 
+      },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '8h' }
+    );
+    
+    console.log('✅ React Admin login successful for:', user.email);
+    
+    res.json({ 
+      success: true, 
+      token: jwtToken,
+      message: 'Admin login successful',
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        isAdmin: true
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ React Admin login error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Login failed due to server error'
+    });
+  }
 });
+
+// ✅ REACT ADMIN: Dashboard data endpoint
+app.get('/api/admin/dashboard', requireAdminAuth, async (req, res) => {
+  try {
+    console.log('📊 React Admin dashboard requested by:', req.user.email);
+    
+    // Get template statistics
+    const templateStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_templates,
+        COUNT(CASE WHEN is_public = true THEN 1 END) as public_templates,
+        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) as recent_templates,
+        ROUND(AVG(price)::numeric, 2) as avg_price,
+        COALESCE(SUM(download_count), 0) as total_downloads
+      FROM templates
+    `);
+    
+    // Get purchase statistics
+    const purchaseStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_purchases,
+        COALESCE(SUM(amount_paid), 0) as total_revenue,
+        COUNT(CASE WHEN purchased_at >= NOW() - INTERVAL '7 days' THEN 1 END) as recent_purchases,
+        COUNT(DISTINCT user_id) as unique_customers
+      FROM purchases
+      WHERE status = 'completed'
+    `);
+    
+    // Get user statistics
+    const userStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_users,
+        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) as new_users,
+        COUNT(CASE WHEN github_id IS NOT NULL THEN 1 END) as github_users
+      FROM users
+    `);
+    
+    // Get top templates
+    const topTemplates = await pool.query(`
+      SELECT 
+        id, name, 
+        COALESCE(download_count, 0) as download_count, 
+        COALESCE(view_count, 0) as view_count, 
+        price,
+        (SELECT COUNT(*) FROM purchases WHERE template_id = templates.id) as purchase_count
+      FROM templates 
+      WHERE is_public = true
+      ORDER BY download_count DESC, view_count DESC
+      LIMIT 10
+    `);
+    
+    res.json({
+      success: true,
+      dashboard: {
+        templates: templateStats.rows[0],
+        purchases: purchaseStats.rows[0],
+        users: userStats.rows[0],
+        topTemplates: topTemplates.rows
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ React Admin dashboard error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to load dashboard data'
+    });
+  }
+});
+
+// ✅ REACT ADMIN: Template upload endpoint
+app.post('/api/templates', requireAdminAuth, async (req, res) => {
+  try {
+    console.log('📤 React Admin template upload by:', req.user.email);
+    
+    const { name, description, price, imageUrl, workflowJson } = req.body;
+    
+    // Validation
+    if (!name || !description || price === undefined || !workflowJson) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields'
+      });
+    }
+    
+    const priceFloat = parseFloat(price);
+    if (isNaN(priceFloat) || priceFloat < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid price'
+      });
+    }
+    
+    // Validate JSON
+    let parsedWorkflow;
+    try {
+      parsedWorkflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid workflow JSON'
+      });
+    }
+    
+    const priceInCents = Math.round(priceFloat * 100);
+    
+    // Use requesting admin user's ID
+    const adminUserId = req.user.id;
+    
+    // Generate fallback image if none provided
+    let finalImageUrl = imageUrl;
+    if (!finalImageUrl) {
+      const safeName = name.replace(/[^a-zA-Z0-9\s]/g, '').substring(0, 50);
+      finalImageUrl = `https://via.placeholder.com/400x250/4F46E5/FFFFFF?text=${encodeURIComponent(safeName)}`;
+    }
+    
+    // Insert template
+    const insertResult = await pool.query(`
+      INSERT INTO templates (
+        name, description, price, currency, image_url, 
+        workflow_json, status, is_public, creator_id,
+        created_at, updated_at, download_count, view_count, rating
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9,
+        NOW(), NOW(), 0, 0, 4.5
+      ) RETURNING id, name, description, price, image_url
+    `, [
+      name.trim(),
+      description.trim(),
+      priceInCents,
+      'USD',
+      finalImageUrl,
+      JSON.stringify(parsedWorkflow),
+      'active',
+      true,
+      adminUserId
+    ]);
+    
+    const newTemplate = insertResult.rows[0];
+    
+    console.log('✅ Template uploaded by admin:', req.user.email, 'Template:', newTemplate.name);
+    
+    res.json({
+      success: true,
+      message: 'Template uploaded successfully',
+      template: {
+        id: newTemplate.id,
+        name: newTemplate.name,
+        description: newTemplate.description,
+        price: newTemplate.price / 100, // Convert back to dollars for frontend
+        imageUrl: newTemplate.image_url
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ React Admin template upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload template'
+    });
+  }
+});
+
+// ✅ REACT ADMIN: Generate template details with AI
+app.post('/api/admin/generate-template-details', requireAdminAuth, async (req, res) => {
+  try {
+    const { workflowJson } = req.body;
+    
+    if (!workflowJson) {
+      return res.status(400).json({
+        success: false,
+        message: 'Workflow JSON is required'
+      });
+    }
+    
+    console.log('🤖 AI template generation requested by admin:', req.user.email);
+    
+    // Parse workflow
+    let workflow;
+    try {
+      workflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid workflow JSON'
+      });
+    }
+    
+    // Extract services and determine category
+    const nodeTypes = workflow.nodes?.map(node => node.type).filter(Boolean) || [];
+    const services = [...new Set(nodeTypes)]
+      .map(service => service.replace('n8n-nodes-base.', ''))
+      .filter(service => !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(service))
+      .slice(0, 5);
+    
+    let category = 'General Automation';
+    let suggestedPrice = 19.97;
+    
+    if (services.some(s => s.includes('OpenAi') || s.includes('langchain'))) {
+      category = 'AI Automation';
+      suggestedPrice = 29.97;
+    } else if (services.some(s => s.includes('Webhook'))) {
+      category = 'Integration';
+      suggestedPrice = 14.97;
+    } else if (services.some(s => s.includes('Slack') || s.includes('Discord'))) {
+      category = 'Communication';
+      suggestedPrice = 19.97;
+    }
+    
+    // Try Groq API if available
+    const groqApiKey = process.env.GROQ_API_KEY;
+    let generatedDetails = null;
+    
+    if (groqApiKey) {
+      try {
+        const prompt = `Generate template details for this n8n workflow:
+        
+Services: ${services.join(', ')}
+Nodes: ${workflow.nodes?.length || 0}
+Category: ${category}
+
+Return ONLY valid JSON:
+{
+  "name": "Template name (max 60 chars)",
+  "description": "Description focusing on automation purpose and benefits (max 200 chars)",
+  "price": ${suggestedPrice}
+}`;
+
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 500,
+            temperature: 0.3
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const aiResponse = data.choices?.[0]?.message?.content || '';
+          try {
+            generatedDetails = JSON.parse(aiResponse);
+          } catch (parseError) {
+            console.log('AI response parsing failed, using fallback');
+          }
+        }
+      } catch (error) {
+        console.log('Groq API failed, using fallback:', error.message);
+      }
+    }
+    
+    // Fallback if AI generation fails
+    if (!generatedDetails) {
+      const serviceName = services[0] || 'n8n';
+      generatedDetails = {
+        name: `${serviceName} ${category} Template`,
+        description: `Automate your ${category.toLowerCase()} workflow using ${services.slice(0, 3).join(', ')}. Contains ${workflow.nodes?.length || 0} pre-configured nodes.`,
+        price: suggestedPrice
+      };
+    }
+    
+    res.json({
+      success: true,
+      name: generatedDetails.name,
+      description: generatedDetails.description,
+      price: Math.round(generatedDetails.price * 100), // Convert to cents for consistency
+      metadata: {
+        services,
+        category,
+        nodeCount: workflow.nodes?.length || 0,
+        source: groqApiKey ? 'ai_generated' : 'structured_fallback'
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ AI generation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate template details'
+    });
+  }
+});
+
+// Remove the HTML admin route completely - no app.get('/admin', ...)
+
+console.log('✅ React-only admin system configured');
+console.log('🔐 Admin endpoints available for React app:');
+console.log('   POST /api/admin/login - JWT-based login');
+console.log('   GET  /api/admin/dashboard - Dashboard data');
+console.log('   POST /api/templates - Template upload');
+console.log('   POST /api/admin/generate-template-details - AI generation');
 
 // Catch-all handler for React routes (EXISTING CODE - DON'T CHANGE THIS)
 app.get('*', (req, res) => {
