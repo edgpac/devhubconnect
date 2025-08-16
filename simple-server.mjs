@@ -13,16 +13,18 @@ import passport from 'passport';
 import { Strategy as GitHubStrategy } from 'passport-github2';
 import Stripe from 'stripe';
 import cors from 'cors';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 const pgSession = require('connect-pg-simple')(session);
 
-// Line 16: Environment Variables and Configuration
+// Line 18: Environment Variables and Configuration
 const port = process.env.PORT || 3000;
 const frontendUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://devhubconnect-production.up.railway.app' : 'http://localhost:3000');
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const app = express();
 
-// Line 21: Middleware Setup
+// Line 24: Middleware Setup
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
@@ -31,24 +33,68 @@ app.use(cors({
 }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Line 29: Admin Middleware
-function requireGitHubAdmin(req, res, next) {
+// Line 32: Secure Database-Based Admin Authentication
+async function requireGitHubAdmin(req, res, next) {
   if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required', loginUrl: '/api/auth/github' });
+    return res.status(401).json({ 
+      error: 'Authentication required', 
+      loginUrl: '/api/auth/github' 
+    });
   }
-  const emailDomain = req.user.email.split('@')[1].toLowerCase();
-  if (!process.env.ADMIN_ALLOWED_DOMAINS.split(',').includes(emailDomain)) {
-    return res.status(403).json({ error: 'Unauthorized: Admin access required' });
-  }
-  pool.query('SELECT role FROM users WHERE github_id = $1', [req.user.id], (err, result) => {
-    if (err || result.rows.length === 0 || result.rows[0].role !== 'admin') {
-      return res.status(403).json({ error: 'Unauthorized: Admin role required' });
+  
+  try {
+    // Check admin role from database only
+    const result = await pool.query(
+      'SELECT role FROM users WHERE github_id = $1', 
+      [req.user.github_id]
+    );
+    
+    if (result.rows.length === 0 || result.rows[0].role !== 'admin') {
+      return res.status(403).json({ 
+        error: 'Unauthorized: Admin role required' 
+      });
     }
+    
     next();
-  });
+  } catch (error) {
+    console.error('Admin auth check error:', error);
+    return res.status(500).json({ 
+      error: 'Authentication system error' 
+    });
+  }
 }
 
-// Line 45: Session Configuration
+// Line 57: JWT-based admin authentication for React frontend
+const requireAdminAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+    
+    // Verify user still exists and is admin in database
+    const result = await pool.query(
+      'SELECT * FROM users WHERE id = $1 AND role = $2', 
+      [decoded.user_id, 'admin']
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: 'Admin access revoked' });
+    }
+    
+    req.user = decoded;
+    next();
+  } catch (error) {
+    console.log('JWT verification failed:', error);
+    return res.status(403).json({ error: 'Invalid or expired token' });
+  }
+};
+
+// Line 84: Session Configuration
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
@@ -60,7 +106,7 @@ app.use(session({
   cookie: { secure: process.env.NODE_ENV === 'production', maxAge: 24 * 60 * 60 * 1000 }
 }));
 
-// Line 56: Passport GitHub Strategy
+// Line 95: Passport GitHub Strategy
 passport.use(new GitHubStrategy({
   clientID: process.env.GITHUB_CLIENT_ID,
   clientSecret: process.env.GITHUB_CLIENT_SECRET,
@@ -105,15 +151,135 @@ passport.deserializeUser(async (id, done) => {
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Line 102: GitHub Authentication Routes
+// Line 139: GitHub Authentication Routes
 app.get('/api/auth/github', passport.authenticate('github', { scope: ['user:email'] }));
 
-app.get('/api/auth/github/callback', passport.authenticate('github', { failureRedirect: '/api/auth/github' }), (req, res) => {
-  console.log(`✅ GitHub auth successful for user: ${req.user.email || req.user.username}`);
-  res.redirect(frontendUrl);
+app.get('/api/auth/github/callback', passport.authenticate('github', { failureRedirect: '/api/auth/github' }), async (req, res) => {
+  try {
+    console.log(`🔗 GitHub OAuth: Finding/creating user for: ${req.user.username} ${req.user.email}`);
+    
+    // Check if user should be admin and redirect accordingly
+    const result = await pool.query(
+      'SELECT role FROM users WHERE github_id = $1', 
+      [req.user.github_id]
+    );
+    
+    const userRole = result.rows.length > 0 ? result.rows[0].role : 'user';
+    
+    console.log(`✅ GitHub OAuth successful for user: ${req.user.username} ${req.user.email} (${userRole})`);
+    
+    // Redirect admin users to admin dashboard
+    if (userRole === 'admin') {
+      res.redirect('/admin/dashboard');
+    } else {
+      res.redirect(frontendUrl);
+    }
+  } catch (error) {
+    console.error('❌ GitHub OAuth error:', error);
+    res.redirect(frontendUrl);
+  }
 });
 
-// Line 114: Helper Functions
+// Line 163: Admin Login Endpoints
+app.post('/api/auth/admin/login', async (req, res) => {
+  try {
+    const { password } = req.body;
+    console.log('🔐 Admin login attempt received');
+
+    if (password !== process.env.ADMIN_PASSWORD) {
+      return res.status(401).json({ error: 'Invalid admin password' });
+    }
+
+    // Get admin user from database
+    const adminQuery = `SELECT * FROM users WHERE role = 'admin' LIMIT 1`;
+    const adminResult = await pool.query(adminQuery);
+    
+    if (adminResult.rows.length === 0) {
+      return res.status(500).json({ error: 'No admin user found in database' });
+    }
+
+    const adminUser = adminResult.rows[0];
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        admin: true,
+        email: adminUser.email,
+        role: 'admin',
+        user_id: adminUser.id
+      },
+      process.env.JWT_SECRET || 'fallback_secret_key',
+      { expiresIn: '24h' }
+    );
+
+    console.log('✅ Admin login successful, JWT generated');
+
+    res.json({ 
+      success: true, 
+      token,
+      user: {
+        email: adminUser.email,
+        role: adminUser.role,
+        username: adminUser.username
+      }
+    });
+
+  } catch (error) {
+    console.log('❌ Admin login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/admin/login', async (req, res) => {
+  try {
+    const { password } = req.body;
+    console.log('🔐 React Admin login attempt received');
+
+    if (password !== process.env.ADMIN_PASSWORD) {
+      return res.status(401).json({ error: 'Invalid admin password' });
+    }
+
+    // Get admin user from database
+    const adminQuery = `SELECT * FROM users WHERE role = 'admin' LIMIT 1`;
+    const adminResult = await pool.query(adminQuery);
+    
+    if (adminResult.rows.length === 0) {
+      return res.status(500).json({ error: 'No admin user found in database' });
+    }
+
+    const adminUser = adminResult.rows[0];
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        admin: true,
+        email: adminUser.email,
+        role: 'admin',
+        user_id: adminUser.id
+      },
+      process.env.JWT_SECRET || 'fallback_secret_key',
+      { expiresIn: '24h' }
+    );
+
+    console.log('✅ Admin login successful, JWT generated');
+
+    res.json({ 
+      success: true, 
+      token,
+      user: {
+        email: adminUser.email,
+        role: adminUser.role,
+        username: adminUser.username
+      }
+    });
+
+  } catch (error) {
+    console.log('❌ React Admin login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Line 251: Helper Functions
 function generateStructuredFallback(prompt, templateContext, history) {
   return `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`;
 }
@@ -139,7 +305,8 @@ function generateTemplateRecommendations(templateStats, commonIssues) {
   }
   return recommendations;
 }
-// Line 201: Template List Endpoint
+
+// Line 275: Template List Endpoint
 app.get('/api/templates/list', async (req, res) => {
   try {
     console.log('📋 Fetching template list for user:', req.user?.email || req.user?.username || 'unauthenticated');
@@ -159,7 +326,7 @@ app.get('/api/templates/list', async (req, res) => {
   }
 });
 
-// Line 222: Template Details Endpoint
+// Line 296: Template Details Endpoint
 app.get('/api/templates/:id', async (req, res) => {
   try {
     console.log('📄 Fetching template details for:', req.params.id, 'by user:', req.user?.email || req.user?.username || 'unauthenticated');
