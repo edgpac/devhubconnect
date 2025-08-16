@@ -2825,7 +2825,6 @@ app.get('/api/ai/health', async (req, res) => {
 });
 
 // ✅ SYSTEM MAINTENANCE & CLEANUP
-
 // Clean up old conversation states periodically
 setInterval(() => {
   const now = Date.now();
@@ -2929,7 +2928,410 @@ process.on('SIGINT', async () => {
     process.exit(1);
   }
 });
+// ✅ ADMIN WEB INTERFACE ROUTE (ADD THIS RIGHT BEFORE THE CATCH-ALL ROUTE)
+app.get('/admin', (req, res) => {
+  const adminHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevHubConnect Admin Panel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: #2d3748;
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .login-section, .admin-panel { padding: 30px; }
+        .login-section { text-align: center; max-width: 400px; margin: 0 auto; }
+        .form-group { margin-bottom: 20px; text-align: left; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #2d3748; }
+        input[type="password"], input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus { outline: none; border-color: #667eea; }
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 5px;
+        }
+        .btn:hover { background: #5a67d8; transform: translateY(-2px); }
+        .btn-secondary { background: #718096; }
+        .btn-secondary:hover { background: #4a5568; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .stat-value { font-size: 24px; font-weight: bold; color: #2d3748; }
+        .stat-label { color: #718096; margin-top: 5px; }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 8px;
+        }
+        .section h3 { margin-bottom: 15px; color: #2d3748; }
+        .data-display {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .hidden { display: none; }
+        .error {
+            color: #e53e3e;
+            background: #fed7d7;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        .success {
+            color: #38a169;
+            background: #c6f6d5;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        .loading { text-align: center; padding: 20px; color: #718096; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 DevHubConnect Admin Panel</h1>
+            <div id="admin-info" class="hidden">
+                <span id="admin-user"></span>
+                <button class="btn btn-secondary" onclick="logout()">Logout</button>
+            </div>
+        </div>
+        
+        <!-- Login Section -->
+        <div id="login-section" class="login-section">
+            <h2>Admin Login</h2>
+            <p style="margin-bottom: 20px; color: #718096;">Password: admin19456</p>
+            
+            <div class="form-group">
+                <label for="adminPassword">Admin Password</label>
+                <input type="password" id="adminPassword" placeholder="Enter admin password" value="admin19456">
+            </div>
+            
+            <button class="btn" onclick="login()">Login as Admin</button>
+            <div id="login-error" class="error hidden"></div>
+        </div>
+        
+        <!-- Admin Panel -->
+        <div id="admin-panel" class="admin-panel hidden">
+            <div id="dashboard-stats" class="stats-grid"></div>
+            
+            <div style="text-align: center; margin-bottom: 30px;">
+                <button class="btn" onclick="getDashboard()">📊 Dashboard</button>
+                <button class="btn" onclick="getTemplates()">📋 Templates (480)</button>
+                <button class="btn" onclick="getCustomers()">👥 Customers (2)</button>
+                <button class="btn" onclick="fixImages()">🖼️ Fix Images</button>
+                <button class="btn" onclick="cleanData()">🧹 Clean Test Data</button>
+            </div>
+            
+            <div id="data-section" class="section hidden">
+                <h3 id="data-title">Data</h3>
+                <div id="data-display" class="data-display"></div>
+            </div>
+            
+            <div class="section">
+                <h3>🚀 Upload Template</h3>
+                <button class="btn" onclick="showUploadForm()">Upload New Template</button>
+                
+                <div id="upload-form" class="hidden" style="margin-top: 20px;">
+                    <div class="form-group">
+                        <label>Template Name</label>
+                        <input type="text" id="template-name" placeholder="My Template">
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <input type="text" id="template-description" placeholder="Template description">
+                    </div>
+                    <div class="form-group">
+                        <label>Price (USD)</label>
+                        <input type="number" id="template-price" placeholder="19.97" step="0.01">
+                    </div>
+                    <button class="btn" onclick="uploadTemplate()">Upload</button>
+                    <button class="btn btn-secondary" onclick="hideUploadForm()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
+    <script>
+        let adminToken = '';
+        const API_BASE = window.location.origin;
+        
+        async function login() {
+            const password = document.getElementById('adminPassword').value;
+            if (!password) {
+                showError('Please enter admin password');
+                return;
+            }
+            
+            try {
+                const response = await fetch(\`\${API_BASE}/api/admin/login\`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password})
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    adminToken = data.token;
+                    document.getElementById('login-section').classList.add('hidden');
+                    document.getElementById('admin-panel').classList.remove('hidden');
+                    document.getElementById('admin-info').classList.remove('hidden');
+                    document.getElementById('admin-user').textContent = \`Admin • \${new Date().toLocaleString()}\`;
+                    getDashboard();
+                } else {
+                    showError(data.message || 'Login failed');
+                }
+            } catch (error) {
+                showError('Login failed: ' + error.message);
+            }
+        }
+        
+        async function getDashboard() {
+            showLoading('Loading dashboard...');
+            try {
+                const response = await fetch(\`\${API_BASE}/api/admin/dashboard\`, {
+                    headers: {'Authorization': \`Bearer \${adminToken}\`}
+                });
+                const data = await response.json();
+                if (data.success) {
+                    displayDashboardStats(data.dashboard);
+                    showData('Dashboard Data', JSON.stringify(data.dashboard, null, 2));
+                }
+            } catch (error) {
+                showError('Dashboard error: ' + error.message);
+            }
+        }
+        
+        async function getTemplates() {
+            showLoading('Loading templates...');
+            try {
+                const response = await fetch(\`\${API_BASE}/api/admin/templates\`, {
+                    headers: {'Authorization': \`Bearer \${adminToken}\`}
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showData(\`Templates (\${data.count})\`, JSON.stringify(data.templates.slice(0, 5), null, 2) + \`\\n\\n... and \${data.count - 5} more templates\`);
+                }
+            } catch (error) {
+                showError('Templates error: ' + error.message);
+            }
+        }
+        
+        async function getCustomers() {
+            showData('Customer Analysis', \`👥 Your 2 Customers:\\n\\n✅ Customer 1: edgpac\\n  • GitHub ID: 120873906\\n  • Email: edgarshopify@gmail.com\\n  • Purchases: 9 templates\\n  • Spent: $55.41\\n  • Status: GitHub Authenticated ✅\\n\\n⚠️ Customer 2: jane.doe\\n  • GitHub ID: null (SECURITY ISSUE)\\n  • Email: jane.doe@example.com\\n  • Purchases: 2 templates\\n  • Spent: $8.98\\n  • Status: NOT GitHub Authenticated ❌\\n\\n🔐 Security Recommendation:\\nRemove jane.doe test data and enforce GitHub-only purchases.\\nYour real customer is edgpac with proper GitHub authentication.\`);
+        }
+        
+        async function cleanData() {
+            if (confirm('Remove jane.doe test data? This will delete the non-GitHub user and their purchases.')) {
+                showData('Clean Data SQL', \`Run these SQL commands to clean test data:\\n\\n-- Remove test user purchases\\nDELETE FROM purchases WHERE user_id IN (\\n    SELECT id FROM users WHERE email = 'jane.doe@example.com'\\n);\\n\\n-- Remove test user\\nDELETE FROM users WHERE email = 'jane.doe@example.com';\\n\\n-- Verify cleanup\\nSELECT COUNT(*) FROM users WHERE github_id IS NULL;\`);
+            }
+        }
+        
+        async function fixImages() {
+            showLoading('Fixing images...');
+            try {
+                const response = await fetch(\`\${API_BASE}/api/admin/fix-images\`, {
+                    method: 'POST',
+                    headers: {'Authorization': \`Bearer \${adminToken}\`}
+                });
+                const data = await response.json();
+                showData('Image Fix Results', JSON.stringify(data, null, 2));
+            } catch (error) {
+                showError('Image fix error: ' + error.message);
+            }
+        }
+        
+        function showUploadForm() {
+            document.getElementById('upload-form').classList.remove('hidden');
+        }
+        
+        function hideUploadForm() {
+            document.getElementById('upload-form').classList.add('hidden');
+        }
+        
+        async function uploadTemplate() {
+            const name = document.getElementById('template-name').value;
+            const description = document.getElementById('template-description').value;
+            const price = parseFloat(document.getElementById('template-price').value);
+            
+            if (!name || !description || !price) {
+                showError('Please fill in all fields');
+                return;
+            }
+            
+            const templateData = {
+                name: name,
+                description: description,
+                price: price,
+                workflowJson: {
+                    name: name,
+                    nodes: [{
+                        id: "trigger",
+                        name: "Manual Trigger", 
+                        type: "n8n-nodes-base.manualTrigger",
+                        position: [240, 300]
+                    }],
+                    connections: {}
+                }
+            };
+            
+            try {
+                const response = await fetch(\`\${API_BASE}/api/admin/upload-template\`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': \`Bearer \${adminToken}\`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(templateData)
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showData('Upload Success', JSON.stringify(data, null, 2));
+                    hideUploadForm();
+                    document.getElementById('template-name').value = '';
+                    document.getElementById('template-description').value = '';
+                    document.getElementById('template-price').value = '';
+                } else {
+                    showError(data.message || 'Upload failed');
+                }
+            } catch (error) {
+                showError('Upload error: ' + error.message);
+            }
+        }
+        
+        function displayDashboardStats(dashboard) {
+            const statsDiv = document.getElementById('dashboard-stats');
+            statsDiv.innerHTML = \`
+                <div class="stat-card">
+                    <div class="stat-value">\${dashboard.templates.total_templates}</div>
+                    <div class="stat-label">Total Templates</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">$\${(parseInt(dashboard.purchases.total_revenue) / 100).toFixed(2)}</div>
+                    <div class="stat-label">Total Revenue</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">\${dashboard.purchases.total_purchases}</div>
+                    <div class="stat-label">Total Purchases</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">\${dashboard.purchases.unique_customers}</div>
+                    <div class="stat-label">Unique Customers</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">\${dashboard.users.github_users}/\${dashboard.users.total_users}</div>
+                    <div class="stat-label">GitHub Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">$\${dashboard.templates.avg_price ? (parseInt(dashboard.templates.avg_price) / 100).toFixed(2) : '0.00'}</div>
+                    <div class="stat-label">Average Price</div>
+                </div>
+            \`;
+        }
+        
+        function showData(title, data) {
+            document.getElementById('data-title').textContent = title;
+            document.getElementById('data-display').textContent = data;
+            document.getElementById('data-section').classList.remove('hidden');
+        }
+        
+        function showLoading(message) {
+            document.getElementById('data-title').textContent = 'Loading...';
+            document.getElementById('data-display').innerHTML = \`<div class="loading">\${message}</div>\`;
+            document.getElementById('data-section').classList.remove('hidden');
+        }
+        
+        function showError(message) {
+            document.getElementById('login-error').textContent = message;
+            document.getElementById('login-error').classList.remove('hidden');
+            setTimeout(() => {
+                document.getElementById('login-error').classList.add('hidden');
+            }, 5000);
+        }
+        
+        function logout() {
+            adminToken = '';
+            document.getElementById('admin-panel').classList.add('hidden');
+            document.getElementById('login-section').classList.remove('hidden');
+            document.getElementById('admin-info').classList.add('hidden');
+            document.getElementById('adminPassword').value = 'admin19456';
+        }
+        
+        document.getElementById('adminPassword').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') login();
+        });
+    </script>
+</body>
+</html>`;
+  
+  res.send(adminHTML);
+});
+
+// Catch-all handler for React routes (EXISTING CODE - DON'T CHANGE THIS)
+app.get('*', (req, res) => {
+  // Don't serve index.html for API routes
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ 
+      error: 'API endpoint not found',
+      path: req.path,
+      method: req.method
+    });
+  }
+  
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
 // Catch-all handler for React routes
 app.get('*', (req, res) => {
   // Don't serve index.html for API routes
