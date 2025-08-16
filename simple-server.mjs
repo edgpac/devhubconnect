@@ -262,7 +262,257 @@ app.get('/health', (req, res) => {
 
 // GitHub OAuth routes
 app.get('/api/auth/github', passport.authenticate('github', { scope: ['user:email'] }));
+// =================================================================================
+// SECURE DATABASE-BASED ADMIN AUTHENTICATION SYSTEM
+// =================================================================================
+// 1. GitHub OAuth callback to check admin role from database
+app.get('/auth/github/callback', 
+  passport.authenticate('github', { failureRedirect: '/login' }),
+  async (req, res) => {
+    try {
+      console.log(`🔗 GitHub OAuth: Finding/creating user for: ${req.user.username} ${req.user.email}`);
+      
+      // Check if user exists
+      let userQuery = `SELECT * FROM users WHERE github_id = $1`;
+      let userResult = await pool.query(userQuery, [req.user.id]);
+      
+      let user;
+      if (userResult.rows.length === 0) {
+        // Create new user with default 'user' role
+        let insertQuery = `
+          INSERT INTO users (github_id, username, email, role) 
+          VALUES ($1, $2, $3, 'user') 
+          RETURNING *
+        `;
+        
+        let insertResult = await pool.query(insertQuery, [
+          req.user.id, 
+          req.user.username, 
+          req.user.email
+        ]);
+        user = insertResult.rows[0];
+        console.log(`✅ Created new user with role: ${user.role}`);
+      } else {
+        user = userResult.rows[0];
+      }
 
+      req.session.user = {
+        id: user.id,
+        github_id: user.github_id,
+        username: user.username,
+        email: user.email,
+        role: user.role
+      };
+
+      console.log(`✅ GitHub OAuth successful for user: ${user.username} ${user.email} (${user.role})`);
+      
+      // Redirect admin users to admin dashboard
+      if (user.role === 'admin') {
+        res.redirect('/admin/dashboard');
+      } else {
+        res.redirect('/');
+      }
+    } catch (error) {
+      console.error('❌ GitHub OAuth error:', error);
+      res.redirect('/');
+    }
+  }
+);
+
+// 2. Add the missing /api/auth/admin/login endpoint (your frontend is calling this)
+app.post('/api/auth/admin/login', async (req, res) => {
+  try {
+    const { password } = req.body;
+    console.log('🔐 Admin login attempt received');
+
+    if (password !== process.env.ADMIN_PASSWORD) {
+      return res.status(401).json({ error: 'Invalid admin password' });
+    }
+
+    // Get admin user from database
+    const adminQuery = `SELECT * FROM users WHERE role = 'admin' LIMIT 1`;
+    const adminResult = await pool.query(adminQuery);
+    
+    if (adminResult.rows.length === 0) {
+      return res.status(500).json({ error: 'No admin user found in database' });
+    }
+
+    const adminUser = adminResult.rows[0];
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        admin: true,
+        email: adminUser.email,
+        role: 'admin',
+        user_id: adminUser.id
+      },
+      process.env.JWT_SECRET || 'fallback_secret_key',
+      { expiresIn: '24h' }
+    );
+
+    console.log('✅ Admin login successful, JWT generated');
+
+    res.json({ 
+      success: true, 
+      token,
+      user: {
+        email: adminUser.email,
+        role: adminUser.role,
+        username: adminUser.username
+      }
+    });
+
+  } catch (error) {
+    console.log('❌ Admin login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 3. Keep your existing /api/admin/login endpoint as backup
+app.post('/api/admin/login', async (req, res) => {
+  try {
+    const { password } = req.body;
+    console.log('🔐 React Admin login attempt received');
+
+    if (password !== process.env.ADMIN_PASSWORD) {
+      return res.status(401).json({ error: 'Invalid admin password' });
+    }
+
+    // Get admin user from database
+    const adminQuery = `SELECT * FROM users WHERE role = 'admin' LIMIT 1`;
+    const adminResult = await pool.query(adminQuery);
+    
+    if (adminResult.rows.length === 0) {
+      return res.status(500).json({ error: 'No admin user found in database' });
+    }
+
+    const adminUser = adminResult.rows[0];
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        admin: true,
+        email: adminUser.email,
+        role: 'admin',
+        user_id: adminUser.id
+      },
+      process.env.JWT_SECRET || 'fallback_secret_key',
+      { expiresIn: '24h' }
+    );
+
+    console.log('✅ Admin login successful, JWT generated');
+
+    res.json({ 
+      success: true, 
+      token,
+      user: {
+        email: adminUser.email,
+        role: adminUser.role,
+        username: adminUser.username
+      }
+    });
+
+  } catch (error) {
+    console.log('❌ React Admin login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 4. Add admin check endpoint that uses database
+app.get('/api/admin/check', requireAdminAuth, async (req, res) => {
+  try {
+    // Check if user is admin in database
+    const result = await pool.query(
+      'SELECT * FROM users WHERE id = $1 AND role = $2', 
+      [req.user.user_id, 'admin']
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    const adminUser = result.rows[0];
+
+    res.json({ 
+      success: true, 
+      user: {
+        email: adminUser.email,
+        role: adminUser.role,
+        username: adminUser.username
+      }
+    });
+  } catch (error) {
+    console.error('❌ Admin check error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 5. Add middleware to check if user is admin (for GitHub login detection)
+const checkAdminRole = async (req, res, next) => {
+  if (req.session.user) {
+    // Double-check admin role from database
+    try {
+      const result = await pool.query(
+        'SELECT role FROM users WHERE id = $1', 
+        [req.session.user.id]
+      );
+      
+      if (result.rows.length > 0) {
+        req.session.user.role = result.rows[0].role;
+        req.isAdmin = result.rows[0].role === 'admin';
+      }
+    } catch (error) {
+      console.error('Error checking admin role:', error);
+    }
+  }
+  next();
+};
+
+// 6. Serve admin dashboard static files
+app.get('/admin/dashboard', checkAdminRole, (req, res) => {
+  if (!req.isAdmin && (!req.session.user || req.session.user.role !== 'admin')) {
+    return res.redirect('/admin/login');
+  }
+  
+  // Serve your admin dashboard HTML file
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// 7. Serve admin login page
+app.get('/admin/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// 8. Updated requireAdminAuth middleware with database verification
+const requireAdminAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+    
+    // Verify user still exists and is admin in database
+    const result = await pool.query(
+      'SELECT * FROM users WHERE id = $1 AND role = $2', 
+      [decoded.user_id, 'admin']
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: 'Admin access revoked' });
+    }
+    
+    req.user = decoded;
+    next();
+  } catch (error) {
+    console.log('JWT verification failed:', error);
+    return res.status(403).json({ error: 'Invalid or expired token' });
+  }
+};
 app.get('/api/auth/github/callback', 
   passport.authenticate('github', { failureRedirect: '/auth' }),
   (req, res) => {
@@ -1619,7 +1869,6 @@ I'm here to help with your **${templateId}** template setup!
 }
 
 // ✅ AI LEARNING SYSTEM FUNCTIONS
-
 // Check if we have a learned response for this question
 async function checkLearnedResponses(prompt, templateId) {
   try {
@@ -2821,62 +3070,7 @@ process.on('SIGINT', async () => {
     console.error('❌ Error during graceful shutdown:', error);
     process.exit(1);
   }
-});
-
-// ✅ Admin authentication middleware for React app only
-function requireAdminAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-    
-    if (!token) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Admin authentication required - no token provided' 
-      });
-    }
-    
-    // Verify JWT token
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-      
-      // Verify user is admin in database
-      pool.query(
-        'SELECT id, email, role FROM users WHERE id = $1 AND role = $2',
-        [decoded.id, 'admin']
-      ).then(userResult => {
-        if (userResult.rows.length > 0) {
-          req.user = userResult.rows[0];
-          req.adminUser = { role: 'admin', userId: decoded.id };
-          next();
-        } else {
-          return res.status(403).json({ 
-            success: false, 
-            message: 'Admin role required' 
-          });
-        }
-      }).catch(dbError => {
-        console.error('Database error in admin auth:', dbError);
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Authentication verification failed' 
-        });
-      });
-    } catch (jwtError) {
-      console.error('JWT verification failed:', jwtError);
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid or expired token' 
-      });
-    }
-  } catch (error) {
-    console.error('Admin auth middleware error:', error);
-    res.status(401).json({ 
-      success: false, 
-      message: 'Authentication failed' 
-    });
-  }
-}
+});  
 
 // ✅ REACT ADMIN: Login endpoint that returns JWT for your React app
 app.post('/api/admin/login', async (req, res) => {
