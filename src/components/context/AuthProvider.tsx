@@ -33,7 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('🔍 Checking session with backend...');
       
-      const response = await fetch('/api/auth/profile/session', {
+      const response = await fetch('/auth/profile/session', {
         method: 'GET',
         credentials: 'include',
         headers: {
@@ -163,8 +163,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('🔐 Starting logout...');
     
     try {
-      // Call backend logout
-      await fetch('/api/auth/logout', {
+      // Call backend logout - Fixed endpoint
+      await fetch('/auth/logout', {
         method: 'POST',
         credentials: 'include',
         headers: {
