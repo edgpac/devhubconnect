@@ -54,7 +54,7 @@ export const AuthSuccess = () => {
         try {
           console.log('🔄 Checking backend session...');
           
-          const sessionResponse = await fetch('/api/auth/profile/session', {
+          const sessionResponse = await fetch('/auth/profile/session', {
             method: 'GET',
             credentials: 'include',
             headers: {
@@ -65,20 +65,20 @@ export const AuthSuccess = () => {
           if (sessionResponse.ok) {
             const sessionData = await sessionResponse.json();
             if (sessionData.success && sessionData.user) {
-              console.log('✅ Backend session found:', sessionData.user.email || sessionData.user.username);
+              console.log('✅ Backend session found:', sessionData.user.email || sessionData.user.name);
               
               const user = {
                 id: sessionData.user.id,
                 email: sessionData.user.email,
-                name: sessionData.user.name || sessionData.user.username,
+                name: sessionData.user.name,
                 role: sessionData.user.role,
                 isAdmin: sessionData.user.role === 'admin',
-                username: sessionData.user.username,
-                github_id: sessionData.user.github_id
+                username: sessionData.user.name,
+                github_id: sessionData.user.id
               };
 
-              // Login with session data
-              login('session', user);
+              // Login with session data - use JWT token for new system
+              login('cookie-session', user);
               
               setCurrentStep('complete');
               setProcessing(false);
@@ -94,51 +94,9 @@ export const AuthSuccess = () => {
             }
           }
           
-          console.log('⚠️ No backend session, trying JWT conversion...');
+          console.log('⚠️ No backend session found, using URL parameters as fallback');
           
-          // Fallback: Try session-to-JWT conversion
-          const jwtResponse = await fetch('/api/auth/session-to-jwt', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (jwtResponse.ok) {
-            const jwtData = await jwtResponse.json();
-            if (jwtData.success && jwtData.token && jwtData.user) {
-              console.log('✅ JWT conversion successful:', jwtData.user.email || jwtData.user.username);
-              
-              const user = {
-                id: jwtData.user.id,
-                email: jwtData.user.email,
-                name: jwtData.user.name || jwtData.user.username,
-                role: jwtData.user.role,
-                isAdmin: jwtData.user.role === 'admin',
-                username: jwtData.user.username,
-                github_id: jwtData.user.github_id
-              };
-
-              login(jwtData.token, user);
-              
-              setCurrentStep('complete');
-              setProcessing(false);
-              
-              toast.success("Login successful! Welcome to DevHub Connect");
-              
-              setTimeout(() => {
-                console.log('🔄 Redirecting to dashboard...');
-                navigate('/dashboard', { replace: true });
-              }, 1500);
-              
-              return;
-            }
-          }
-          
-          // Final fallback: Use URL parameters
-          console.log('⚠️ Backend session failed, using URL parameters as fallback');
-          
+          // Fallback: Use URL parameters (for cases where cookie isn't set yet)
           const fallbackUser = {
             id: userId,
             email: userEmail || '',
@@ -149,7 +107,7 @@ export const AuthSuccess = () => {
             github_id: userId
           };
 
-          login('temp_session', fallbackUser);
+          login('fallback-session', fallbackUser);
           
           setCurrentStep('complete');
           setProcessing(false);
@@ -193,7 +151,7 @@ export const AuthSuccess = () => {
           <p className="text-sm text-gray-600 text-center mb-4">{error}</p>
           <div className="flex space-x-3">
             <button
-              onClick={() => window.location.href = '/api/auth/github'}
+              onClick={() => window.location.href = '/auth/github'}
               className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
             >
               Try Again
