@@ -509,56 +509,87 @@ app.post('/api/auth/refresh', async (req, res) => {
   }
 });
 
-// Security: Secure logout endpoint
-app.post('/auth/logout', async (req, res) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+// FIXED: Support both GET and POST for logout endpoint
+app.route('/auth/logout')
+  .get(async (req, res) => {
+    try {
+      console.log('🔐 GET Logout request received');
+      
+      // Security: Clear session cookie
+      const sessionId = req.cookies?.devhub_session;
+      if (sessionId) {
         await pool.query(
-          'UPDATE sessions SET is_active = false WHERE user_id = $1',
-          [decoded.id]
+          'UPDATE sessions SET is_active = false WHERE id = $1',
+          [sessionId]
         );
-      } catch (jwtError) {
-        // Invalid JWT is expected during logout
+        console.log('🔐 Session invalidated:', sessionId);
       }
+      
+      res.clearCookie('devhub_session', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/'
+      });
+      
+      console.log('🔐 GET Logout successful, redirecting to home');
+      res.redirect('/');
+      
+    } catch (error) {
+      console.error('❌ GET Logout error:', error.message);
+      res.redirect('/?logout=error');
     }
-    
-    // Security: Clear session cookie
-    const sessionId = req.cookies?.devhub_session;
-    if (sessionId) {
-      await pool.query(
-        'UPDATE sessions SET is_active = false WHERE id = $1',
-        [sessionId]
-      );
+  })
+  .post(async (req, res) => {
+    try {
+      console.log('🔐 POST Logout request received');
+      
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+      
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          await pool.query(
+            'UPDATE sessions SET is_active = false WHERE user_id = $1',
+            [decoded.id]
+          );
+        } catch (jwtError) {
+          // Invalid JWT is expected during logout
+        }
+      }
+      
+      // Security: Clear session cookie
+      const sessionId = req.cookies?.devhub_session;
+      if (sessionId) {
+        await pool.query(
+          'UPDATE sessions SET is_active = false WHERE id = $1',
+          [sessionId]
+        );
+        console.log('🔐 Session invalidated:', sessionId);
+      }
+      
+      res.clearCookie('devhub_session', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/'
+      });
+      
+      console.log('🔐 POST Logout successful');
+      res.json({ 
+        success: true, 
+        message: 'Logged out successfully' 
+      });
+      
+    } catch (error) {
+      console.error('❌ POST Logout error:', error.message);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Error during logout' 
+      });
     }
-    
-    res.clearCookie('devhub_session', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/'
-    });
-    
-    res.json({ 
-      success: true, 
-      message: 'Logged out successfully' 
-    });
-    
-    // Continue with rest of your existing code...
-    // (All the helper functions, template routes, Stripe routes, etc.)
-    
-  } catch (error) {
-    console.error('Logout error:', error.message);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error during logout' 
-    });
-  }
-});
+  });
 
 // SECURITY: Block any remaining email/password endpoints
 app.all('/api/auth/login', (req, res) => {
