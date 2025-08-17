@@ -75,7 +75,7 @@ const useCurrentUser = () => {
      }
 
      console.log('🔐 Making session check request...');
-     const response = await fetch('/api/auth/profile/session', {
+     const response = await fetch('/auth/profile/session', {
        method: 'GET',
        credentials: 'include',
        headers: {
