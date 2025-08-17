@@ -5,8 +5,8 @@ type User = {
  id: string;
  email: string;
  name?: string;
- role?: string; // ✅ ADDED: Include role field
- isAdmin?: boolean; // ✅ ADDED: Include isAdmin field
+ role?: string;
+ isAdmin?: boolean;
 };
 
 type AuthContextType = {
@@ -14,7 +14,7 @@ type AuthContextType = {
  token: string | null;
  login: (token: string, user: User) => void;
  logout: () => void;
- setUser: (user: User) => void; // Add setUser method
+ setUser: (user: User) => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,45 +28,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  useEffect(() => {
    const checkAuthStatus = async () => {
      try {
-       // First check localStorage (for backward compatibility)
-       const savedToken = localStorage.getItem("token");
+       console.log('🔍 DEBUG: AuthProvider checking auth status...');
+       
+       // First check localStorage for existing session
        const savedUser = localStorage.getItem("devhub_user");
+       const savedToken = localStorage.getItem("token");
 
-       if (savedToken && savedUser) {
+       if (savedUser && savedToken) {
+         console.log('🔍 DEBUG: Found saved user in localStorage');
+         const userData = JSON.parse(savedUser);
+         setCurrentUser(userData);
          setToken(savedToken);
-         setCurrentUser(JSON.parse(savedUser));
-         setIsLoading(false);
-         return;
+         
+         // Skip backend verification if we just logged in via AuthSuccess
+         const skipVerification = sessionStorage.getItem('skip_auth_check');
+         if (skipVerification) {
+           console.log('🔍 DEBUG: Skipping backend verification (just logged in)');
+           sessionStorage.removeItem('skip_auth_check');
+           setIsLoading(false);
+           return;
+         }
        }
 
-       // If no localStorage data, check session cookie by calling verify endpoint
+       // Try to verify session with backend
+       console.log('🔍 DEBUG: Checking backend session...');
        const response = await apiCall(API_ENDPOINTS.AUTH_SESSION, {
          method: 'GET',
        });
 
+       console.log('🔍 DEBUG: Backend response status:', response.status);
+
        if (response.ok) {
          const data = await response.json();
+         console.log('🔍 DEBUG: Backend response data:', data);
+         
          if (data.success && data.user) {
-           // ✅ FIXED: User is logged in via session cookie - include ALL user fields
            const userData = {
              id: data.user.id,
              email: data.user.email,
-             name: data.user.name,
-             role: data.user.role, // ✅ ADDED: Include role
-             isAdmin: data.user.role === 'admin' // ✅ ADDED: Set isAdmin based on role
+             name: data.user.name || data.user.username,
+             role: data.user.role,
+             isAdmin: data.user.role === 'admin'
            };
            
            setCurrentUser(userData);
-           setToken('session'); // Placeholder since we're using session cookies
-           console.log('✅ User logged in via session cookie:', data.user.email, 'Role:', data.user.role);
+           setToken('session');
            
-           // Save to localStorage for Navbar compatibility
+           // Save to localStorage
            localStorage.setItem("token", "session");
            localStorage.setItem("devhub_user", JSON.stringify(userData));
+           
+           console.log('✅ User verified via backend session:', userData.email, 'Role:', userData.role);
+         } else {
+           console.log('🔍 DEBUG: Backend session invalid, clearing local data');
+           // Clear invalid session data
+           localStorage.removeItem("token");
+           localStorage.removeItem("devhub_user");
+           setCurrentUser(null);
+           setToken(null);
+         }
+       } else {
+         console.log('🔍 DEBUG: Backend session check failed, but keeping local session if exists');
+         // If we have local data but backend fails, keep the local session
+         // This handles the case where AuthSuccess just set the user but backend session isn't ready
+         if (savedUser && savedToken) {
+           console.log('🔍 DEBUG: Keeping local session despite backend failure');
+           // Keep the existing local session
+         } else {
+           // No local session and backend failed, clear everything
+           localStorage.removeItem("token");
+           localStorage.removeItem("devhub_user");
+           setCurrentUser(null);
+           setToken(null);
          }
        }
      } catch (error) {
-       console.log('No active session found');
+       console.log('🔍 DEBUG: Auth check error:', error);
+       // Keep existing local session if backend is unreachable
+       const savedUser = localStorage.getItem("devhub_user");
+       if (savedUser) {
+         console.log('🔍 DEBUG: Backend unreachable, keeping local session');
+       }
      } finally {
        setIsLoading(false);
      }
@@ -76,7 +118,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  }, []);
 
  const login = (token: string, user: User) => {
-   // ✅ ENHANCED: Ensure isAdmin is set correctly
+   console.log('🔍 DEBUG: AuthProvider login called with:', { token, user });
+   
    const enhancedUser = {
      ...user,
      isAdmin: user.role === 'admin' || user.isAdmin || false
@@ -86,40 +129,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    setCurrentUser(enhancedUser);
    localStorage.setItem("token", token);
    localStorage.setItem("devhub_user", JSON.stringify(enhancedUser));
+   
+   // Set flag to skip backend verification on next auth check
+   sessionStorage.setItem('skip_auth_check', 'true');
+   
+   console.log('✅ User logged in via AuthProvider:', enhancedUser.email, 'Role:', enhancedUser.role);
  };
 
  const setUser = (user: User) => {
-   // ✅ ENHANCED: Ensure isAdmin is set correctly
+   console.log('🔍 DEBUG: AuthProvider setUser called with:', user);
+   
    const enhancedUser = {
      ...user,
      isAdmin: user.role === 'admin' || user.isAdmin || false
    };
    
    setCurrentUser(enhancedUser);
-   setToken('session'); // For session-based auth
-   // Save to localStorage for consistency
+   setToken('session');
    localStorage.setItem("token", "session");
    localStorage.setItem("devhub_user", JSON.stringify(enhancedUser));
+   
+   // Set flag to skip backend verification on next auth check
+   sessionStorage.setItem('skip_auth_check', 'true');
+   
+   console.log('✅ User set via AuthProvider:', enhancedUser.email, 'Role:', enhancedUser.role);
  };
 
  const logout = async () => {
    try {
-     // Call logout endpoint to clear session cookie
+     console.log('🔍 DEBUG: Attempting logout...');
      await apiCall(API_ENDPOINTS.AUTH_LOGOUT, {
        method: 'POST',
      });
-     console.log('✅ Logout successful - session cleared');
+     console.log('✅ Backend logout successful');
    } catch (error) {
-     console.error('❌ Logout error:', error);
+     console.error('❌ Backend logout error:', error);
    }
 
-   // Clear frontend state regardless of backend success/failure
+   // Clear all auth data
    setToken(null);
    setCurrentUser(null);
    localStorage.removeItem("token");
    localStorage.removeItem("devhub_user");
+   sessionStorage.removeItem('skip_auth_check');
    
-   // FIX: Redirect to home page after logout
+   console.log('✅ Auth data cleared, redirecting to home');
    window.location.href = '/';
  };
 
