@@ -14,6 +14,7 @@ import jwt from 'jsonwebtoken';                 // Used for JWT tokens
 import bcrypt from 'bcrypt';                    // Used for password hashing
 import rateLimit from 'express-rate-limit';    // Add for security
 import crypto from 'crypto';                   // Add for secure random generation
+import cookieParser from 'cookie-parser';      // FIXED: Add missing cookie parser
 const pgSession = require('connect-pg-simple'); // Used for session store
 
 // Environment Variables and Configuration
@@ -24,6 +25,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const app = express();
 app.set('trust proxy', 1);
 
+// FIXED: Add cookie parser middleware BEFORE other middleware
+app.use(cookieParser());
 // Middleware Setup
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -420,15 +423,14 @@ app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
   }
 });
 
-// Security: Session-based profile endpoint with validation
+// FIXED: Session-based profile endpoint with validation - returns flat user data as frontend expects
 app.get('/auth/profile/session', async (req, res) => {
   try {
     const sessionId = req.cookies?.devhub_session;
     
     if (!sessionId || typeof sessionId !== 'string' || sessionId.length > 100) {
       return res.status(401).json({ 
-        success: false, 
-        message: 'No valid session found' 
+        error: 'No valid session found' 
       });
     }
 
@@ -439,8 +441,7 @@ app.get('/auth/profile/session', async (req, res) => {
 
     if (session.rows.length === 0 || new Date() > session.rows[0].expires_at) {
       return res.status(401).json({ 
-        success: false, 
-        message: 'Session expired' 
+        error: 'Session expired' 
       });
     }
 
@@ -451,22 +452,60 @@ app.get('/auth/profile/session', async (req, res) => {
 
     if (user.rows.length === 0) {
       return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
+        error: 'User not found' 
       });
     }
 
-    res.json({ 
-      success: true, 
-      user: user.rows[0] 
+    const userData = user.rows[0];
+    
+    // FIXED: Return flat user data as frontend expects (not nested in 'user' object)
+    res.json({
+      id: userData.id,
+      email: userData.email,
+      name: userData.name || userData.email.split('@')[0],
+      avatar: userData.avatar_url,
+      isAdmin: userData.role === 'admin',
+      role: userData.role || 'user'
     });
     
   } catch (error) {
     console.error('Profile check error:', error.message);
     res.status(500).json({ 
-      success: false, 
-      message: 'Internal server error' 
+      error: 'Internal server error' 
     });
+  }
+});
+
+// FIXED: Add missing refresh endpoint for frontend compatibility
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const sessionId = req.cookies?.devhub_session;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'No session found' });
+    }
+    
+    const session = await pool.query(
+      'SELECT user_id, expires_at FROM sessions WHERE id = $1 AND is_active = true', 
+      [sessionId]
+    );
+    
+    if (session.rows.length === 0 || new Date() > session.rows[0].expires_at) {
+      return res.status(401).json({ success: false, error: 'Session expired' });
+    }
+    
+    const user = await pool.query(
+      'SELECT id, email, name, role FROM users WHERE id = $1', 
+      [session.rows[0].user_id]
+    );
+    
+    if (user.rows.length === 0) {
+      return res.status(401).json({ success: false, error: 'User not found' });
+    }
+    
+    res.json({ success: true, token: 'session', user: user.rows[0] });
+  } catch (error) {
+    console.error('Refresh error:', error);
+    res.status(500).json({ success: false, error: 'Refresh failed' });
   }
 });
 
@@ -488,28 +527,6 @@ app.post('/auth/logout', async (req, res) => {
       }
     }
     
-    // Add missing refresh endpoint for frontend compatibility
-app.post('/api/auth/refresh', async (req, res) => {
-  try {
-    const sessionId = req.cookies?.devhub_session;
-    if (!sessionId) {
-      return res.status(401).json({ success: false, error: 'No session found' });
-    }
-    const session = await pool.query('SELECT user_id, expires_at FROM sessions WHERE id = $1 AND is_active = true', [sessionId]);
-    if (session.rows.length === 0 || new Date() > session.rows[0].expires_at) {
-      return res.status(401).json({ success: false, error: 'Session expired' });
-    }
-    const user = await pool.query('SELECT id, email, name, role FROM users WHERE id = $1', [session.rows[0].user_id]);
-    if (user.rows.length === 0) {
-      return res.status(401).json({ success: false, error: 'User not found' });
-    }
-    res.json({ success: true, token: 'session', user: user.rows[0] });
-  } catch (error) {
-    console.error('Refresh error:', error);
-    res.status(500).json({ success: false, error: 'Refresh failed' });
-  }
-});
-
     // Security: Clear session cookie
     const sessionId = req.cookies?.devhub_session;
     if (sessionId) {
