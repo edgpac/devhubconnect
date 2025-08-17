@@ -355,7 +355,7 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
  // ✅ NEW: Handle GitHub authentication
  const handleGitHubAuth = () => {
    console.log('🔐 Redirecting to GitHub OAuth...');
-   window.location.href = '/api/auth/github';
+   window.location.href = '/auth/github';
  };
 
  if (isLoading && !propUser) {
