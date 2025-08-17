@@ -151,12 +151,25 @@ passport.use(new GitHubStrategy({
   }
 }));
 
-passport.serializeUser((user, done) => done(null, user.id));
+passpassport.serializeUser((user, done) => {
+  console.log('🔐 SERIALIZE USER:', user.email, 'ID:', user.id);
+  done(null, user.id);
+});
+
 passport.deserializeUser(async (id, done) => {
+  console.log('🔍 DESERIALIZE USER ID:', id);
   try {
     const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-    done(null, result.rows[0]);
+    if (result.rows.length > 0) {
+      const user = result.rows[0];
+      console.log('✅ DESERIALIZE SUCCESS:', user.email);
+      done(null, user);
+    } else {
+      console.log('❌ DESERIALIZE FAILED: No user found for ID:', id);
+      done(null, false);
+    }
   } catch (error) {
+    console.error('❌ DESERIALIZE ERROR:', error);
     done(error);
   }
 });
@@ -512,6 +525,43 @@ app.get('/api/debug/session', async (req, res) => {
       error: 'Debug failed',
       details: error.message 
     });
+  }
+});
+
+// Simple session repair endpoint
+app.post('/api/auth/repair-session', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID required' });
+    }
+    
+    // Get user from database
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const user = userResult.rows[0];
+    
+    // Manually login the user
+    req.login(user, (err) => {
+      if (err) {
+        console.error('❌ Manual login failed:', err);
+        return res.status(500).json({ error: 'Login failed' });
+      }
+      
+      console.log('✅ Session repaired for:', user.email);
+      res.json({ 
+        success: true, 
+        user: { id: user.id, username: user.username, email: user.email, role: user.role }
+      });
+    });
+  } catch (error) {
+    console.error('❌ Session repair error:', error);
+    res.status(500).json({ error: 'Session repair failed' });
   }
 });
 
