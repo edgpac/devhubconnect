@@ -302,22 +302,37 @@ app.post('/api/admin/login', async (req, res) => {
 
 // Line 251: Missing Frontend API Endpoints
 // Profile/session endpoint that frontend is calling
-app.get('/api/auth/profile/session', (req, res) => {
-  if (req.user) {
-    res.json({
-      success: true,
-      user: {
-        id: req.user.id,
-        username: req.user.username,
-        email: req.user.email,
-        role: req.user.role,
-        github_id: req.user.github_id
-      }
-    });
-  } else {
+app.get('/api/auth/profile/session', async (req, res) => {
+  try {
+    console.log('🔍 DEBUG: Session check - cookies:', req.headers.cookie);
+    console.log('🔍 DEBUG: Session ID from passport:', req.sessionID);
+    console.log('🔍 DEBUG: Passport user:', req.user);
+    
+    // Check if user is authenticated via Passport session
+    if (req.user && req.user.id) {
+      console.log('✅ Session valid for user:', req.user.email);
+      return res.json({
+        success: true,
+        user: {
+          id: req.user.id,
+          username: req.user.username,
+          email: req.user.email,
+          role: req.user.role,
+          github_id: req.user.github_id
+        }
+      });
+    }
+    
+    console.log('❌ No valid session found');
     res.status(401).json({
       success: false,
       error: 'Not authenticated'
+    });
+  } catch (error) {
+    console.error('Session check error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Session check failed'
     });
   }
 });
