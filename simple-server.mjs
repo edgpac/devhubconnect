@@ -22,7 +22,6 @@ const frontendUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'produ
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const app = express();
-app.set('trust proxy', true); // Add this line for Railway/proxy deployment
 
 // Middleware Setup
 app.use(express.json({ limit: '10mb' }));
@@ -488,6 +487,28 @@ app.post('/auth/logout', async (req, res) => {
       }
     }
     
+    // Add missing refresh endpoint for frontend compatibility
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const sessionId = req.cookies?.devhub_session;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'No session found' });
+    }
+    const session = await pool.query('SELECT user_id, expires_at FROM sessions WHERE id = $1 AND is_active = true', [sessionId]);
+    if (session.rows.length === 0 || new Date() > session.rows[0].expires_at) {
+      return res.status(401).json({ success: false, error: 'Session expired' });
+    }
+    const user = await pool.query('SELECT id, email, name, role FROM users WHERE id = $1', [session.rows[0].user_id]);
+    if (user.rows.length === 0) {
+      return res.status(401).json({ success: false, error: 'User not found' });
+    }
+    res.json({ success: true, token: 'session', user: user.rows[0] });
+  } catch (error) {
+    console.error('Refresh error:', error);
+    res.status(500).json({ success: false, error: 'Refresh failed' });
+  }
+});
+
     // Security: Clear session cookie
     const sessionId = req.cookies?.devhub_session;
     if (sessionId) {
@@ -1547,3 +1568,4 @@ app.get('*', (req, res) => {
   // Serve React app for all other routes
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
+
