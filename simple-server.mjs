@@ -151,7 +151,7 @@ passport.use(new GitHubStrategy({
   }
 }));
 
-passpassport.serializeUser((user, done) => {
+passport.serializeUser((user, done) => {
   console.log('🔐 SERIALIZE USER:', user.email, 'ID:', user.id);
   done(null, user.id);
 });
