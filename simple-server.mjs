@@ -27,160 +27,160 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
-  origin: frontendUrl,
-  credentials: true
+ origin: frontendUrl,
+ credentials: true
 }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // Line 32: Secure Database-Based Admin Authentication
 async function requireGitHubAdmin(req, res, next) {
-  if (!req.user) {
-    return res.status(401).json({ 
-      error: 'Authentication required', 
-      loginUrl: '/api/auth/github' 
-    });
-  }
-  
-  try {
-    // Check admin role from database only
-    const result = await pool.query(
-      'SELECT role FROM users WHERE github_id = $1', 
-      [req.user.github_id]
-    );
-    
-    if (result.rows.length === 0 || result.rows[0].role !== 'admin') {
-      return res.status(403).json({ 
-        error: 'Unauthorized: Admin role required' 
-      });
-    }
-    
-    next();
-  } catch (error) {
-    console.error('Admin auth check error:', error);
-    return res.status(500).json({ 
-      error: 'Authentication system error' 
-    });
-  }
+ if (!req.user) {
+   return res.status(401).json({ 
+     error: 'Authentication required', 
+     loginUrl: '/api/auth/github' 
+   });
+ }
+ 
+ try {
+   // Check admin role from database only
+   const result = await pool.query(
+     'SELECT role FROM users WHERE github_id = $1', 
+     [req.user.github_id]
+   );
+   
+   if (result.rows.length === 0 || result.rows[0].role !== 'admin') {
+     return res.status(403).json({ 
+       error: 'Unauthorized: Admin role required' 
+     });
+   }
+   
+   next();
+ } catch (error) {
+   console.error('Admin auth check error:', error);
+   return res.status(500).json({ 
+     error: 'Authentication system error' 
+   });
+ }
 }
 
 // Line 57: JWT-based admin authentication for React frontend
 const requireAdminAuth = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
+ const authHeader = req.headers.authorization;
+ const token = authHeader && authHeader.split(' ')[1];
 
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
+ if (!token) {
+   return res.status(401).json({ error: 'Access token required' });
+ }
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
-    
-    // Verify user still exists and is admin in database
-    const result = await pool.query(
-      'SELECT * FROM users WHERE id = $1 AND role = $2', 
-      [decoded.user_id, 'admin']
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(403).json({ error: 'Admin access revoked' });
-    }
-    
-    req.user = decoded;
-    next();
-  } catch (error) {
-    console.log('JWT verification failed:', error);
-    return res.status(403).json({ error: 'Invalid or expired token' });
-  }
+ try {
+   const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+   
+   // Verify user still exists and is admin in database
+   const result = await pool.query(
+     'SELECT * FROM users WHERE id = $1 AND role = $2', 
+     [decoded.user_id, 'admin']
+   );
+   
+   if (result.rows.length === 0) {
+     return res.status(403).json({ error: 'Admin access revoked' });
+   }
+   
+   req.user = decoded;
+   next();
+ } catch (error) {
+   console.log('JWT verification failed:', error);
+   return res.status(403).json({ error: 'Invalid or expired token' });
+ }
 };
 
 // Line 84: Session Configuration
 app.use(session({
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  store: new pgSession({
-    pool: pool,
-    tableName: 'session'
-  }),
-  cookie: { 
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: false,
-    maxAge: 24 * 60 * 60 * 1000,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-  }
+ secret: process.env.SESSION_SECRET,
+ resave: false,
+ saveUninitialized: false,
+ store: new pgSession({
+   pool: pool,
+   tableName: 'session'
+ }),
+ cookie: { 
+   secure: process.env.NODE_ENV === 'production',
+   httpOnly: false,
+   maxAge: 24 * 60 * 60 * 1000,
+   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+ }
 }));
 
 // Line 95: FIXED GitHub OAuth Strategy
 passport.use(new GitHubStrategy({
-  clientID: process.env.GITHUB_CLIENT_ID,
-  clientSecret: process.env.GITHUB_CLIENT_SECRET,
-  callbackURL: `${frontendUrl}/api/auth/github/callback`
+ clientID: process.env.GITHUB_CLIENT_ID,
+ clientSecret: process.env.GITHUB_CLIENT_SECRET,
+ callbackURL: `${frontendUrl}/api/auth/github/callback`
 }, async (accessToken, refreshToken, profile, done) => {
-  try {
-    const githubEmail = profile.emails?.[0]?.value;
-    const githubUsername = profile.username || `user_${profile.id}`;
-    const githubId = profile.id;
+ try {
+   const githubEmail = profile.emails?.[0]?.value;
+   const githubUsername = profile.username || `user_${profile.id}`;
+   const githubId = profile.id;
 
-    console.log('🔗 GitHub OAuth: Processing user:', githubUsername, githubEmail || 'NO_EMAIL');
-    
-    // Check if user exists by github_id
-    const result = await pool.query(
-      'SELECT * FROM users WHERE github_id = $1',
-      [githubId]
-    );
-    
-    let user;
-    if (result.rows.length > 0) {
-      // User exists, update username and email if provided
-      user = result.rows[0];
-      const updateEmail = githubEmail && githubEmail !== user.email ? githubEmail : user.email;
-      
-      await pool.query(
-        'UPDATE users SET username = $1, email = $2, updated_at = NOW() WHERE github_id = $3',
-        [githubUsername, updateEmail, githubId]
-      );
-      
-      user.username = githubUsername;
-      user.email = updateEmail;
-      console.log('✅ Updated existing GitHub user:', githubUsername, updateEmail || 'NULL');
-    } else {
-      // Create new user - email can be null
-      const insertResult = await pool.query(
-        'INSERT INTO users (github_id, username, email, role, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING *',
-        [githubId, githubUsername, githubEmail, 'user']
-      );
-      user = insertResult.rows[0];
-      console.log('✅ Created new GitHub user:', githubUsername, githubEmail || 'NULL');
-    }
-    
-    return done(null, user);
-  } catch (error) {
-    console.error('❌ GitHub auth error:', error.message);
-    return done(error);
-  }
+   console.log('🔗 GitHub OAuth: Processing user:', githubUsername, githubEmail || 'NO_EMAIL');
+   
+   // Check if user exists by github_id
+   const result = await pool.query(
+     'SELECT * FROM users WHERE github_id = $1',
+     [githubId]
+   );
+   
+   let user;
+   if (result.rows.length > 0) {
+     // User exists, update username and email if provided
+     user = result.rows[0];
+     const updateEmail = githubEmail && githubEmail !== user.email ? githubEmail : user.email;
+     
+     await pool.query(
+       'UPDATE users SET username = $1, email = $2, updated_at = NOW() WHERE github_id = $3',
+       [githubUsername, updateEmail, githubId]
+     );
+     
+     user.username = githubUsername;
+     user.email = updateEmail;
+     console.log('✅ Updated existing GitHub user:', githubUsername, updateEmail || 'NULL');
+   } else {
+     // Create new user - email can be null
+     const insertResult = await pool.query(
+       'INSERT INTO users (github_id, username, email, role, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING *',
+       [githubId, githubUsername, githubEmail, 'user']
+     );
+     user = insertResult.rows[0];
+     console.log('✅ Created new GitHub user:', githubUsername, githubEmail || 'NULL');
+   }
+   
+   return done(null, user);
+ } catch (error) {
+   console.error('❌ GitHub auth error:', error.message);
+   return done(error);
+ }
 }));
 
 passport.serializeUser((user, done) => {
-  console.log('🔐 SERIALIZE USER:', user.username, 'ID:', user.id);
-  done(null, user.id);
+ console.log('🔐 SERIALIZE USER:', user.username, 'ID:', user.id);
+ done(null, user.id);
 });
 
 passport.deserializeUser(async (id, done) => {
-  console.log('🔍 DESERIALIZE USER ID:', id);
-  try {
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-    if (result.rows.length > 0) {
-      const user = result.rows[0];
-      console.log('✅ DESERIALIZE SUCCESS:', user.username, 'Email:', user.email || 'NULL');
-      done(null, user);
-    } else {
-      console.log('❌ DESERIALIZE FAILED: No user found for ID:', id);
-      done(null, false);
-    }
-  } catch (error) {
-    console.error('❌ DESERIALIZE ERROR:', error);
-    done(error);
-  }
+ console.log('🔍 DESERIALIZE USER ID:', id);
+ try {
+   const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+   if (result.rows.length > 0) {
+     const user = result.rows[0];
+     console.log('✅ DESERIALIZE SUCCESS:', user.username, 'Email:', user.email || 'NULL');
+     done(null, user);
+   } else {
+     console.log('❌ DESERIALIZE FAILED: No user found for ID:', id);
+     done(null, false);
+   }
+ } catch (error) {
+   console.error('❌ DESERIALIZE ERROR:', error);
+   done(error);
+ }
 });
 
 app.use(passport.initialize());
@@ -190,131 +190,146 @@ app.use(passport.session());
 app.get('/api/auth/github', passport.authenticate('github', { scope: ['user:email'] }));
 
 app.get('/api/auth/github/callback', passport.authenticate('github', { failureRedirect: '/api/auth/github' }), async (req, res) => {
-  try {
-    console.log(`🔗 GitHub OAuth: Processing callback for: ${req.user.username}`);
-    
-    // Check essential data
-    if (!req.user || !req.user.id || !req.user.username) {
-      console.error('❌ Security: OAuth callback missing essential user data');
-      const params = new URLSearchParams({
-        success: 'false',
-        error: 'missing_user_data'
-      });
-      return res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
-    }
-    
-    // Check and update admin role based on username
-    const result = await pool.query(
-      'SELECT role FROM users WHERE github_id = $1', 
-      [req.user.github_id]
-    );
-    
-    const userRole = result.rows.length > 0 ? result.rows[0].role : 'user';
-    
-    // ADMIN CHECK: Promote to admin if GitHub username matches
-    if (req.user.username === 'edgpac' && userRole !== 'admin') {
-      await pool.query(
-        'UPDATE users SET role = $1 WHERE github_id = $2',
-        ['admin', req.user.github_id]
-      );
-      console.log('✅ Auto-promoted user to admin based on GitHub username:', req.user.username);
-    }
-    
-    console.log(`✅ GitHub OAuth successful for user: ${req.user.username} (${userRole})`);
-    
-    // Send users to auth/success for proper login processing
-    const params = new URLSearchParams({
-      success: 'true',
-      userId: req.user.id,
-      userName: req.user.username || '',
-      userEmail: req.user.email || '',
-      hasEmail: req.user.email ? 'true' : 'false'
-    });
+ try {
+   console.log(`🔗 GitHub OAuth: Processing callback for: ${req.user.username}`);
+   
+   // Check essential data
+   if (!req.user || !req.user.id || !req.user.username) {
+     console.error('❌ Security: OAuth callback missing essential user data');
+     const params = new URLSearchParams({
+       success: 'false',
+       error: 'missing_user_data'
+     });
+     return res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
+   }
+   
+   // Check and update admin role based on username
+   const result = await pool.query(
+     'SELECT role FROM users WHERE github_id = $1', 
+     [req.user.github_id]
+   );
+   
+   const userRole = result.rows.length > 0 ? result.rows[0].role : 'user';
+   
+   // ADMIN CHECK: Promote to admin if GitHub username matches
+   if (req.user.username === 'edgpac' && userRole !== 'admin') {
+     await pool.query(
+       'UPDATE users SET role = $1 WHERE github_id = $2',
+       ['admin', req.user.github_id]
+     );
+     console.log('✅ Auto-promoted user to admin based on GitHub username:', req.user.username);
+   }
+   
+   console.log(`✅ GitHub OAuth successful for user: ${req.user.username} (${userRole})`);
+   
+   // FORCE SESSION SAVE before redirect
+   req.session.save((err) => {
+     if (err) {
+       console.error('❌ Session save error:', err);
+       const params = new URLSearchParams({
+         success: 'false',
+         error: 'session_save_failed'
+       });
+       return res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
+     }
+     
+     console.log('✅ Session saved successfully for user:', req.user.username);
+     
+     // Send users to auth/success for proper login processing
+     const params = new URLSearchParams({
+       success: 'true',
+       userId: req.user.id,
+       userName: req.user.username || '',
+       userEmail: req.user.email || '',
+       hasEmail: req.user.email ? 'true' : 'false'
+     });
 
-    res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
-  } catch (error) {
-    console.error('❌ GitHub OAuth error:', error);
-    const params = new URLSearchParams({
-      success: 'false',
-      error: 'oauth_error'
-    });
-    res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
-  }
+     res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
+   });
+   
+ } catch (error) {
+   console.error('❌ GitHub OAuth error:', error);
+   const params = new URLSearchParams({
+     success: 'false',
+     error: 'oauth_error'
+   });
+   res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
+ }
 });
 
 // Session-to-JWT Bridge Endpoint (GitHub users only)
 app.post('/api/auth/session-to-jwt', async (req, res) => {
-  try {
-    console.log('🔄 Session-to-JWT bridge request');
-    console.log('🔍 Session ID:', req.sessionID);
-    console.log('🔍 User from session:', req.user?.email || 'NO_USER');
+ try {
+   console.log('🔄 Session-to-JWT bridge request');
+   console.log('🔍 Session ID:', req.sessionID);
+   console.log('🔍 User from session:', req.user?.email || 'NO_USER');
 
-    if (req.user && req.user.id) {
-      // SECURITY: Verify user still exists and has GitHub ID (GitHub-only)
-      const userCheck = await pool.query(
-        'SELECT id, username, email, role, github_id FROM users WHERE id = $1 AND github_id IS NOT NULL',
-        [req.user.id]
-      );
-      
-      if (userCheck.rows.length === 0) {
-        console.log('❌ Security: User not found or not a GitHub user');
-        return res.status(401).json({
-          success: false,
-          error: 'GitHub authentication required'
-        });
-      }
-      
-      const dbUser = userCheck.rows[0];
-      console.log('✅ Valid GitHub session found for user:', dbUser.email);
-      
-      // Generate JWT token for GitHub user
-      const token = jwt.sign(
-        { 
-          id: dbUser.id,
-          email: dbUser.email,
-          role: dbUser.role,
-          github_id: dbUser.github_id,
-          username: dbUser.username,
-          session_id: req.sessionID,
-          auth_method: 'github',
-          iat: Math.floor(Date.now() / 1000)
-        },
-        process.env.JWT_SECRET || 'fallback_secret_key',
-        { expiresIn: '24h' }
-      );
+   if (req.user && req.user.id) {
+     // SECURITY: Verify user still exists and has GitHub ID (GitHub-only)
+     const userCheck = await pool.query(
+       'SELECT id, username, email, role, github_id FROM users WHERE id = $1 AND github_id IS NOT NULL',
+       [req.user.id]
+     );
+     
+     if (userCheck.rows.length === 0) {
+       console.log('❌ Security: User not found or not a GitHub user');
+       return res.status(401).json({
+         success: false,
+         error: 'GitHub authentication required'
+       });
+     }
+     
+     const dbUser = userCheck.rows[0];
+     console.log('✅ Valid GitHub session found for user:', dbUser.email);
+     
+     // Generate JWT token for GitHub user
+     const token = jwt.sign(
+       { 
+         id: dbUser.id,
+         email: dbUser.email,
+         role: dbUser.role,
+         github_id: dbUser.github_id,
+         username: dbUser.username,
+         session_id: req.sessionID,
+         auth_method: 'github',
+         iat: Math.floor(Date.now() / 1000)
+       },
+       process.env.JWT_SECRET || 'fallback_secret_key',
+       { expiresIn: '24h' }
+     );
 
-      const userResponse = {
-        id: dbUser.id,
-        username: dbUser.username,
-        email: dbUser.email,
-        role: dbUser.role || 'user',
-        github_id: dbUser.github_id,
-        auth_method: 'github'
-      };
+     const userResponse = {
+       id: dbUser.id,
+       username: dbUser.username,
+       email: dbUser.email,
+       role: dbUser.role || 'user',
+       github_id: dbUser.github_id,
+       auth_method: 'github'
+     };
 
-      console.log('✅ JWT generated for GitHub user:', userResponse.email);
+     console.log('✅ JWT generated for GitHub user:', userResponse.email);
 
-      res.json({ 
-        success: true,
-        token: token,
-        user: userResponse,
-        source: 'github_session'
-      });
-    } else {
-      console.log('❌ No valid GitHub session found');
-      
-      res.status(401).json({ 
-        success: false,
-        error: 'GitHub authentication required'
-      });
-    }
-  } catch (error) {
-    console.error('❌ Session-to-JWT bridge error:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Session bridge failed'
-    });
-  }
+     res.json({ 
+       success: true,
+       token: token,
+       user: userResponse,
+       source: 'github_session'
+     });
+   } else {
+     console.log('❌ No valid GitHub session found');
+     
+     res.status(401).json({ 
+       success: false,
+       error: 'GitHub authentication required'
+     });
+   }
+ } catch (error) {
+   console.error('❌ Session-to-JWT bridge error:', error);
+   res.status(500).json({ 
+     success: false,
+     error: 'Session bridge failed'
+   });
+ }
 });
 
 // Session profile endpoint (GitHub users only)
