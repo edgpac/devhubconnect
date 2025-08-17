@@ -110,16 +110,36 @@ app.use(session({
   }
 }));
 
-// Line 95: Passport GitHub Strategy
+// Line 95: Passport GitHub Strategy (GITHUB-ONLY AUTHENTICATION)
 passport.use(new GitHubStrategy({
   clientID: process.env.GITHUB_CLIENT_ID,
   clientSecret: process.env.GITHUB_CLIENT_SECRET,
   callbackURL: `${frontendUrl}/api/auth/github/callback`
 }, async (accessToken, refreshToken, profile, done) => {
   try {
-    console.log('🔗 GitHub OAuth: Processing user:', profile.username, profile.emails?.[0]?.value);
+    // STRICT: Only GitHub OAuth is allowed - email must come from GitHub
+    const email = profile.emails?.[0]?.value || 
+                  profile._json?.email || 
+                  null;
     
-    // ✅ FIXED: Check if user exists by github_id (no github_access_token)
+    console.log('🔗 GitHub OAuth: Processing user:', profile.username, email || 'NO_EMAIL');
+    console.log('🔍 DEBUG: Profile emails:', profile.emails);
+    console.log('🔍 DEBUG: Profile _json.email:', profile._json?.email);
+    
+    // SECURITY: Reject OAuth if no email - REQUIRED for Stripe integration
+    if (!email) {
+      console.error('❌ Security: GitHub OAuth rejected - no email provided (required for Stripe)');
+      return done(new Error('GitHub account must have a public email address for Stripe payments. Please set a public email in your GitHub settings.'));
+    }
+    
+    // SECURITY: Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      console.error('❌ Security: Invalid email format from GitHub:', email);
+      return done(new Error('Invalid email format from GitHub OAuth'));
+    }
+    
+    // Check if user exists by github_id
     const result = await pool.query(
       'SELECT * FROM users WHERE github_id = $1',
       [profile.id]
@@ -127,21 +147,23 @@ passport.use(new GitHubStrategy({
     
     let user;
     if (result.rows.length > 0) {
-      // User exists, update basic info only
+      // User exists, update email and GitHub data
       user = result.rows[0];
       await pool.query(
-        'UPDATE users SET updated_at = NOW() WHERE github_id = $1',
-        [profile.id]
+        'UPDATE users SET email = $1, username = $2, updated_at = NOW() WHERE github_id = $3',
+        [email, profile.username, profile.id]
       );
-      console.log('✅ Updated existing user:', user.username);
+      user.email = email;
+      user.username = profile.username;
+      console.log('✅ Updated existing GitHub user:', user.username, user.email);
     } else {
-      // Create new user (removed github_access_token column)
+      // Create new user - ONLY via GitHub OAuth
       const insertResult = await pool.query(
         'INSERT INTO users (github_id, username, email, role, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING *',
-        [profile.id, profile.username, profile.emails?.[0]?.value || '', 'user']
+        [profile.id, profile.username, email, 'user']
       );
       user = insertResult.rows[0];
-      console.log('✅ Created new user:', user.username);
+      console.log('✅ Created new GitHub user:', user.username, user.email);
     }
     
     return done(null, user);
@@ -177,14 +199,24 @@ passport.deserializeUser(async (id, done) => {
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Line 139: GitHub Authentication Routes
+// GITHUB-ONLY AUTHENTICATION ROUTES
 app.get('/api/auth/github', passport.authenticate('github', { scope: ['user:email'] }));
 
 app.get('/api/auth/github/callback', passport.authenticate('github', { failureRedirect: '/api/auth/github' }), async (req, res) => {
   try {
-    console.log(`🔗 GitHub OAuth: Finding/creating user for: ${req.user.username} ${req.user.email}`);
+    console.log(`🔗 GitHub OAuth: Processing callback for: ${req.user.username} ${req.user.email}`);
     
-    // Check if user should be admin and redirect accordingly
+    // SECURITY: Verify user has required data for Stripe
+    if (!req.user || !req.user.email || !req.user.id) {
+      console.error('❌ Security: OAuth callback missing required user data for Stripe');
+      const params = new URLSearchParams({
+        success: 'false',
+        error: 'missing_user_data'
+      });
+      return res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
+    }
+    
+    // Check if user should be admin (based on GitHub username)
     const result = await pool.query(
       'SELECT role FROM users WHERE github_id = $1', 
       [req.user.github_id]
@@ -192,20 +224,28 @@ app.get('/api/auth/github/callback', passport.authenticate('github', { failureRe
     
     const userRole = result.rows.length > 0 ? result.rows[0].role : 'user';
     
+    // ADMIN CHECK: Promote to admin if GitHub username matches (more secure than email)
+    if (req.user.username === 'edgpac' && userRole !== 'admin') {
+      await pool.query(
+        'UPDATE users SET role = $1 WHERE github_id = $2',
+        ['admin', req.user.github_id]
+      );
+      console.log('✅ Auto-promoted user to admin based on GitHub username:', req.user.username);
+    }
+    
     console.log(`✅ GitHub OAuth successful for user: ${req.user.username} ${req.user.email} (${userRole})`);
     
-    // ✅ FIXED: Send users to auth/success for proper login processing
+    // Send users to auth/success for proper login processing
     const params = new URLSearchParams({
       success: 'true',
       userId: req.user.id,
       userName: req.user.username || '',
-      userEmail: req.user.email || ''
+      userEmail: req.user.email
     });
 
     res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
   } catch (error) {
     console.error('❌ GitHub OAuth error:', error);
-    // On error, still try to process through auth/success
     const params = new URLSearchParams({
       success: 'false',
       error: 'oauth_error'
@@ -214,162 +254,41 @@ app.get('/api/auth/github/callback', passport.authenticate('github', { failureRe
   }
 });
 
-// Line 163: Admin Login Endpoints
-app.post('/api/auth/admin/login', async (req, res) => {
-  try {
-    const { password } = req.body;
-    console.log('🔐 Admin login attempt received');
-
-    if (password !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'Invalid admin password' });
-    }
-
-    // Get admin user from database
-    const adminQuery = `SELECT * FROM users WHERE role = 'admin' LIMIT 1`;
-    const adminResult = await pool.query(adminQuery);
-    
-    if (adminResult.rows.length === 0) {
-      return res.status(500).json({ error: 'No admin user found in database' });
-    }
-
-    const adminUser = adminResult.rows[0];
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        admin: true,
-        email: adminUser.email,
-        role: 'admin',
-        user_id: adminUser.id
-      },
-      process.env.JWT_SECRET || 'fallback_secret_key',
-      { expiresIn: '24h' }
-    );
-
-    console.log('✅ Admin login successful, JWT generated');
-
-    res.json({ 
-      success: true, 
-      token,
-      user: {
-        email: adminUser.email,
-        role: adminUser.role,
-        username: adminUser.username
-      }
-    });
-
-  } catch (error) {
-    console.log('❌ Admin login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/admin/login', async (req, res) => {
-  try {
-    const { password } = req.body;
-    console.log('🔐 React Admin login attempt received');
-
-    if (password !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'Invalid admin password' });
-    }
-
-    // Get admin user from database
-    const adminQuery = `SELECT * FROM users WHERE role = 'admin' LIMIT 1`;
-    const adminResult = await pool.query(adminQuery);
-    
-    if (adminResult.rows.length === 0) {
-      return res.status(500).json({ error: 'No admin user found in database' });
-    }
-
-    const adminUser = adminResult.rows[0];
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        admin: true,
-        email: adminUser.email,
-        role: 'admin',
-        user_id: adminUser.id
-      },
-      process.env.JWT_SECRET || 'fallback_secret_key',
-      { expiresIn: '24h' }
-    );
-
-    console.log('✅ Admin login successful, JWT generated');
-
-    res.json({ 
-      success: true, 
-      token,
-      user: {
-        email: adminUser.email,
-        role: adminUser.role,
-        username: adminUser.username
-      }
-    });
-
-  } catch (error) {
-    console.log('❌ React Admin login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Line 251: Missing Frontend API Endpoints
-// Profile/session endpoint that frontend is calling
-app.get('/api/auth/profile/session', async (req, res) => {
-  try {
-    console.log('🔍 DEBUG: Session check - cookies:', req.headers.cookie);
-    console.log('🔍 DEBUG: Session ID from passport:', req.sessionID);
-    console.log('🔍 DEBUG: Passport user:', req.user);
-    
-    // Check if user is authenticated via Passport session
-    if (req.user && req.user.id) {
-      console.log('✅ Session valid for user:', req.user.email);
-      return res.json({
-        success: true,
-        user: {
-          id: req.user.id,
-          username: req.user.username,
-          email: req.user.email,
-          role: req.user.role,
-          github_id: req.user.github_id
-        }
-      });
-    }
-    
-    console.log('❌ No valid session found');
-    res.status(401).json({
-      success: false,
-      error: 'Not authenticated'
-    });
-  } catch (error) {
-    console.error('Session check error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Session check failed'
-    });
-  }
-});
-
-// Session-to-JWT Bridge Endpoint
+// Session-to-JWT Bridge Endpoint (GitHub users only)
 app.post('/api/auth/session-to-jwt', async (req, res) => {
   try {
     console.log('🔄 Session-to-JWT bridge request');
     console.log('🔍 Session ID:', req.sessionID);
-    console.log('🔍 User from session:', req.user);
-    console.log('🔍 Session data:', req.session);
+    console.log('🔍 User from session:', req.user?.email || 'NO_USER');
 
     if (req.user && req.user.id) {
-      console.log('✅ Valid session found for user:', req.user.email || req.user.username);
+      // SECURITY: Verify user still exists and has GitHub ID (GitHub-only)
+      const userCheck = await pool.query(
+        'SELECT id, username, email, role, github_id FROM users WHERE id = $1 AND github_id IS NOT NULL',
+        [req.user.id]
+      );
       
-      // Generate JWT token for this user
+      if (userCheck.rows.length === 0) {
+        console.log('❌ Security: User not found or not a GitHub user');
+        return res.status(401).json({
+          success: false,
+          error: 'GitHub authentication required'
+        });
+      }
+      
+      const dbUser = userCheck.rows[0];
+      console.log('✅ Valid GitHub session found for user:', dbUser.email);
+      
+      // Generate JWT token for GitHub user
       const token = jwt.sign(
         { 
-          id: req.user.id,
-          email: req.user.email,
-          role: req.user.role,
-          github_id: req.user.github_id,
-          username: req.user.username,
+          id: dbUser.id,
+          email: dbUser.email,
+          role: dbUser.role,
+          github_id: dbUser.github_id,
+          username: dbUser.username,
           session_id: req.sessionID,
+          auth_method: 'github',
           iat: Math.floor(Date.now() / 1000)
         },
         process.env.JWT_SECRET || 'fallback_secret_key',
@@ -377,75 +296,64 @@ app.post('/api/auth/session-to-jwt', async (req, res) => {
       );
 
       const userResponse = {
-        id: req.user.id,
-        username: req.user.username,
-        email: req.user.email,
-        role: req.user.role || 'user',
-        github_id: req.user.github_id
+        id: dbUser.id,
+        username: dbUser.username,
+        email: dbUser.email,
+        role: dbUser.role || 'user',
+        github_id: dbUser.github_id,
+        auth_method: 'github'
       };
 
-      console.log('✅ JWT generated for session user:', userResponse.email);
+      console.log('✅ JWT generated for GitHub user:', userResponse.email);
 
       res.json({ 
         success: true,
         token: token,
         user: userResponse,
-        source: 'passport_session'
+        source: 'github_session'
       });
     } else {
-      console.log('❌ No valid Passport session found');
-      console.log('🔍 Debug - req.user:', req.user);
-      console.log('🔍 Debug - req.session:', req.session);
+      console.log('❌ No valid GitHub session found');
       
       res.status(401).json({ 
         success: false,
-        error: 'No valid session found',
-        debug: {
-          hasUser: !!req.user,
-          hasSession: !!req.session,
-          sessionID: req.sessionID
-        }
+        error: 'GitHub authentication required'
       });
     }
   } catch (error) {
     console.error('❌ Session-to-JWT bridge error:', error);
     res.status(500).json({ 
       success: false,
-      error: 'Session bridge failed',
-      details: error.message 
+      error: 'Session bridge failed'
     });
   }
 });
 
-// Enhanced session profile endpoint with better debugging
+// Session profile endpoint (GitHub users only)
 app.get('/api/auth/profile/session', async (req, res) => {
   try {
-    console.log('🔍 Enhanced session check:');
-    console.log('  - Cookies:', req.headers.cookie ? 'Present' : 'Missing');
+    console.log('🔍 GitHub session check:');
     console.log('  - Session ID:', req.sessionID);
-    console.log('  - User object:', req.user ? `${req.user.email || req.user.username} (${req.user.role})` : 'undefined');
-    console.log('  - Session store data:', req.session ? Object.keys(req.session) : 'no session');
+    console.log('  - User:', req.user ? `${req.user.email} (GitHub: ${req.user.github_id})` : 'undefined');
     
-    // Check if user is authenticated via Passport session
+    // Check if user is authenticated via GitHub OAuth
     if (req.user && req.user.id) {
-      console.log('✅ Valid session for user:', req.user.email || req.user.username);
-      
-      // Verify user still exists in database
+      // SECURITY: Verify user is a GitHub user
       const userCheck = await pool.query(
-        'SELECT id, username, email, role, github_id FROM users WHERE id = $1',
+        'SELECT id, username, email, role, github_id FROM users WHERE id = $1 AND github_id IS NOT NULL',
         [req.user.id]
       );
       
       if (userCheck.rows.length === 0) {
-        console.log('❌ User no longer exists in database');
+        console.log('❌ User not found or not a GitHub user');
         return res.status(401).json({
           success: false,
-          error: 'User account not found'
+          error: 'GitHub authentication required'
         });
       }
       
       const dbUser = userCheck.rows[0];
-      console.log('✅ Database user verified:', dbUser.email);
+      console.log('✅ Valid GitHub session for user:', dbUser.email);
       
       return res.json({
         success: true,
@@ -454,38 +362,134 @@ app.get('/api/auth/profile/session', async (req, res) => {
           username: dbUser.username,
           email: dbUser.email,
           role: dbUser.role,
-          github_id: dbUser.github_id
+          github_id: dbUser.github_id,
+          auth_method: 'github'
         },
         session: {
           id: req.sessionID,
-          authenticated: true
+          authenticated: true,
+          auth_method: 'github'
         }
       });
     }
     
-    console.log('❌ No valid session found');
-    console.log('🔍 Debug info:');
-    console.log('  - req.user:', req.user);
-    console.log('  - req.isAuthenticated():', req.isAuthenticated ? req.isAuthenticated() : 'method not available');
-    console.log('  - Session passport:', req.session?.passport);
+    console.log('❌ No valid GitHub session found');
     
     res.status(401).json({
       success: false,
-      error: 'Not authenticated',
-      debug: {
-        hasUser: !!req.user,
-        sessionID: req.sessionID,
-        passportUser: req.session?.passport?.user
-      }
+      error: 'GitHub authentication required'
     });
   } catch (error) {
     console.error('❌ Session check error:', error);
     res.status(500).json({
       success: false,
-      error: 'Session check failed',
-      details: error.message
+      error: 'Session check failed'
     });
   }
+});
+
+// Session repair endpoint (GitHub users only)
+app.post('/api/auth/repair-session', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    // SECURITY: Validate input
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).json({ error: 'Valid User ID required' });
+    }
+    
+    // SECURITY: Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(userId)) {
+      console.log('❌ Security: Invalid UUID format for session repair:', userId);
+      return res.status(400).json({ error: 'Invalid user ID format' });
+    }
+    
+    console.log('🔧 GitHub session repair requested for:', userId);
+    
+    // SECURITY: Only repair sessions for GitHub users
+    const userResult = await pool.query(
+      'SELECT * FROM users WHERE id = $1 AND github_id IS NOT NULL', 
+      [userId]
+    );
+    
+    if (userResult.rows.length === 0) {
+      console.log('❌ User not found or not a GitHub user');
+      return res.status(404).json({ error: 'GitHub user not found' });
+    }
+    
+    const user = userResult.rows[0];
+    
+    // SECURITY: Ensure user is active
+    if (user.is_active === false) {
+      console.log('❌ Security: Attempted session repair for inactive GitHub user:', user.email);
+      return res.status(403).json({ error: 'User account is inactive' });
+    }
+    
+    // Manually login the GitHub user
+    req.login(user, (err) => {
+      if (err) {
+        console.error('❌ Manual login failed for GitHub user:', err);
+        return res.status(500).json({ error: 'Login failed' });
+      }
+      
+      console.log('✅ GitHub session repaired for:', user.email);
+      res.json({ 
+        success: true, 
+        user: { 
+          id: user.id, 
+          username: user.username, 
+          email: user.email, 
+          role: user.role,
+          github_id: user.github_id,
+          auth_method: 'github'
+        }
+      });
+    });
+  } catch (error) {
+    console.error('❌ GitHub session repair error:', error);
+    res.status(500).json({ error: 'Session repair failed' });
+  }
+});
+
+// Logout endpoint
+app.post('/api/auth/logout', (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      console.error('❌ Logout error:', err);
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('❌ Session destruction error:', err);
+        return res.status(500).json({ error: 'Session destruction failed' });
+      }
+      console.log('✅ GitHub user logged out successfully');
+      res.json({ success: true, message: 'Logged out successfully' });
+    });
+  });
+});
+
+// SECURITY: Block any remaining email/password endpoints
+app.all('/api/auth/login', (req, res) => {
+  res.status(403).json({ 
+    error: 'Email/password authentication disabled. Use GitHub OAuth only.',
+    github_oauth: '/api/auth/github'
+  });
+});
+
+app.all('/api/admin/login', (req, res) => {
+  res.status(403).json({ 
+    error: 'Admin email/password login disabled. Use GitHub OAuth only.',
+    github_oauth: '/api/auth/github'
+  });
+});
+
+app.all('/api/auth/register', (req, res) => {
+  res.status(403).json({ 
+    error: 'Email registration disabled. Use GitHub OAuth only.',
+    github_oauth: '/api/auth/github'
+  });
 });
 
 // Session debugging endpoint (remove in production)
