@@ -62,29 +62,45 @@ const useCurrentUser = () => {
  }, []);
 
  // Enhanced session check with retry logic
- const checkSession = useCallback(async (retryCount = 0) => {
-   try {
-     const token = localStorage.getItem('token');
-     console.log('🔐 Checking session, token exists:', !!token);
-     
-     if (!token) {
-       console.log('🔐 No token found, setting user to null');
-       setUser(null);
-       setIsLoading(false);
-       return;
-     }
+const checkSession = useCallback(async (retryCount = 0) => {
+  try {
+    // Skip token checking for cookie-based auth - call session directly
+    console.log('🔐 Checking session with cookies...');
 
-     console.log('🔐 Making session check request...');
-     const response = await fetch('/auth/profile/session', {
-       method: 'GET',
-       credentials: 'include',
-       headers: {
-         'Content-Type': 'application/json',
-         'Authorization': `Bearer ${token}`
-       }
-     });
+    console.log('🔐 Making session check request...');
+    const response = await fetch('/auth/profile/session', {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
 
-     console.log('🔐 Session check response status:', response.status);
+    console.log('🔐 Session check response status:', response.status);
+
+    if (response.ok) {
+      const userData = await response.json();
+      console.log('🔐 Session valid, user data:', userData);
+      setUser(userData);
+    } else {
+      console.log('🔐 Session invalid, clearing user');
+      setUser(null);
+    }
+    
+    setIsLoading(false);
+  } catch (error) {
+    console.error('🔐 Session check error:', error);
+    
+    if (retryCount < 3) {
+      console.log(`🔐 Retrying session check (${retryCount + 1}/3)...`);
+      return checkSession(retryCount + 1);
+    }
+    
+    console.log('🔐 Max retries reached, clearing user');
+    setUser(null);
+    setIsLoading(false);
+  }
+}, []);
 
      // If unauthorized and we haven't tried refreshing yet
      if (response.status === 401 && retryCount === 0) {
