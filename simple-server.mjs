@@ -974,6 +974,90 @@ app.get('/api/admin/templates', requireAdminAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch admin templates' });
   }
 });
+
+// Template upload endpoint for JSON processing
+app.post('/api/templates/upload', requireAdminAuth, async (req, res) => {
+  try {
+    const { workflowJson, templateName, description, price } = req.body;
+    
+    // Validate JSON format
+    let parsedWorkflow;
+    try {
+      parsedWorkflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
+    } catch (error) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid JSON format',
+        details: 'Please ensure your workflow JSON is properly formatted'
+      });
+    }
+
+    // Validate workflow structure
+    if (!parsedWorkflow.nodes || !Array.isArray(parsedWorkflow.nodes)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid workflow structure',
+        details: 'Workflow must contain a nodes array'
+      });
+    }
+    
+    console.log('✅ Template JSON validated successfully');
+    res.json({ 
+      success: true, 
+      message: 'Template validated and processed',
+      nodeCount: parsedWorkflow.nodes.length
+    });
+    
+  } catch (error) {
+    console.error('Template upload error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to process template',
+      details: error.message
+    });
+  }
+});
+
+// ✅ AI Chat Endpoint
+app.post('/api/ask-ai', authenticateJWT, async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ 
+      error: 'Authentication required',
+      message: 'You must be signed in to use the AI chat feature',
+      loginUrl: '/auth/github'
+    });
+  }
+
+  const { prompt, history, templateContext } = req.body;
+  if (!prompt) {
+    return res.status(400).json({ error: 'Prompt is required in the request body.' });
+  }
+
+  try {
+    console.log('🧠 AI chat request by:', req.user.email || req.user.username);
+    
+    // Use smart fallback for now
+    const smartFallback = generateSmartFallback(prompt, templateContext, history);
+    const response = smartFallback.response;
+    
+    await logChatInteraction(
+      templateContext?.templateId || 'general_chat',
+      prompt,
+      response,
+      req.user.id,
+      'smart_fallback'
+    );
+
+    res.json({ response, source: 'smart_fallback' });
+
+  } catch (error) {
+    console.error('❌ Chat error for user:', req.user.email || req.user.username, error);
+    const fallbackResponse = `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`;
+    
+    res.json({ response: fallbackResponse });
+  }
+});
+
 // ✅ FIXED Stripe Checkout Session (removed passport middleware)
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   // ✅ FIXED: Check authentication manually instead of using passport middleware
