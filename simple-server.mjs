@@ -332,6 +332,44 @@ app.post('/api/auth/session-to-jwt', async (req, res) => {
  }
 });
 
+// Session refresh endpoint for frontend compatibility
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    console.log('🔄 Session refresh requested');
+    console.log('🔍 Session ID:', req.sessionID);
+    console.log('🔍 User from session:', req.user?.email || 'NO_USER');
+
+    if (req.user && req.user.id) {
+      // User session exists, return success
+      res.json({
+        success: true,
+        token: 'session', // Use 'session' as token for session-based auth
+        user: {
+          id: req.user.id,
+          username: req.user.username,
+          email: req.user.email,
+          role: req.user.role,
+          isAdmin: req.user.role === 'admin',
+          github_id: req.user.github_id
+        }
+      });
+    } else {
+      // No session found
+      console.log('❌ No session to refresh');
+      res.status(401).json({
+        success: false,
+        error: 'No session found'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Session refresh error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Session refresh failed'
+    });
+  }
+});
+
 // Session profile endpoint (GitHub users only)
 app.get('/api/auth/profile/session', async (req, res) => {
   try {
