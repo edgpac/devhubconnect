@@ -128,9 +128,9 @@ passport.use(new GitHubStrategy({
     
     // SECURITY: Reject OAuth if no email - REQUIRED for Stripe integration
     if (!email) {
-      console.error('❌ Security: GitHub OAuth rejected - no email provided (required for Stripe)');
-      return done(new Error('GitHub account must have a public email address for Stripe payments. Please set a public email in your GitHub settings.'));
-    }
+  console.log('⚠️ GitHub OAuth: No email provided, will collect later for Stripe if needed');
+  email = null; // Set to null, will be collected later
+   }
     
     // SECURITY: Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
