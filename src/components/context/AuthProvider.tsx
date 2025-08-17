@@ -17,160 +17,36 @@ type AuthContextType = {
   login: (token: string, user: User) => void;
   logout: () => void;
   setUser: (user: User) => void;
-  authLocked: boolean;
   isLoading: boolean;
+  checkSession: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Global auth state manager to prevent conflicts
-class AuthStateManager {
-  private isChanging = false;
-  private changeTimeout: NodeJS.Timeout | null = null;
-
-  setState(user: User | null, token: string | null): boolean {
-    // Prevent concurrent auth changes
-    if (this.isChanging) {
-      console.log('🔒 Auth change blocked - another change in progress');
-      return false;
-    }
-
-    this.isChanging = true;
-    console.log('🔐 Auth state changing:', user?.email || 'logout');
-
-    try {
-      if (user && token) {
-        localStorage.setItem('token', token);
-        localStorage.setItem('devhub_user', JSON.stringify(user));
-        console.log('✅ Auth state saved for:', user.email);
-      } else {
-        localStorage.removeItem('token');
-        localStorage.removeItem('devhub_user');
-        console.log('🔓 Auth state cleared');
-      }
-
-      // Release lock after a delay to prevent rapid changes
-      if (this.changeTimeout) {
-        clearTimeout(this.changeTimeout);
-      }
-      
-      this.changeTimeout = setTimeout(() => {
-        this.isChanging = false;
-        console.log('🔓 Auth lock released');
-      }, 2000); // 2 second lock to prevent clearing loops
-
-      return true;
-    } catch (error) {
-      console.error('❌ Auth state change failed:', error);
-      this.isChanging = false;
-      return false;
-    }
-  }
-
-  getState(): { user: User | null; token: string | null } {
-    try {
-      const token = localStorage.getItem('token');
-      const userStr = localStorage.getItem('devhub_user');
-      const user = userStr ? JSON.parse(userStr) : null;
-      return { user, token };
-    } catch (error) {
-      console.error('❌ Failed to get auth state:', error);
-      return { user: null, token: null };
-    }
-  }
-
-  isLocked(): boolean {
-    return this.isChanging;
-  }
-
-  forceUnlock(): void {
-    console.log('🔓 Force unlocking auth state');
-    this.isChanging = false;
-    if (this.changeTimeout) {
-      clearTimeout(this.changeTimeout);
-      this.changeTimeout = null;
-    }
-  }
-}
-
-const authStateManager = new AuthStateManager();
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [authLocked, setAuthLocked] = useState(false);
 
-  // Check if user is logged in on app startup
-  useEffect(() => {
-    const checkAuthStatus = async () => {
-      try {
-        console.log('🔍 DEBUG: AuthProvider checking auth status...');
-        
-        // Check if we should skip verification (during login flow)
-        const skipVerification = sessionStorage.getItem('skip_auth_check');
-        if (skipVerification) {
-          console.log('⏭️ Skipping backend verification during login flow');
-          sessionStorage.removeItem('skip_auth_check');
-          
-          // Load from localStorage only
-          const { user, token: storedToken } = authStateManager.getState();
-          if (user && storedToken) {
-            const enhancedUser = {
-              ...user,
-              isAdmin: user.role === 'admin' || user.isAdmin || false
-            };
-            setCurrentUser(enhancedUser);
-            setToken(storedToken);
-            console.log('✅ Auth loaded from localStorage:', enhancedUser.email);
-          }
-          setIsLoading(false);
-          return;
-        }
-
-        // Load initial state from centralized manager
-        const { user: savedUser, token: savedToken } = authStateManager.getState();
-        
-        if (savedUser && savedToken) {
-          const enhancedUser = {
-            ...savedUser,
-            isAdmin: savedUser.role === 'admin' || savedUser.isAdmin || false
-          };
-          setCurrentUser(enhancedUser);
-          setToken(savedToken);
-          console.log('🔐 Initial auth state loaded:', enhancedUser.email);
-          
-          // Verify with backend (but don't clear on failure during first few seconds)
-          verifyWithBackend(savedToken, enhancedUser);
-        } else {
-          console.log('🔓 No stored auth found');
-          setIsLoading(false);
-        }
-      } catch (error) {
-        console.log('🔍 DEBUG: Auth initialization error:', error);
-        setIsLoading(false);
-      }
-    };
-
-    checkAuthStatus();
-  }, []);
-
-  // Verify auth with backend
-  const verifyWithBackend = async (tokenToVerify: string, userToVerify: User) => {
+  // Simple session check function
+  const checkSession = async () => {
     try {
-      console.log('🔍 Verifying auth with backend for:', userToVerify.email);
+      console.log('🔍 Checking session with backend...');
       
-      const response = await apiCall(API_ENDPOINTS.AUTH_SESSION, {
+      const response = await fetch('/api/auth/profile/session', {
         method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.user) {
-          console.log('✅ Backend verification successful:', data.user.email);
+          console.log('✅ Session valid:', data.user.email || data.user.username);
           
-          // Update user data from backend if different
-          const backendUser = {
+          const user = {
             id: data.user.id,
             email: data.user.email,
             name: data.user.name || data.user.username,
@@ -180,174 +56,134 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             github_id: data.user.github_id
           };
           
-          if (JSON.stringify(backendUser) !== JSON.stringify(userToVerify)) {
-            console.log('🔄 Updating user data from backend');
-            setCurrentUser(backendUser);
-            authStateManager.setState(backendUser, tokenToVerify);
-          }
-        } else {
-          console.log('❌ Backend verification failed - invalid response');
-          handleAuthFailure();
+          setCurrentUser(user);
+          setToken('session'); // Use 'session' as token indicator
+          
+          // Store in localStorage for persistence
+          localStorage.setItem('token', 'session');
+          localStorage.setItem('devhub_user', JSON.stringify(user));
+          
+          return;
+        }
+      }
+      
+      console.log('❌ No valid session found');
+      clearAuth();
+      
+    } catch (error) {
+      console.error('❌ Session check error:', error);
+      // Don't clear auth on network errors, just log them
+    }
+  };
+
+  // Clear authentication state
+  const clearAuth = () => {
+    console.log('🔓 Clearing auth state');
+    setCurrentUser(null);
+    setToken(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('devhub_user');
+  };
+
+  // Initialize auth on app startup
+  useEffect(() => {
+    const initAuth = async () => {
+      console.log('🚀 Initializing Auth Checker...');
+      
+      // Check if we have stored auth
+      const storedToken = localStorage.getItem('token');
+      const storedUserStr = localStorage.getItem('devhub_user');
+      
+      if (storedToken && storedUserStr) {
+        try {
+          const storedUser = JSON.parse(storedUserStr);
+          console.log('🔍 Found stored auth for:', storedUser.email || storedUser.username);
+          
+          // Set immediately to prevent flash
+          setCurrentUser(storedUser);
+          setToken(storedToken);
+          
+          // Verify with backend in the background
+          await checkSession();
+        } catch (error) {
+          console.error('❌ Error parsing stored user:', error);
+          clearAuth();
         }
       } else {
-        console.log('❌ Backend verification failed:', response.status);
-        // FIXED: Give more time for session to establish
-        setTimeout(() => {
-          if (!authStateManager.isLocked()) {
-            console.log('⏰ Delayed auth clearing due to backend failure');
-            handleAuthFailure();
-          }
-        }, 30000); // CHANGED: 30 seconds instead of 5 seconds
+        console.log('🔍 No stored auth found');
+        // Still check for existing session
+        await checkSession();
       }
-    } catch (error) {
-      console.error('❌ Backend verification error:', error);
-      // Don't clear auth on network errors
-    } finally {
+      
       setIsLoading(false);
-    }
-  };
+    };
 
-  const handleAuthFailure = () => {
-    if (authStateManager.isLocked()) {
-      console.log('🔒 Auth failure ignored - state is locked');
-      return;
-    }
+    initAuth();
+  }, []);
 
-    console.log('🔓 Clearing auth due to backend failure');
-    logout();
-  };
-
+  // Login function
   const login = (newToken: string, user: User) => {
-    if (authLocked || authStateManager.isLocked()) {
-      console.log('🔒 Login blocked - auth is locked');
-      return;
-    }
-
-    console.log('🔐 Login attempt for:', user.email);
+    console.log('🔐 Login for:', user.email || user.username);
     
-    // Set auth lock for 10 seconds to prevent clearing (INCREASED)
-    setAuthLocked(true);
-    setTimeout(() => setAuthLocked(false), 10000); // CHANGED: 10 seconds instead of 5
-
     const enhancedUser = {
       ...user,
       isAdmin: user.role === 'admin' || user.isAdmin || false
     };
 
-    // Update state using centralized manager
-    const success = authStateManager.setState(enhancedUser, newToken);
-    if (success) {
-      setCurrentUser(enhancedUser);
-      setToken(newToken);
-      console.log('✅ Login successful for:', enhancedUser.email);
-      
-      // Set skip flag to prevent immediate backend verification
-      sessionStorage.setItem('skip_auth_check', 'true');
-    } else {
-      console.log('❌ Login failed - state manager rejected change');
-    }
+    setCurrentUser(enhancedUser);
+    setToken(newToken);
+    
+    // Store in localStorage
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('devhub_user', JSON.stringify(enhancedUser));
+    
+    console.log('✅ Login successful for:', enhancedUser.email || enhancedUser.username);
   };
 
+  // Set user function (for manual updates)
   const setUser = (user: User) => {
-    if (authLocked || authStateManager.isLocked()) {
-      console.log('🔒 SetUser blocked - auth is locked');
-      return;
-    }
-
-    console.log('🔍 DEBUG: AuthProvider setUser called with:', user);
+    console.log('🔄 Setting user:', user.email || user.username);
     
     const enhancedUser = {
       ...user,
       isAdmin: user.role === 'admin' || user.isAdmin || false
     };
     
-    const success = authStateManager.setState(enhancedUser, 'session');
-    if (success) {
-      setCurrentUser(enhancedUser);
-      setToken('session');
-      
-      // Set flag to skip backend verification on next auth check
-      sessionStorage.setItem('skip_auth_check', 'true');
-      
-      console.log('✅ User set via AuthProvider:', enhancedUser.email, 'Role:', enhancedUser.role);
-    }
+    setCurrentUser(enhancedUser);
+    setToken('session');
+    
+    localStorage.setItem('token', 'session');
+    localStorage.setItem('devhub_user', JSON.stringify(enhancedUser));
+    
+    console.log('✅ User updated:', enhancedUser.email || enhancedUser.username);
   };
 
+  // Logout function
   const logout = async () => {
-    if (authLocked || authStateManager.isLocked()) {
-      console.log('🔒 Logout blocked - auth is locked');
-      return;
-    }
-
+    console.log('🔐 Starting logout...');
+    
     try {
-      console.log('🔍 DEBUG: Attempting logout...');
-      await apiCall(API_ENDPOINTS.AUTH_LOGOUT, {
+      // Call backend logout
+      await fetch('/api/auth/logout', {
         method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       console.log('✅ Backend logout successful');
     } catch (error) {
       console.error('❌ Backend logout error:', error);
     }
 
-    // Clear all auth data using centralized manager
-    const success = authStateManager.setState(null, null);
-    if (success) {
-      setCurrentUser(null);
-      setToken(null);
-      
-      // Clear any skip flags
-      sessionStorage.removeItem('skip_auth_check');
-      sessionStorage.removeItem('permanent_session');
-      
-      console.log('✅ Auth data cleared, redirecting to home');
-      window.location.href = '/';
-    }
+    // Clear local state
+    clearAuth();
+    
+    console.log('✅ Logout complete, redirecting...');
+    window.location.href = '/';
   };
 
-  // Listen for storage changes from other tabs/components
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (authLocked || authStateManager.isLocked()) {
-        console.log('🔒 Storage change ignored - auth is locked');
-        return;
-      }
-
-      if (e.key === 'token' || e.key === 'devhub_user') {
-        console.log('🔐 Storage changed externally:', e.key);
-        
-        // Reload auth state
-        const { user, token: storedToken } = authStateManager.getState();
-        if (user) {
-          const enhancedUser = {
-            ...user,
-            isAdmin: user.role === 'admin' || user.isAdmin || false
-          };
-          setCurrentUser(enhancedUser);
-        } else {
-          setCurrentUser(null);
-        }
-        setToken(storedToken);
-        
-        if (user && storedToken) {
-          console.log('✅ Auth reloaded from storage:', user.email);
-        } else {
-          console.log('🔓 Auth cleared from storage');
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [authLocked]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      authStateManager.forceUnlock();
-    };
-  }, []);
-
-  // Show loading state while checking auth
+  // Show loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -365,9 +201,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       token, 
       login, 
       logout, 
-      setUser, 
-      authLocked: authLocked || authStateManager.isLocked(),
-      isLoading 
+      setUser,
+      isLoading,
+      checkSession
     }}>
       {children}
     </AuthContext.Provider>
