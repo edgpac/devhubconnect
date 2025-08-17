@@ -104,9 +104,9 @@ app.use(session({
   }),
   cookie: { 
     secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
+    httpOnly: false, // ✅ CHANGED: Allow frontend to read session
     maxAge: 24 * 60 * 60 * 1000,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax' // ✅ ADDED: CORS support
   }
 }));
 
