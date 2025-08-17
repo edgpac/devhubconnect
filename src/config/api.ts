@@ -11,11 +11,11 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL ||
 
 // API endpoints
 export const API_ENDPOINTS = {
-  // Auth endpoints
-  AUTH_SESSION: `${API_BASE_URL}/api/auth/profile/session`,
-  AUTH_LOGOUT: `${API_BASE_URL}/api/auth/logout`,
-  AUTH_GITHUB: `${API_BASE_URL}/api/auth/github`,
-  AUTH_ADMIN_LOGIN: `${API_BASE_URL}/api/auth/admin/login`,
+  // Auth endpoints - Fixed to match authRoutes.ts
+  AUTH_SESSION: `${API_BASE_URL}/auth/profile/session`,
+  AUTH_LOGOUT: `${API_BASE_URL}/auth/logout`,
+  AUTH_GITHUB: `${API_BASE_URL}/auth/github`,
+  AUTH_ADMIN_LOGIN: `${API_BASE_URL}/auth/admin/login`,
   
   // Template endpoints
   TEMPLATES: `${API_BASE_URL}/api/templates`,
