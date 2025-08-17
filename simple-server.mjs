@@ -104,66 +104,53 @@ app.use(session({
   }),
   cookie: { 
     secure: process.env.NODE_ENV === 'production',
-    httpOnly: false, // ✅ CHANGED: Allow frontend to read session
+    httpOnly: false,
     maxAge: 24 * 60 * 60 * 1000,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax' // ✅ ADDED: CORS support
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
   }
 }));
 
-// Line 95: Passport GitHub Strategy (GITHUB-ONLY AUTHENTICATION)
+// Line 95: FIXED GitHub OAuth Strategy
 passport.use(new GitHubStrategy({
   clientID: process.env.GITHUB_CLIENT_ID,
   clientSecret: process.env.GITHUB_CLIENT_SECRET,
   callbackURL: `${frontendUrl}/api/auth/github/callback`
 }, async (accessToken, refreshToken, profile, done) => {
   try {
-    // STRICT: Only GitHub OAuth is allowed - email must come from GitHub
-    const email = profile.emails?.[0]?.value || 
-                  profile._json?.email || 
-                  null;
-    
-    console.log('🔗 GitHub OAuth: Processing user:', profile.username, email || 'NO_EMAIL');
-    console.log('🔍 DEBUG: Profile emails:', profile.emails);
-    console.log('🔍 DEBUG: Profile _json.email:', profile._json?.email);
-    
-    // SECURITY: Reject OAuth if no email - REQUIRED for Stripe integration
-    if (!email) {
-  console.log('⚠️ GitHub OAuth: No email provided, will collect later for Stripe if needed');
-  email = null; // Set to null, will be collected later
-   }
-    
-    // SECURITY: Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      console.error('❌ Security: Invalid email format from GitHub:', email);
-      return done(new Error('Invalid email format from GitHub OAuth'));
-    }
+    const githubEmail = profile.emails?.[0]?.value;
+    const githubUsername = profile.username || `user_${profile.id}`;
+    const githubId = profile.id;
+
+    console.log('🔗 GitHub OAuth: Processing user:', githubUsername, githubEmail || 'NO_EMAIL');
     
     // Check if user exists by github_id
     const result = await pool.query(
       'SELECT * FROM users WHERE github_id = $1',
-      [profile.id]
+      [githubId]
     );
     
     let user;
     if (result.rows.length > 0) {
-      // User exists, update email and GitHub data
+      // User exists, update username and email if provided
       user = result.rows[0];
+      const updateEmail = githubEmail && githubEmail !== user.email ? githubEmail : user.email;
+      
       await pool.query(
-        'UPDATE users SET email = $1, username = $2, updated_at = NOW() WHERE github_id = $3',
-        [email, profile.username, profile.id]
+        'UPDATE users SET username = $1, email = $2, updated_at = NOW() WHERE github_id = $3',
+        [githubUsername, updateEmail, githubId]
       );
-      user.email = email;
-      user.username = profile.username;
-      console.log('✅ Updated existing GitHub user:', user.username, user.email);
+      
+      user.username = githubUsername;
+      user.email = updateEmail;
+      console.log('✅ Updated existing GitHub user:', githubUsername, updateEmail || 'NULL');
     } else {
-      // Create new user - ONLY via GitHub OAuth
+      // Create new user - email can be null
       const insertResult = await pool.query(
         'INSERT INTO users (github_id, username, email, role, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING *',
-        [profile.id, profile.username, email, 'user']
+        [githubId, githubUsername, githubEmail, 'user']
       );
       user = insertResult.rows[0];
-      console.log('✅ Created new GitHub user:', user.username, user.email);
+      console.log('✅ Created new GitHub user:', githubUsername, githubEmail || 'NULL');
     }
     
     return done(null, user);
@@ -174,7 +161,7 @@ passport.use(new GitHubStrategy({
 }));
 
 passport.serializeUser((user, done) => {
-  console.log('🔐 SERIALIZE USER:', user.email, 'ID:', user.id);
+  console.log('🔐 SERIALIZE USER:', user.username, 'ID:', user.id);
   done(null, user.id);
 });
 
@@ -184,7 +171,7 @@ passport.deserializeUser(async (id, done) => {
     const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
     if (result.rows.length > 0) {
       const user = result.rows[0];
-      console.log('✅ DESERIALIZE SUCCESS:', user.email);
+      console.log('✅ DESERIALIZE SUCCESS:', user.username, 'Email:', user.email || 'NULL');
       done(null, user);
     } else {
       console.log('❌ DESERIALIZE FAILED: No user found for ID:', id);
@@ -204,11 +191,11 @@ app.get('/api/auth/github', passport.authenticate('github', { scope: ['user:emai
 
 app.get('/api/auth/github/callback', passport.authenticate('github', { failureRedirect: '/api/auth/github' }), async (req, res) => {
   try {
-    console.log(`🔗 GitHub OAuth: Processing callback for: ${req.user.username} ${req.user.email}`);
+    console.log(`🔗 GitHub OAuth: Processing callback for: ${req.user.username}`);
     
-    // SECURITY: Verify user has required data for Stripe
-    if (!req.user || !req.user.email || !req.user.id) {
-      console.error('❌ Security: OAuth callback missing required user data for Stripe');
+    // Check essential data
+    if (!req.user || !req.user.id || !req.user.username) {
+      console.error('❌ Security: OAuth callback missing essential user data');
       const params = new URLSearchParams({
         success: 'false',
         error: 'missing_user_data'
@@ -216,7 +203,7 @@ app.get('/api/auth/github/callback', passport.authenticate('github', { failureRe
       return res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
     }
     
-    // Check if user should be admin (based on GitHub username)
+    // Check and update admin role based on username
     const result = await pool.query(
       'SELECT role FROM users WHERE github_id = $1', 
       [req.user.github_id]
@@ -224,7 +211,7 @@ app.get('/api/auth/github/callback', passport.authenticate('github', { failureRe
     
     const userRole = result.rows.length > 0 ? result.rows[0].role : 'user';
     
-    // ADMIN CHECK: Promote to admin if GitHub username matches (more secure than email)
+    // ADMIN CHECK: Promote to admin if GitHub username matches
     if (req.user.username === 'edgpac' && userRole !== 'admin') {
       await pool.query(
         'UPDATE users SET role = $1 WHERE github_id = $2',
@@ -233,14 +220,15 @@ app.get('/api/auth/github/callback', passport.authenticate('github', { failureRe
       console.log('✅ Auto-promoted user to admin based on GitHub username:', req.user.username);
     }
     
-    console.log(`✅ GitHub OAuth successful for user: ${req.user.username} ${req.user.email} (${userRole})`);
+    console.log(`✅ GitHub OAuth successful for user: ${req.user.username} (${userRole})`);
     
     // Send users to auth/success for proper login processing
     const params = new URLSearchParams({
       success: 'true',
       userId: req.user.id,
       userName: req.user.username || '',
-      userEmail: req.user.email
+      userEmail: req.user.email || '',
+      hasEmail: req.user.email ? 'true' : 'false'
     });
 
     res.redirect(`${frontendUrl}/auth/success?${params.toString()}`);
@@ -492,83 +480,6 @@ app.all('/api/auth/register', (req, res) => {
   });
 });
 
-// Session debugging endpoint (remove in production)
-app.get('/api/debug/session', async (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(404).json({ error: 'Debug endpoint not available in production' });
-  }
-  
-  try {
-    console.log('🔍 Session debug endpoint called');
-    
-    const sessionInfo = {
-      sessionID: req.sessionID,
-      hasUser: !!req.user,
-      user: req.user,
-      sessionData: req.session,
-      isAuthenticated: req.isAuthenticated ? req.isAuthenticated() : 'method not available',
-      cookies: req.headers.cookie,
-      passportSession: req.session?.passport,
-      headers: {
-        authorization: req.headers.authorization,
-        cookie: req.headers.cookie,
-        'user-agent': req.headers['user-agent']
-      }
-    };
-    
-    console.log('📊 Session debug info:', JSON.stringify(sessionInfo, null, 2));
-    
-    res.json({
-      success: true,
-      debug: sessionInfo,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ Session debug error:', error);
-    res.status(500).json({ 
-      error: 'Debug failed',
-      details: error.message 
-    });
-  }
-});
-
-// Simple session repair endpoint
-app.post('/api/auth/repair-session', async (req, res) => {
-  try {
-    const { userId } = req.body;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID required' });
-    }
-    
-    // Get user from database
-    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
-    
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    const user = userResult.rows[0];
-    
-    // Manually login the user
-    req.login(user, (err) => {
-      if (err) {
-        console.error('❌ Manual login failed:', err);
-        return res.status(500).json({ error: 'Login failed' });
-      }
-      
-      console.log('✅ Session repaired for:', user.email);
-      res.json({ 
-        success: true, 
-        user: { id: user.id, username: user.username, email: user.email, role: user.role }
-      });
-    });
-  } catch (error) {
-    console.error('❌ Session repair error:', error);
-    res.status(500).json({ error: 'Session repair failed' });
-  }
-});
-
 // Session health check endpoint
 app.get('/api/auth/health', async (req, res) => {
   try {
@@ -621,23 +532,6 @@ app.get('/api/user/profile', (req, res) => {
     });
   }
 });
-
-// Logout endpoint
-app.post('/api/auth/logout', (req, res) => {
-  req.logout((err) => {
-    if (err) {
-      return res.status(500).json({ error: 'Logout failed' });
-    }
-    req.session.destroy((err) => {
-      if (err) {
-        return res.status(500).json({ error: 'Session destruction failed' });
-      }
-      res.json({ success: true, message: 'Logged out successfully' });
-    });
-  });
-});
-
-// ✅ ADD THESE MISSING HELPER FUNCTIONS AND ENDPOINTS AFTER LINE 327
 
 // Helper function to convert database field names to frontend format
 function convertFieldNames(template) {
