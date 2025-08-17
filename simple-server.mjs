@@ -337,6 +337,216 @@ app.get('/api/auth/profile/session', async (req, res) => {
   }
 });
 
+// Session-to-JWT Bridge Endpoint
+app.post('/api/auth/session-to-jwt', async (req, res) => {
+  try {
+    console.log('🔄 Session-to-JWT bridge request');
+    console.log('🔍 Session ID:', req.sessionID);
+    console.log('🔍 User from session:', req.user);
+    console.log('🔍 Session data:', req.session);
+
+    if (req.user && req.user.id) {
+      console.log('✅ Valid session found for user:', req.user.email || req.user.username);
+      
+      // Generate JWT token for this user
+      const token = jwt.sign(
+        { 
+          id: req.user.id,
+          email: req.user.email,
+          role: req.user.role,
+          github_id: req.user.github_id,
+          username: req.user.username,
+          session_id: req.sessionID,
+          iat: Math.floor(Date.now() / 1000)
+        },
+        process.env.JWT_SECRET || 'fallback_secret_key',
+        { expiresIn: '24h' }
+      );
+
+      const userResponse = {
+        id: req.user.id,
+        username: req.user.username,
+        email: req.user.email,
+        role: req.user.role || 'user',
+        github_id: req.user.github_id
+      };
+
+      console.log('✅ JWT generated for session user:', userResponse.email);
+
+      res.json({ 
+        success: true,
+        token: token,
+        user: userResponse,
+        source: 'passport_session'
+      });
+    } else {
+      console.log('❌ No valid Passport session found');
+      console.log('🔍 Debug - req.user:', req.user);
+      console.log('🔍 Debug - req.session:', req.session);
+      
+      res.status(401).json({ 
+        success: false,
+        error: 'No valid session found',
+        debug: {
+          hasUser: !!req.user,
+          hasSession: !!req.session,
+          sessionID: req.sessionID
+        }
+      });
+    }
+  } catch (error) {
+    console.error('❌ Session-to-JWT bridge error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Session bridge failed',
+      details: error.message 
+    });
+  }
+});
+
+// Enhanced session profile endpoint with better debugging
+app.get('/api/auth/profile/session', async (req, res) => {
+  try {
+    console.log('🔍 Enhanced session check:');
+    console.log('  - Cookies:', req.headers.cookie ? 'Present' : 'Missing');
+    console.log('  - Session ID:', req.sessionID);
+    console.log('  - User object:', req.user ? `${req.user.email || req.user.username} (${req.user.role})` : 'undefined');
+    console.log('  - Session store data:', req.session ? Object.keys(req.session) : 'no session');
+    
+    // Check if user is authenticated via Passport session
+    if (req.user && req.user.id) {
+      console.log('✅ Valid session for user:', req.user.email || req.user.username);
+      
+      // Verify user still exists in database
+      const userCheck = await pool.query(
+        'SELECT id, username, email, role, github_id FROM users WHERE id = $1',
+        [req.user.id]
+      );
+      
+      if (userCheck.rows.length === 0) {
+        console.log('❌ User no longer exists in database');
+        return res.status(401).json({
+          success: false,
+          error: 'User account not found'
+        });
+      }
+      
+      const dbUser = userCheck.rows[0];
+      console.log('✅ Database user verified:', dbUser.email);
+      
+      return res.json({
+        success: true,
+        user: {
+          id: dbUser.id,
+          username: dbUser.username,
+          email: dbUser.email,
+          role: dbUser.role,
+          github_id: dbUser.github_id
+        },
+        session: {
+          id: req.sessionID,
+          authenticated: true
+        }
+      });
+    }
+    
+    console.log('❌ No valid session found');
+    console.log('🔍 Debug info:');
+    console.log('  - req.user:', req.user);
+    console.log('  - req.isAuthenticated():', req.isAuthenticated ? req.isAuthenticated() : 'method not available');
+    console.log('  - Session passport:', req.session?.passport);
+    
+    res.status(401).json({
+      success: false,
+      error: 'Not authenticated',
+      debug: {
+        hasUser: !!req.user,
+        sessionID: req.sessionID,
+        passportUser: req.session?.passport?.user
+      }
+    });
+  } catch (error) {
+    console.error('❌ Session check error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Session check failed',
+      details: error.message
+    });
+  }
+});
+
+// Session debugging endpoint (remove in production)
+app.get('/api/debug/session', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Debug endpoint not available in production' });
+  }
+  
+  try {
+    console.log('🔍 Session debug endpoint called');
+    
+    const sessionInfo = {
+      sessionID: req.sessionID,
+      hasUser: !!req.user,
+      user: req.user,
+      sessionData: req.session,
+      isAuthenticated: req.isAuthenticated ? req.isAuthenticated() : 'method not available',
+      cookies: req.headers.cookie,
+      passportSession: req.session?.passport,
+      headers: {
+        authorization: req.headers.authorization,
+        cookie: req.headers.cookie,
+        'user-agent': req.headers['user-agent']
+      }
+    };
+    
+    console.log('📊 Session debug info:', JSON.stringify(sessionInfo, null, 2));
+    
+    res.json({
+      success: true,
+      debug: sessionInfo,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Session debug error:', error);
+    res.status(500).json({ 
+      error: 'Debug failed',
+      details: error.message 
+    });
+  }
+});
+
+// Session health check endpoint
+app.get('/api/auth/health', async (req, res) => {
+  try {
+    // Check database connection
+    const dbTest = await pool.query('SELECT NOW() as timestamp');
+    
+    // Check session store
+    const sessionStoreTest = req.sessionStore ? 'connected' : 'missing';
+    
+    // Check if user session exists
+    const userStatus = req.user ? 'authenticated' : 'not_authenticated';
+    
+    res.json({
+      success: true,
+      health: {
+        database: 'connected',
+        sessionStore: sessionStoreTest,
+        userStatus: userStatus,
+        timestamp: dbTest.rows[0].timestamp
+      },
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    console.error('❌ Health check error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Health check failed',
+      details: error.message 
+    });
+  }
+});
+
 // User profile endpoint
 app.get('/api/user/profile', (req, res) => {
   if (req.user) {
