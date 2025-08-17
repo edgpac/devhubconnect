@@ -1289,3 +1289,13 @@ app.get('/api/additional-endpoint', (req, res) => {
   res.json({ message: 'Additional endpoint placeholder' });
 });
 */
+// ✅ SPA ROUTING FIX: Serve React app for all non-API routes
+app.get('*', (req, res) => {
+  // Don't interfere with API routes
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
+  
+  // Serve React app for all other routes
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
