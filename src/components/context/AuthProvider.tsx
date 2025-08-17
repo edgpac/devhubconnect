@@ -191,13 +191,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         console.log('❌ Backend verification failed:', response.status);
-        // Don't immediately clear auth - might be temporary backend issue
+        // FIXED: Give more time for session to establish
         setTimeout(() => {
           if (!authStateManager.isLocked()) {
             console.log('⏰ Delayed auth clearing due to backend failure');
             handleAuthFailure();
           }
-        }, 5000); // Wait 5 seconds before clearing
+        }, 30000); // CHANGED: 30 seconds instead of 5 seconds
       }
     } catch (error) {
       console.error('❌ Backend verification error:', error);
@@ -225,9 +225,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     console.log('🔐 Login attempt for:', user.email);
     
-    // Set auth lock for 5 seconds to prevent clearing
+    // Set auth lock for 10 seconds to prevent clearing (INCREASED)
     setAuthLocked(true);
-    setTimeout(() => setAuthLocked(false), 5000);
+    setTimeout(() => setAuthLocked(false), 10000); // CHANGED: 10 seconds instead of 5
 
     const enhancedUser = {
       ...user,

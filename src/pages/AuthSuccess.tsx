@@ -37,7 +37,7 @@ export const AuthSuccess = () => {
           return;
         }
 
-        if (!userId || !userEmail) {
+        if (!userId || !userName) {
           console.log('❌ Missing OAuth parameters');
           setError('Missing authentication parameters. Please try logging in again.');
           setProcessing(false);
@@ -47,33 +47,29 @@ export const AuthSuccess = () => {
         console.log('✅ OAuth parameters received:', { userId, userName, userEmail });
         setCurrentStep('processing');
 
-        // Set skip flag to prevent backend verification during login
-        sessionStorage.setItem('skip_auth_check', 'true');
-
         // Create user object from URL parameters
         const urlUser = {
           id: userId,
           username: userName || '',
-          email: userEmail,
+          email: userEmail || '',
           name: userName || '',
-          role: 'user', // Will be updated from backend if needed
+          role: 'user',
           github_id: userId
         };
 
-        console.log('🔐 Attempting initial login with URL data:', urlUser.email);
+        console.log('🔐 Attempting login with URL data:', urlUser.username);
         setCurrentStep('setting_session');
 
-        // First, login with URL data to establish immediate auth state
-        // This prevents the auth clearing loop by giving the user immediate access
+        // Login with URL data to establish immediate auth state
         const tempToken = `temp_${userId}_${Date.now()}`;
         login(tempToken, urlUser);
 
-        // Wait a moment for auth state to settle
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // FIXED: Wait longer for auth state to settle
+        await new Promise(resolve => setTimeout(resolve, 3000)); // 3 seconds instead of 1
 
         setCurrentStep('backend_sync');
 
-        // Now try to get proper JWT token from backend session
+        // Try to get proper JWT token from backend session
         try {
           console.log('🔄 Converting session to JWT token...');
           
@@ -108,59 +104,16 @@ export const AuthSuccess = () => {
               setCurrentStep('complete');
             } else {
               console.log('⚠️ JWT conversion failed, using URL data');
-              setCurrentStep('fallback');
+              setCurrentStep('complete');
             }
           } else {
             console.log('⚠️ JWT endpoint failed, using URL data');
-            setCurrentStep('fallback');
+            setCurrentStep('complete');
           }
         } catch (jwtError) {
           console.log('⚠️ JWT conversion error, using URL data:', jwtError);
-          setCurrentStep('fallback');
+          setCurrentStep('complete');
         }
-
-        // Fallback: Try the original session endpoint
-        if (currentStep === 'fallback') {
-          try {
-            console.log('🔄 Fallback: Checking original session endpoint...');
-            
-            const sessionResponse = await apiCall(API_ENDPOINTS.AUTH_SESSION, {
-              method: 'GET',
-            });
-
-            if (sessionResponse.ok) {
-              const sessionData = await sessionResponse.json();
-              if (sessionData.success && sessionData.user) {
-                console.log('✅ Fallback session validated:', sessionData.user.email);
-                
-                // Update with session data
-                const sessionUser = {
-                  id: sessionData.user.id,
-                  username: sessionData.user.username,
-                  email: sessionData.user.email,
-                  name: sessionData.user.username || sessionData.user.name || '',
-                  role: sessionData.user.role || 'user',
-                  isAdmin: sessionData.user.role === 'admin',
-                  github_id: sessionData.user.github_id
-                };
-
-                console.log('🔄 Updating auth with session data...');
-                login('session', sessionUser);
-                
-                console.log('✅ Authentication complete with session for:', sessionUser.email);
-                setCurrentStep('complete');
-              }
-            }
-          } catch (sessionError) {
-            console.log('⚠️ Session fallback also failed, keeping URL data:', sessionError);
-            setCurrentStep('complete');
-          }
-        }
-
-        // Remove the skip flag after processing
-        setTimeout(() => {
-          sessionStorage.removeItem('skip_auth_check');
-        }, 5000);
 
         console.log('🎉 OAuth processing complete, showing success...');
         setProcessing(false);
@@ -168,11 +121,11 @@ export const AuthSuccess = () => {
         // Show success message
         toast.success("Login successful! Welcome to DevHub Connect");
 
-        // Redirect to dashboard after a brief delay
+        // FIXED: Longer redirect delay
         setTimeout(() => {
           console.log('🔍 DEBUG: Redirecting to dashboard');
           navigate('/dashboard', { replace: true });
-        }, 1500);
+        }, 3000); // 3 seconds instead of 1.5
 
       } catch (error) {
         console.error('❌ OAuth processing error:', error);
@@ -181,8 +134,8 @@ export const AuthSuccess = () => {
       }
     };
 
-    // Add a small delay to ensure the component mounts properly
-    const timer = setTimeout(processOAuthCallback, 100);
+    // FIXED: Longer initial delay
+    const timer = setTimeout(processOAuthCallback, 500); // 500ms instead of 100ms
     
     return () => clearTimeout(timer);
   }, [searchParams, login, navigate]);
@@ -229,8 +182,6 @@ export const AuthSuccess = () => {
         return 'Setting up your session...';
       case 'backend_sync':
         return 'Syncing with backend systems...';
-      case 'fallback':
-        return 'Ensuring session stability...';
       case 'complete':
         return 'Authentication complete!';
       default:
@@ -274,7 +225,7 @@ export const AuthSuccess = () => {
             </div>
             <div className="flex items-center text-sm">
               <div className={`w-2 h-2 rounded-full mr-3 ${
-                currentStep === 'setting_session' || currentStep === 'backend_sync' || currentStep === 'fallback' 
+                currentStep === 'setting_session' || currentStep === 'backend_sync' 
                   ? 'bg-blue-500 animate-pulse' 
                   : currentStep === 'complete' 
                     ? 'bg-green-500' 
@@ -284,7 +235,7 @@ export const AuthSuccess = () => {
             </div>
             <div className="flex items-center text-sm">
               <div className={`w-2 h-2 rounded-full mr-3 ${
-                currentStep === 'backend_sync' || currentStep === 'fallback'
+                currentStep === 'backend_sync'
                   ? 'bg-blue-500 animate-pulse'
                   : currentStep === 'complete'
                     ? 'bg-green-500'
