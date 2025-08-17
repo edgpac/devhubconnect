@@ -95,19 +95,22 @@ const requireAdminAuth = async (req, res, next) => {
 
 // Line 84: Session Configuration
 app.use(session({
- secret: process.env.SESSION_SECRET,
- resave: false,
- saveUninitialized: false,
- store: new pgSession({
-   pool: pool,
-   tableName: 'session'
- }),
- cookie: { 
-   secure: process.env.NODE_ENV === 'production',
-   httpOnly: false,
-   maxAge: 24 * 60 * 60 * 1000,
-   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
- }
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  store: new pgSession({
+    pool: pool,
+    tableName: 'session',
+    errorLog: console.error  // Add error logging
+  }),
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,  // Change back to true for security
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'lax',  // Use 'lax' instead of 'none'
+    path: '/'  // Ensure cookie works for all paths
+  },
+  name: 'devhub.sid'  // Custom session name
 }));
 
 // Line 95: FIXED GitHub OAuth Strategy
