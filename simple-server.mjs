@@ -1250,7 +1250,7 @@ Ask me specific questions like:
 });
 
 // Line 375: Admin Template List Endpoint
-app.get('/api/admin/templates', requireGitHubAdmin, async (req, res) => {
+app.get('/api/admin/templates', requireAdminAuth, async (req, res) => {
   try {
     console.log('📋 Admin fetching template list:', req.user.email || req.user.username);
     const result = await pool.query(`
@@ -1407,7 +1407,7 @@ app.get('/api/purchases', async (req, res) => {
 });
 
 // Line 489: Set Admin Role Endpoint
-app.post('/api/admin/set-admin-role', requireGitHubAdmin, async (req, res) => {
+app.post('/api/admin/set-admin-role', requireAdminAuth, async (req, res) => {
   try {
     console.log('🔐 Admin role change requested by:', req.user.email || req.user.username);
     const { userId, role } = req.body;
