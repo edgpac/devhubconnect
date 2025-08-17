@@ -22,6 +22,7 @@ const frontendUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'produ
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const app = express();
+app.set('trust proxy', 1);
 
 // Middleware Setup
 app.use(express.json({ limit: '10mb' }));
