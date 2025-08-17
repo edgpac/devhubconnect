@@ -31,158 +31,49 @@ const useCurrentUser = () => {
  const [isLoading, setIsLoading] = useState(true);
  const [authError, setAuthError] = useState<string | null>(null);
 
- // Function to refresh token
- const refreshToken = useCallback(async () => {
+ // Enhanced session check with retry logic
+ const checkSession = useCallback(async (retryCount = 0) => {
    try {
-     console.log('🔄 Attempting token refresh...');
-     const response = await fetch('/api/auth/refresh', {
-       method: 'POST',
+     // Skip token checking for cookie-based auth - call session directly
+     console.log('🔐 Checking session with cookies...');
+
+     console.log('🔐 Making session check request...');
+     const response = await fetch('/auth/profile/session', {
+       method: 'GET',
        credentials: 'include',
        headers: {
          'Content-Type': 'application/json'
        }
      });
 
-     console.log('🔄 Token refresh response status:', response.status);
+     console.log('🔐 Session check response status:', response.status);
 
      if (response.ok) {
-       const data = await response.json();
-       if (data.token) {
-         localStorage.setItem('token', data.token);
-         console.log('✅ Token refresh successful');
-         return true;
-       }
-     }
-     console.log('❌ Token refresh failed');
-     return false;
-   } catch (error) {
-     console.error('❌ Token refresh failed:', error);
-     return false;
-   }
- }, []);
-
- // Enhanced session check with retry logic
-const checkSession = useCallback(async (retryCount = 0) => {
-  try {
-    // Skip token checking for cookie-based auth - call session directly
-    console.log('🔐 Checking session with cookies...');
-
-    console.log('🔐 Making session check request...');
-    const response = await fetch('/auth/profile/session', {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log('🔐 Session check response status:', response.status);
-
-    if (response.ok) {
-      const userData = await response.json();
-      console.log('🔐 Session valid, user data:', userData);
-      setUser(userData);
-    } else {
-      console.log('🔐 Session invalid, clearing user');
-      setUser(null);
-    }
-    
-    setIsLoading(false);
-  } catch (error) {
-    console.error('🔐 Session check error:', error);
-    
-    if (retryCount < 3) {
-      console.log(`🔐 Retrying session check (${retryCount + 1}/3)...`);
-      return checkSession(retryCount + 1);
-    }
-    
-    console.log('🔐 Max retries reached, clearing user');
-    setUser(null);
-    setIsLoading(false);
-  }
-}, []);
-
-     // If unauthorized and we haven't tried refreshing yet
-     if (response.status === 401 && retryCount === 0) {
-       console.log('🔄 Token expired, attempting refresh...');
-       const refreshSuccess = await refreshToken();
-       
-       if (refreshSuccess) {
-         // Retry the session check with new token
-         console.log('🔄 Retrying session check with new token...');
-         return checkSession(1);
-       } else {
-         // Refresh failed, clear auth data
-         console.log('❌ Refresh failed, clearing auth data');
-         localStorage.removeItem('token');
-         localStorage.removeItem('devhub_user');
-         localStorage.removeItem('admin_auth');
-         setUser(null);
-         setAuthError('Session expired. Please sign in again.');
-         setIsLoading(false);
-         return;
-       }
-     }
-
-     if (response.ok) {
-       const data = await response.json();
-       console.log('✅ Session check successful, user data:', data.user ? 'present' : 'missing');
-       if (data.user) {
-         const userData = {
-           id: data.user.id,
-           email: data.user.email || '',
-           name: data.user.username || data.user.name || data.user.email?.split('@')[0] || 'User',
-           avatar: data.user.avatar_url,
-           isAdmin: data.user.isAdmin || data.user.role === 'admin',
-           role: data.user.role || (data.user.isAdmin ? 'admin' : 'user')
-         };
-         
-         console.log('✅ Setting user data:', userData.email);
-         setUser(userData);
-         setAuthError(null);
-         
-         // Update localStorage with fresh data
-         localStorage.setItem('devhub_user', JSON.stringify(userData));
-         setIsLoading(false);
-         return;
-       }
-     }
-
-     // If we get here, session check failed
-     throw new Error(`Session check failed with status: ${response.status}`);
-     
-   } catch (error) {
-     console.error('❌ Session check error:', error);
-     
-     // Fallback to localStorage data if available
-     const savedUser = localStorage.getItem('devhub_user');
-     const adminAuth = localStorage.getItem('admin_auth');
-     
-     console.log('🔐 Falling back to localStorage, savedUser exists:', !!savedUser);
-     
-     if (savedUser) {
-       try {
-         const userData = JSON.parse(savedUser);
-         console.log('✅ Using localStorage user data:', userData.email);
-         setUser({
-           ...userData,
-           isAdmin: userData.isAdmin || adminAuth === 'true'
-         });
-         setAuthError('Using offline data. Some features may be limited.');
-       } catch (parseError) {
-         console.error('❌ Error parsing saved user:', parseError);
-         setUser(null);
-         setAuthError('Authentication error. Please sign in again.');
-       }
+       const userData = await response.json();
+       console.log('🔐 Session valid, user data:', userData);
+       setUser(userData);
+       setAuthError(null);
      } else {
-       console.log('❌ No localStorage data available');
+       console.log('🔐 Session invalid, clearing user');
        setUser(null);
-       setAuthError('Unable to verify authentication. Please sign in.');
+       setAuthError('Session expired. Please sign in again.');
      }
      
      setIsLoading(false);
+   } catch (error) {
+     console.error('🔐 Session check error:', error);
+     
+     if (retryCount < 3) {
+       console.log(`🔐 Retrying session check (${retryCount + 1}/3)...`);
+       return checkSession(retryCount + 1);
+     }
+     
+     console.log('🔐 Max retries reached, clearing user');
+     setUser(null);
+     setAuthError('Unable to verify authentication. Please sign in.');
+     setIsLoading(false);
    }
- }, [refreshToken]);
+ }, []);
 
  useEffect(() => {
    const checkUser = async () => {
@@ -305,7 +196,7 @@ const checkSession = useCallback(async (retryCount = 0) => {
    }, 2000);
 
    // Listen for storage changes (when user logs in/out in another tab)
-   const handleStorageChange = (e) => {
+   const handleStorageChange = (e: StorageEvent) => {
      if (e.key === 'token' || e.key === 'devhub_user') {
        console.log('🔐 Storage changed:', e.key);
        checkSession();
