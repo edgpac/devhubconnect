@@ -660,6 +660,13 @@ app.get('/api/auth/user', (req, res) => {
   }
 });
 
+// Error page route
+app.get('/auth/error', (req, res) => {
+  const error = req.query.error || 'unknown_error';
+  console.log('🔴 Auth error page accessed:', error);
+  res.redirect(`${frontendUrl}/?auth_error=${error}`);
+});
+
 // ✅ FIXED: Enhanced /api/templates endpoint with proper field conversion
 app.get('/api/templates', async (req, res) => {
   try {
