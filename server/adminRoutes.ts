@@ -230,6 +230,48 @@ adminRouter.get('/templates', verifyAdminToken, async (req: AuthenticatedAdminRe
   }
 });
 
+// ✅ NEW: Update template endpoint (FIX FOR ADMIN PANEL)
+adminRouter.put('/templates/:id', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    // Add proper validation
+    if (!id || !updateData) {
+      return res.status(400).json({ error: 'Missing template ID or update data' });
+    }
+    
+    const templateId = parseInt(id);
+    if (isNaN(templateId)) {
+      return res.status(400).json({ error: 'Invalid template ID' });
+    }
+    
+    // Update the template
+    const updatedTemplate = await db.update(templates)
+      .set(updateData)
+      .where(eq(templates.id, templateId))
+      .returning();
+    
+    if (!updatedTemplate || updatedTemplate.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+    
+    console.log(`✅ Template ${templateId} updated successfully by admin`);
+    res.json({ 
+      success: true, 
+      message: 'Template updated successfully',
+      template: updatedTemplate[0] 
+    });
+    
+  } catch (error) {
+    console.error('Template update error:', error);
+    res.status(500).json({ 
+      error: 'Failed to update template',
+      details: error.message 
+    });
+  }
+});
+
 // ✅ NEW: Delete template endpoint
 adminRouter.delete('/templates/:id', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
   try {
@@ -380,16 +422,16 @@ Services Used: ${uniqueServices.map(s => s.replace('n8n-nodes-base.', '')).join(
 
 Write exactly 3 complete paragraphs in a professional, instructional tone using action words like "configure," "set up," "ensure," "import," "activate," and "deploy." Avoid numbered lists or bullet points. Be specific about node names (e.g., Chat Trigger, OpenAI Request, Documentation Search, Web Search) and services (e.g., OpenAI, DuckDuckGo).
 
-Paragraph 1: Describe the workflow’s purpose, focusing on its main functionality, such as processing user queries via a chat interface, generating AI-driven responses, and retrieving results from documentation and web searches. Highlight key nodes like Chat Trigger for initiating queries, OpenAI Request for AI responses, Documentation Search for n8n documentation, and Web Search for external data.
+Paragraph 1: Describe the workflow's purpose, focusing on its main functionality, such as processing user queries via a chat interface, generating AI-driven responses, and retrieving results from documentation and web searches. Highlight key nodes like Chat Trigger for initiating queries, OpenAI Request for AI responses, Documentation Search for n8n documentation, and Web Search for external data.
 
-Paragraph 2: Detail the setup process, including importing the JSON workflow into an n8n instance via Workflow > Import from Clipboard. Specify configuring the Chat Trigger node’s webhook URL to accept incoming queries, setting up OpenAI API credentials for the OpenAI Request node, and customizing parameters like query inputs for the Documentation Search and Web Search nodes (e.g., DuckDuckGo API settings). Emphasize establishing and testing API connections for reliable operation.
+Paragraph 2: Detail the setup process, including importing the JSON workflow into an n8n instance via Workflow > Import from Clipboard. Specify configuring the Chat Trigger node's webhook URL to accept incoming queries, setting up OpenAI API credentials for the OpenAI Request node, and customizing parameters like query inputs for the Documentation Search and Web Search nodes (e.g., DuckDuckGo API settings). Emphasize establishing and testing API connections for reliable operation.
 
 Paragraph 3: Explain testing the workflow by sending sample queries through the Chat Trigger node and verifying outputs in the Combine Results node, which aggregates aiResponse, documentation, and webResults. Describe troubleshooting using error logs from nodes like OpenAI Error Handler and Docs Error Handler. Cover activating the workflow for production use and monitoring performance via timestamps and status outputs in the Combine Results and Final Error Response nodes.
 
 Respond with ONLY this JSON structure:
 {
-  "name": "Professional title describing this workflow’s purpose (max 60 chars)",
-  "description": "Paragraph 1 describing the workflow’s purpose and key nodes.\\n\\nParagraph 2 detailing import, webhook, and configuration steps.\\n\\nParagraph 3 explaining testing, deployment, and monitoring procedures.",
+  "name": "Professional title describing this workflow's purpose (max 60 chars)",
+  "description": "Paragraph 1 describing the workflow's purpose and key nodes.\\n\\nParagraph 2 detailing import, webhook, and configuration steps.\\n\\nParagraph 3 explaining testing, deployment, and monitoring procedures.",
   "price": 549
 }`;
         console.log('DEBUG: Using improved setup instruction prompt');
