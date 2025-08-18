@@ -22,6 +22,7 @@ interface Template {
   description: string;
   price: number;
   imageUrl?: string;
+  image_url?: string; // ✅ ADD: Backend field name
   workflowJson: { nodes?: { id: string; name: string; type: string }[] };
   // ✅ ADD: Fields that backend actually sends
   steps?: number;
@@ -94,6 +95,21 @@ export const TemplateDetail = () => {
   if (isLoading) return <div className="text-center p-12">Loading Marketplace...</div>;
   if (error) return <div className="text-center p-12 text-red-500">Error: {(error as Error).message}</div>;
   if (!template) return <div className="text-center p-12">Template not found.</div>;
+
+  // ✅ FIX: Use image_url from backend as fallback to imageUrl
+  const imageUrl = template.imageUrl || template.image_url;
+
+  // ✅ DEBUG: Add console logging for investigation
+  console.log('🔍 Template Debug Info:', {
+    templateId: template.id,
+    templateName: template.name,
+    imageUrl: template.imageUrl,
+    image_url: template.image_url,
+    finalImageUrl: imageUrl,
+    hasImageUrl: !!imageUrl,
+    imageUrlType: typeof imageUrl,
+    imageUrlLength: imageUrl?.length
+  });
 
   const searchParams = new URLSearchParams(location.search);
   const currentPageFromUrl = searchParams.get('page');
@@ -188,10 +204,22 @@ export const TemplateDetail = () => {
                   <p className="text-gray-600 mb-6">{template.description}</p>
                   <h2 className="text-xl font-semibold mb-4">Visual Preview</h2>
                   <div className="p-4 border rounded-lg bg-gray-100 flex justify-center items-center">
-                    {template.imageUrl ? (
-                      <img src={template.imageUrl} alt={`${template.name} preview`} className="max-w-full h-auto rounded-md" />
+                    {imageUrl ? (
+                      <img 
+                        src={imageUrl} 
+                        alt={`${template.name} preview`} 
+                        className="max-w-full h-auto rounded-md"
+                        onLoad={() => console.log('✅ Image loaded successfully:', imageUrl)}
+                        onError={(e) => {
+                          console.error('❌ Image failed to load:', imageUrl);
+                          console.error('Error details:', e);
+                        }}
+                      />
                     ) : (
-                      <p className="text-gray-500">No visual preview available.</p>
+                      <div>
+                        <p className="text-gray-500">No visual preview available.</p>
+                        <p className="text-xs text-gray-400 mt-2">Debug: imageUrl = "{template.imageUrl}", image_url = "{template.image_url}"</p>
+                      </div>
                     )}
                   </div>
                 </div>
