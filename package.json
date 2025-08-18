@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "start": "node dist/index.js",
+    "build": "vite build",
+    "start": "tsx index.ts",
     "preview": "vite preview",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0"
   },
@@ -76,6 +76,7 @@
     "stripe": "^18.4.0",
     "tailwind-merge": "^2.4.0",
     "tailwindcss-animate": "^1.0.7",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.3",
     "vaul": "^1.1.2",
     "zod": "^3.23.8"
