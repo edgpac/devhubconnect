@@ -12,8 +12,11 @@ interface Template {
  description: string;
  price: number;
  imageUrl?: string;
+ image_url?: string; // ✅ ADD: Backend field name
  workflowJson?: any;
+ workflow_json?: any; // ✅ ADD: Backend field name
  createdAt?: string;
+ created_at?: string; // ✅ ADD: Backend field name
  downloads?: number;
  downloadCount?: number;
  purchased?: boolean;
@@ -30,6 +33,9 @@ interface TemplateCardProps {
 export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
  const navigate = useNavigate();
  const [isDownloading, setIsDownloading] = useState(false);
+ 
+ // ✅ MAIN FIX: Handle both field name formats for image
+ const imageUrl = template.imageUrl || template.image_url || null;
  
  // Generate deterministic fake numbers if real data isn't available
  const downloadCount = template.downloads || template.downloadCount || 
@@ -51,24 +57,25 @@ export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
    navigate(`/template/${template.id}`);
  };
 
- // ✅ NEW: Real download functionality with DEBUG logging
+ // ✅ Real download functionality with DEBUG logging
  const handleDownload = async () => {
-   // ✅ ADD THESE DEBUG LINES
+   // ✅ DEBUG: Template object analysis
    console.log('🐛 DEBUG: Full template object:', template);
    console.log('🐛 DEBUG: Template ID:', template.id);
    console.log('🐛 DEBUG: Template ID type:', typeof template.id);
    console.log('🐛 DEBUG: Template purchased:', template.purchased);
+   console.log('🐛 DEBUG: Image URL resolved to:', imageUrl);
 
    if (!template.purchased) {
      handlePurchase();
      return;
    }
 
-   // ✅ ADD VALIDATION
+   // ✅ Validation
    if (template.id === undefined || template.id === null) {
-  console.error('❌ Template ID is undefined or invalid');
-  alert('Error: Template ID is missing');
-  return;
+     console.error('❌ Template ID is undefined or invalid');
+     alert('Error: Template ID is missing');
+     return;
    }
 
    setIsDownloading(true);
@@ -125,29 +132,44 @@ export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
    <Card className="h-full flex flex-col hover:shadow-lg transition-shadow duration-200">
      {/* Template Image */}
      <div className="relative overflow-hidden rounded-t-lg">
-       {template.imageUrl ? (
+       {/* ✅ MAIN FIX: Use the resolved imageUrl variable */}
+       {imageUrl ? (
          <img 
-           src={template.imageUrl} 
+           src={imageUrl} 
            alt={template.name}
            className="w-full h-48 object-cover transition-transform duration-300 ease-in-out hover:scale-110"
+           onError={(e) => {
+             // ✅ BONUS: Fallback if image fails to load
+             console.log('🐛 DEBUG: Image failed to load:', imageUrl);
+             e.currentTarget.style.display = 'none';
+             e.currentTarget.parentElement?.querySelector('.image-fallback')?.classList.remove('hidden');
+           }}
          />
-       ) : (
-         <div className="w-full h-48 bg-gray-100 flex items-center justify-center transition-transform duration-300 ease-in-out hover:scale-110">
-           <div className="text-center text-gray-400">
-             <div className="text-4xl mb-2">📋</div>
-             <div className="text-sm">Workflow Preview</div>
-           </div>
+       ) : null}
+       
+       {/* ✅ Always show fallback div, hide it when image loads successfully */}
+       <div className={`w-full h-48 bg-gray-100 flex items-center justify-center transition-transform duration-300 ease-in-out hover:scale-110 image-fallback ${imageUrl ? 'hidden' : ''}`}>
+         <div className="text-center text-gray-400">
+           <div className="text-4xl mb-2">📋</div>
+           <div className="text-sm">Workflow Preview</div>
+           {/* ✅ DEBUG: Show what image URL we tried to load */}
+           {process.env.NODE_ENV === 'development' && (
+             <div className="text-xs mt-2 px-2 py-1 bg-red-100 text-red-600 rounded">
+               DEBUG: {imageUrl || 'No image URL found'}<br/>
+               Fields checked: imageUrl={template.imageUrl || 'undefined'}, image_url={template.image_url || 'undefined'}
+             </div>
+           )}
          </div>
-       )}
+       </div>
        
        {/* Price Badge */}
        <div className="absolute top-3 right-3 z-10">
-  <Badge variant="secondary" className="bg-white/90 text-gray-800 font-semibold">
-    {Number(template.price) === 0 
-      ? 'Free' 
-      : `$${(Number(template.price) / 100).toFixed(2)}`}
-  </Badge>
-</div>
+         <Badge variant="secondary" className="bg-white/90 text-gray-800 font-semibold">
+           {Number(template.price) === 0 
+             ? 'Free' 
+             : `$${(Number(template.price) / 100).toFixed(2)}`}
+         </Badge>
+       </div>
      </div>
 
      <CardHeader className="pb-3">
