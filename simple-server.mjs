@@ -1189,6 +1189,70 @@ app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
   }
 });
 
+// ✅ FIX: Dashboard compatibility endpoint - alias for /api/user/purchases
+app.get('/api/purchases/', authenticateJWT, async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    console.log('📦 Fetching purchases for user via /api/purchases/:', req.user.email || req.user.username);
+    
+    const result = await pool.query(`
+      SELECT 
+        p.id as purchase_id,
+        p.amount_paid,
+        p.currency,
+        p.status,
+        p.purchased_at,
+        t.id,
+        t.name,
+        t.description,
+        t.price,
+        t.image_url as imageUrl,
+        t.workflow_json as workflowJson,
+        t.created_at as createdAt,
+        t.download_count as downloadCount,
+        t.view_count as viewCount,
+        t.rating
+      FROM purchases p
+      LEFT JOIN templates t ON p.template_id = t.id
+      WHERE p.user_id = $1 AND p.status = 'completed'
+      ORDER BY p.purchased_at DESC
+    `, [req.user.id]);
+
+    const formattedPurchases = result.rows.map(row => ({
+      purchaseInfo: {
+        purchaseId: row.purchase_id,
+        amountPaid: row.amount_paid,
+        currency: row.currency,
+        status: row.status,
+        purchasedAt: row.purchased_at
+      },
+      template: {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        price: row.price,
+        imageUrl: row.imageUrl,
+        workflowJson: row.workflowJson,
+        createdAt: row.createdAt,
+        downloadCount: row.downloadCount,
+        viewCount: row.viewCount,
+        rating: row.rating,
+        purchased: true
+      }
+    }));
+
+    console.log('✅ Found', formattedPurchases.length, 'purchases for user via /api/purchases/');
+    res.json({ success: true, purchases: formattedPurchases });
+
+  } catch (error) {
+    console.error('Error fetching user purchases via /api/purchases/:', error);
+    res.status(500).json({ error: 'Failed to fetch purchases' });
+  }
+});
+
 // Template List Endpoint (redirect to main templates endpoint)
 app.get('/api/templates/list', async (req, res) => {
   res.redirect('/api/templates');
