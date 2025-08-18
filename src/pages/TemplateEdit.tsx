@@ -12,37 +12,28 @@ import { ArrowLeft, Save, Trash2, Eye } from 'lucide-react';
 async function fetchTemplateForEdit(id: string | undefined) {
   if (!id) throw new Error("No template ID provided");
   
-  // Get the token from localStorage
-  const token = localStorage.getItem('token');
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
-  };
-  
-  // Add auth header if token exists
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
+  // ✅ FIXED: Use session cookies instead of JWT tokens
   const response = await fetch(`/api/templates/${id}`, {
-    headers
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json'
+    }
   });
   if (!response.ok) throw new Error("Failed to fetch template.");
-  const data = await response.json(); // Get the full response data
-  return data.template; // Access the nested 'template' object
+  const data = await response.json();
+  return data.template;
 }
 
 async function updateTemplate(data: { id: string | undefined; name: string; description: string; price: number; imageUrl?: string; workflowJson: any }) {
   if (!data.id) throw new Error("No ID provided for update");
   
-  // Get the token from localStorage
-  const token = localStorage.getItem('token');
-  if (!token) throw new Error("No authentication token found");
-  
+  // ✅ FIXED: Use session cookies instead of JWT tokens
   const response = await fetch(`/api/templates/${data.id}`, {
     method: 'PATCH',
+    credentials: 'include',
     headers: { 
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify(data),
   });
@@ -53,14 +44,11 @@ async function updateTemplate(data: { id: string | undefined; name: string; desc
 async function deleteTemplate(id: string | undefined) {
   if (!id) throw new Error("No ID provided for deletion");
   
-  // Get the token from localStorage
-  const token = localStorage.getItem('token');
-  if (!token) throw new Error("No authentication token found");
-  
+  // ✅ FIXED: Use session cookies instead of JWT tokens
   const response = await fetch(`/api/templates/${id}`, { 
     method: 'DELETE',
+    credentials: 'include',
     headers: {
-      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
     }
   });
@@ -84,25 +72,22 @@ export const TemplateEdit = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
-  // Changed state variable name back to workflowJson for consistency with API/props
   const [workflowJson, setWorkflowJson] = useState('');
   const [imageUrl, setImageUrl] = useState('');
 
   useEffect(() => {
- if (template) {
-   console.log('Template data received:', template); // Add this line
-   console.log('workflowJson field:', template.workflowJson); // Add this line
-   console.log('workflow_json field:', template.workflow_json); // Add this line
-   
-   setName(template.name);
-   setDescription(template.description);
-   setPrice((template.price / 100).toFixed(2));
-   // Fixed: Use workflowJson (camelCase) to match schema
-   setWorkflowJson(JSON.stringify(template.workflowJson || template.workflow_json || {}, null, 2));
-
-   setImageUrl(template.imageUrl || '');
- }
-}, [template]);
+    if (template) {
+      console.log('Template data received:', template);
+      console.log('workflowJson field:', template.workflowJson);
+      console.log('workflow_json field:', template.workflow_json);
+      
+      setName(template.name);
+      setDescription(template.description);
+      setPrice((template.price / 100).toFixed(2));
+      setWorkflowJson(JSON.stringify(template.workflowJson || template.workflow_json || {}, null, 2));
+      setImageUrl(template.imageUrl || '');
+    }
+  }, [template]);
 
   const updateMutation = useMutation({
     mutationFn: updateTemplate,
@@ -132,8 +117,6 @@ export const TemplateEdit = () => {
       updateMutation.mutate({
         id, name, description, imageUrl,
         price: parseFloat(price),
-        // FIX 3: Corrected 'json' to 'JSON' (uppercase)
-        // FIX 4: Used workflowJson state variable (camelCase)
         workflowJson: JSON.parse(workflowJson),
       });
     } catch (error) {

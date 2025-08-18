@@ -1,12 +1,13 @@
-import { useState, useRef, useEffect } from 'react'; // Import useEffect
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Upload, X, Brain, LogIn, BarChart3, LogOut, Trash2, Eye, Home } from 'lucide-react'; // Import Brain, LogIn, BarChart3, LogOut and Trash2 icons
-import { toast } from 'sonner'; // Import toast for notifications
+import { Upload, X, Brain, LogIn, BarChart3, LogOut, Trash2, Eye, Home } from 'lucide-react';
+import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/components/context/AuthProvider';
 
 export function AdminDashboard() {
   const [name, setName] = useState('');
@@ -23,31 +24,21 @@ export function AdminDashboard() {
   const [isGeneratingDetails, setIsGeneratingDetails] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ NEW: Authentication states
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // ✅ FIXED: Use AuthProvider for authentication
+  const { currentUser, logout } = useAuth();
   const [adminPassword, setAdminPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const navigate = useNavigate();
 
-  // Check for token on component mount
-  useEffect(() => {
-    const token = localStorage.getItem('adminToken');
-    if (token) {
-      // Basic check: if token exists, assume authenticated for now
-      // In a real app, you'd verify this token with the backend or decode it
-      setIsAuthenticated(true);
-    }
-  }, []);
+  // ✅ FIXED: Check if user is admin using AuthProvider
+  const isAuthenticated = currentUser && currentUser.isAdmin;
 
-  // ✅ NEW: Admin Sign Out Function
+  // ✅ FIXED: Use AuthProvider logout
   const handleSignOut = () => {
-    localStorage.removeItem('adminToken');
-    setIsAuthenticated(false);
+    logout();
     toast.success('Signed out successfully', { description: 'You have been logged out of the admin dashboard.' });
-    // Optionally redirect to home page
-    navigate('/');
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,16 +91,12 @@ export function AdminDashboard() {
 
       const parsedJson = JSON.parse(workflowJson);
       
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
-        throw new Error("Admin not authenticated. Please log in.");
-      }
-
+      // ✅ FIXED: Use session cookies instead of JWT tokens
       const response = await fetch('/api/templates', {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`, // Send the token
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           name,
@@ -143,11 +130,6 @@ export function AdminDashboard() {
       setIsError(true);
       setMessage(`Upload failed: ${err.message}`);
       toast.error('Upload Failed', { description: err.message });
-      // If authentication fails, log out
-      if (err.message.includes('authenticated') || err.message.includes('Forbidden')) {
-        setIsAuthenticated(false);
-        localStorage.removeItem('adminToken');
-      }
     } finally {
       setIsLoading(false);
     }
@@ -167,16 +149,12 @@ export function AdminDashboard() {
 
       const parsedJson = JSON.parse(workflowJson);
       
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
-        throw new Error("Admin not authenticated. Please log in.");
-      }
-
+      // ✅ FIXED: Use session cookies instead of JWT tokens
       const response = await fetch('/api/templates', {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`, // Send the token
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           name,
@@ -191,7 +169,6 @@ export function AdminDashboard() {
 
       if (response.ok) {
         toast.success('Upload successful!', { description: "Template has been added to the marketplace." });
-        // Navigate to template page
         navigate(`/templates/${data.template.id}`);
       } else {
         if (response.status === 409) {
@@ -203,11 +180,6 @@ export function AdminDashboard() {
       setIsError(true);
       setMessage(`Upload failed: ${err.message}`);
       toast.error('Upload Failed', { description: err.message });
-      // If authentication fails, log out
-      if (err.message.includes('authenticated') || err.message.includes('Forbidden')) {
-        setIsAuthenticated(false);
-        localStorage.removeItem('adminToken');
-      }
     } finally {
       setIsLoading(false);
     }
@@ -229,16 +201,12 @@ export function AdminDashboard() {
     try {
       const parsedJson = JSON.parse(workflowJson);
       
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
-        throw new Error("Admin not authenticated. Please log in.");
-      }
-
+      // ✅ FIXED: Use session cookies instead of JWT tokens
       const response = await fetch('/api/admin/generate-template-details', {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`, // Send the token
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ workflowJson: parsedJson }),
       });
@@ -261,17 +229,12 @@ export function AdminDashboard() {
       setIsError(true);
       setMessage(`AI generation failed: ${err.message}`);
       toast.error('AI Generation Failed', { description: err.message });
-      // If authentication fails, log out
-      if (err.message.includes('authenticated') || err.message.includes('Forbidden')) {
-        setIsAuthenticated(false);
-        localStorage.removeItem('adminToken');
-      }
     } finally {
       setIsGeneratingDetails(false);
     }
   };
 
-  // ✅ NEW FUNCTION: Handle Admin Login
+  // ✅ FIXED: Handle admin login with session auth
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoggingIn(true);
@@ -280,16 +243,17 @@ export function AdminDashboard() {
     try {
       const response = await fetch('/api/admin/login', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: adminPassword }),
       });
 
       const data = await response.json();
 
-      if (response.ok && data.success && data.token) {
-        localStorage.setItem('adminToken', data.token); // Store the token
-        setIsAuthenticated(true);
+      if (response.ok && data.success) {
         toast.success('Admin Login Successful!', { description: 'Welcome to the dashboard.' });
+        // Refresh page to trigger AuthProvider re-check
+        window.location.reload();
       } else {
         setLoginError(data.message || 'Login failed. Please check your password.');
         toast.error('Login Failed', { description: data.message || 'Invalid password.' });
@@ -344,7 +308,6 @@ export function AdminDashboard() {
   return (
     <div className="container mx-auto py-8">
       <div className="max-w-2xl mx-auto space-y-6">
-        {/* Admin Header with Navigation Buttons */}
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold">Admin Dashboard</h1>
@@ -370,7 +333,6 @@ export function AdminDashboard() {
           </div>
         </div>
 
-        {/* Analytics Dashboard Card */}
         <Card>
           <CardHeader>
             <CardTitle>Analytics & Management</CardTitle>
@@ -387,7 +349,6 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Upload Template Card */}
         <Card>
           <CardHeader>
             <CardTitle>Upload New Template</CardTitle>
@@ -449,12 +410,11 @@ export function AdminDashboard() {
               <div className="space-y-2">
                 <Label htmlFor="workflowJson">Workflow JSON</Label>
                 <Textarea id="workflowJson" value={workflowJson} onChange={(e) => setWorkflowJson(e.target.value)} required rows={10} />
-                {/* ✅ NEW BUTTON: Generate Details with AI */}
                 <Button
-                  type="button" // Important: type="button" to prevent form submission
+                  type="button"
                   onClick={handleGenerateDetails}
                   className="w-full mt-2 bg-blue-600 hover:bg-blue-700"
-                  disabled={isGeneratingDetails || isLoading} // Disable if already generating or uploading
+                  disabled={isGeneratingDetails || isLoading}
                 >
                   {isGeneratingDetails ? (
                     <>Generating...</>
