@@ -65,10 +65,10 @@ export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
    }
 
    // ✅ ADD VALIDATION
-   if (!template.id || template.id === 'undefined') {
-     console.error('❌ Template ID is undefined or invalid');
-     alert('Error: Template ID is missing');
-     return;
+   if (template.id === undefined || template.id === null) {
+  console.error('❌ Template ID is undefined or invalid');
+  alert('Error: Template ID is missing');
+  return;
    }
 
    setIsDownloading(true);
@@ -142,10 +142,12 @@ export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
        
        {/* Price Badge */}
        <div className="absolute top-3 right-3 z-10">
-         <Badge variant="secondary" className="bg-white/90 text-gray-800 font-semibold">
-           {Number(template.price) === 0 ? 'Free' : `$${Number(template.price).toFixed(2)}`}
-         </Badge>
-       </div>
+  <Badge variant="secondary" className="bg-white/90 text-gray-800 font-semibold">
+    {Number(template.price) === 0 
+      ? 'Free' 
+      : `$${(Number(template.price) / 100).toFixed(2)}`}
+  </Badge>
+</div>
      </div>
 
      <CardHeader className="pb-3">
