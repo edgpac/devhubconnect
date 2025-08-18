@@ -32,6 +32,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('🔍 Checking session with backend...');
       
+      // ✅ FIXED: Use correct endpoint (no /api prefix)
       const response = await fetch('/auth/profile/session', {
         method: 'GET',
         credentials: 'include',
@@ -59,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setCurrentUser(user);
           setToken('session'); // Use 'session' as token indicator
           
-          // Store in localStorage for persistence
+          // ✅ FIXED: Store session token, not JWT
           localStorage.setItem('token', 'session');
           localStorage.setItem('devhub_user', JSON.stringify(user));
           
