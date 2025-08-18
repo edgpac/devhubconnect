@@ -690,7 +690,7 @@ app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
         userEmail: user.email
       });
       
-      res.redirect(`${frontendUrl}/auth/success?${userParams.toString()}`);
+      res.redirect(`${frontendUrl}/?${userParams.toString()}`);
       
     } catch (dbError) {
       await client.query('ROLLBACK');
