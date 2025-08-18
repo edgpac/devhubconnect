@@ -1026,7 +1026,7 @@ app.get('/api/templates/:id', async (req, res) => {
 app.patch('/api/templates/:id', requireAdminAuth, async (req, res) => {
   try {
     const templateId = req.params.id;
-    const { name, description, price, workflowJson, imageUrl } = req.body;
+    const { name, description, price, workflow_json, image_url } = req.body;
     
     console.log('🔧 Updating template:', templateId, 'by user:', req.user.email);
     
@@ -1036,7 +1036,7 @@ app.patch('/api/templates/:id', requireAdminAuth, async (req, res) => {
     
     const result = await pool.query(
       'UPDATE templates SET name = $1, description = $2, price = $3, workflow_json = $4, image_url = $5, updated_at = NOW() WHERE id = $6 RETURNING *',
-      [name, description, Math.round(parseFloat(price) * 100), workflowJson, imageUrl, templateId]
+      [name, description, price, workflow_json, image_url, templateId]
     );
     
     if (result.rows.length === 0) {
