@@ -8,6 +8,7 @@ type User = {
   isAdmin?: boolean;
   username?: string;
   github_id?: string;
+  avatar?: string;  // ← ADD THIS LINE
 };
 
 type AuthContextType = {
