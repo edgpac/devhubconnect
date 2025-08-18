@@ -104,6 +104,7 @@ export const templates = pgTable('templates', {
   // SEO and discoverability
   slug: varchar('slug', { length: 250 }), // URL-friendly identifier
   metaDescription: varchar('meta_description', { length: 160 }), // SEO description
+  category: text('category'), // ✅ ADDED: Missing category field to match database
 }, (table) => {
   return {
     // ✅ SECURE: Performance and security indexes
