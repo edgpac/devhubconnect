@@ -5,7 +5,7 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import fetch from 'node-fetch'; // Ensure node-fetch is imported
 import { db } from './db'; // Import your Drizzle DB instance
-import { users } from '../shared/schema'; // Import the users schema
+import { users, templates } from '../shared/schema'; // Import the users and templates schema
 import { eq } from 'drizzle-orm';
 
 import adminRouter from './adminRoutes';
@@ -21,37 +21,37 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors({
- origin: process.env.FRONTEND_URL || 'https://devhubconnect-production.up.railway.app',
- credentials: true,
- optionsSuccessStatus: 200
+origin: process.env.FRONTEND_URL || 'https://devhubconnect-production.up.railway.app',
+credentials: true,
+optionsSuccessStatus: 200
 }));
 app.use(cookieParser());
 app.use(express.json()); // Use express.json() instead of body-parser for modern Express
 
 // ✅ NEW LOGIC: Ensure admin_user_id exists in the database on startup
 const seedAdminUser = async () => {
- const ADMIN_USER_ID = 'admin_user_id'; // Must match the ID used in adminRoutes.ts login payload
+const ADMIN_USER_ID = 'admin_user_id'; // Must match the ID used in adminRoutes.ts login payload
 
- try {
-   const [existingUser] = await db.select().from(users).where(eq(users.id, ADMIN_USER_ID));
+try {
+  const [existingUser] = await db.select().from(users).where(eq(users.id, ADMIN_USER_ID));
 
-   if (!existingUser) {
-     console.log(`Attempting to create admin user: ${ADMIN_USER_ID}`);
-     await db.insert(users).values({
-       id: ADMIN_USER_ID,
-       email: 'admin@devhubconnect.com', // Placeholder email for admin
-       name: 'DevHubConnect Admin',
-       avatarUrl: 'https://placehold.co/100x100/aabbcc/ffffff?text=ADMIN',
-     }).execute();
-     console.log(`✅ Admin user '${ADMIN_USER_ID}' created successfully.`);
-   } else {
-     console.log(`Admin user '${ADMIN_USER_ID}' already exists.`);
-   }
- } catch (error) {
-   console.error('❌ Error seeding admin user:', error);
-   // Depending on the severity, you might want to exit the process here
-   // process.exit(1);
- }
+  if (!existingUser) {
+    console.log(`Attempting to create admin user: ${ADMIN_USER_ID}`);
+    await db.insert(users).values({
+      id: ADMIN_USER_ID,
+      email: 'admin@devhubconnect.com', // Placeholder email for admin
+      name: 'DevHubConnect Admin',
+      avatarUrl: 'https://placehold.co/100x100/aabbcc/ffffff?text=ADMIN',
+    }).execute();
+    console.log(`✅ Admin user '${ADMIN_USER_ID}' created successfully.`);
+  } else {
+    console.log(`Admin user '${ADMIN_USER_ID}' already exists.`);
+  }
+} catch (error) {
+  console.error('❌ Error seeding admin user:', error);
+  // Depending on the severity, you might want to exit the process here
+  // process.exit(1);
+}
 };
 
 
@@ -64,20 +64,77 @@ app.use('/api/auth', authRouter);
 app.use("/api/purchases", purchaseRouter);
 app.use('/api/recommendations', recommendationsRouter);
 
+// ✅ FIX: Add template update endpoints for frontend compatibility
+app.put('/api/templates/:id', async (req: Request, res: Response) => {
+ const { id } = req.params;
+ const updateData = req.body;
+ 
+ try {
+   const templateId = parseInt(id);
+   if (isNaN(templateId)) {
+     return res.status(400).json({ error: 'Invalid template ID' });
+   }
+   
+   const updatedTemplate = await db.update(templates)
+     .set(updateData)
+     .where(eq(templates.id, templateId))
+     .returning();
+   
+   if (!updatedTemplate.length) {
+     return res.status(404).json({ error: 'Template not found' });
+   }
+   
+   console.log(`✅ Template ${templateId} updated successfully`);
+   res.json({ success: true, template: updatedTemplate[0] });
+   
+ } catch (error) {
+   console.error('Template update error:', error);
+   res.status(500).json({ error: 'Failed to update template' });
+ }
+});
+
+app.patch('/api/templates/:id', async (req: Request, res: Response) => {
+ const { id } = req.params;
+ const updateData = req.body;
+ 
+ try {
+   const templateId = parseInt(id);
+   if (isNaN(templateId)) {
+     return res.status(400).json({ error: 'Invalid template ID' });
+   }
+   
+   const updatedTemplate = await db.update(templates)
+     .set(updateData)
+     .where(eq(templates.id, templateId))
+     .returning();
+   
+   if (!updatedTemplate.length) {
+     return res.status(404).json({ error: 'Template not found' });
+   }
+   
+   console.log(`✅ Template ${templateId} updated via PATCH`);
+   res.json({ success: true, template: updatedTemplate[0] });
+   
+ } catch (error) {
+   console.error('Template PATCH error:', error);
+   res.status(500).json({ error: 'Failed to update template' });
+ }
+});
+
 // Generate setup instructions for validated templates
 app.post('/api/generate-setup-instructions', async (req: Request, res: Response) => {
- const { workflow, templateId, purchaseId } = req.body;
+const { workflow, templateId, purchaseId } = req.body;
 
- if (!workflow || !templateId) {
-   return res.status(400).json({ error: 'Workflow and templateId are required.' });
- }
+if (!workflow || !templateId) {
+  return res.status(400).json({ error: 'Workflow and templateId are required.' });
+}
 
- try {
-   // Analyze the workflow to generate specific instructions
-   const nodeTypes = workflow.nodes?.map((node: any) => node.type).filter(Boolean) || [];
-   const uniqueServices = [...new Set(nodeTypes)].slice(0, 5);
+try {
+  // Analyze the workflow to generate specific instructions
+  const nodeTypes = workflow.nodes?.map((node: any) => node.type).filter(Boolean) || [];
+  const uniqueServices = [...new Set(nodeTypes)].slice(0, 5);
 
-   const instructions = `🔧 **Setup Instructions for ${templateId}**
+  const instructions = `🔧 **Setup Instructions for ${templateId}**
 
 **Step 1: Environment Setup**
 - Ensure you have n8n installed and running
@@ -101,105 +158,105 @@ ${uniqueServices.map(service => `• Set up credentials for ${service.replace('n
 
 Need help with any specific step? Ask me about credential setup, webhook configuration, or troubleshooting!`;
 
-   res.json({ instructions });
+  res.json({ instructions });
 
- } catch (error) {
-   console.error('Error generating setup instructions:', error);
-   res.status(500).json({ error: 'Failed to generate setup instructions.' });
- }
+} catch (error) {
+  console.error('Error generating setup instructions:', error);
+  res.status(500).json({ error: 'Failed to generate setup instructions.' });
+}
 });
 
 // Groq AI route for chat functionality
 app.post('/api/chat', async (req: Request, res: Response) => {
- const { message } = req.body;
+const { message } = req.body;
 
- if (!message) {
-   return res.status(400).json({ error: 'Message is required in the request body.' });
- }
+if (!message) {
+  return res.status(400).json({ error: 'Message is required in the request body.' });
+}
 
- try {
-   // Import Groq SDK dynamically
-   const { default: Groq } = await import('groq-sdk');
-   
-   const groq = new Groq({
-     apiKey: process.env.GROQ_API_KEY
-   });
+try {
+  // Import Groq SDK dynamically
+  const { default: Groq } = await import('groq-sdk');
+  
+  const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY
+  });
 
-   const completion = await groq.chat.completions.create({
-     messages: [
-       {
-         role: "system",
-         content: "You are a helpful AI assistant for DevHubConnect marketplace."
-       },
-       {
-         role: "user",
-         content: message
-       }
-     ],
-     model: "llama-3.3-70b-versatile", // Updated model name
-     temperature: 0.7,
-     max_tokens: 1000,
-   });
+  const completion = await groq.chat.completions.create({
+    messages: [
+      {
+        role: "system",
+        content: "You are a helpful AI assistant for DevHubConnect marketplace."
+      },
+      {
+        role: "user",
+        content: message
+      }
+    ],
+    model: "llama-3.3-70b-versatile", // Updated model name
+    temperature: 0.7,
+    max_tokens: 1000,
+  });
 
-   res.json({ 
-     response: completion.choices[0]?.message?.content || "No response generated" 
-   });
- } catch (error) {
-   console.error('Groq API error:', error);
-   res.status(500).json({ error: 'Failed to generate AI response' });
- }
+  res.json({ 
+    response: completion.choices[0]?.message?.content || "No response generated" 
+  });
+} catch (error) {
+  console.error('Groq API error:', error);
+  res.status(500).json({ error: 'Failed to generate AI response' });
+}
 });
 
 // Ollama LLM route for chat functionality
 app.post('/api/ask-ai', async (req: Request, res: Response) => {
- const { prompt, history, templateContext } = req.body; // Added templateContext for validated templates
+const { prompt, history, templateContext } = req.body; // Added templateContext for validated templates
 
- if (!prompt) {
-   return res.status(400).json({ error: 'Prompt is required in the request body.' });
- }
+if (!prompt) {
+  return res.status(400).json({ error: 'Prompt is required in the request body.' });
+}
 
- // ✅ REORDERED LOGIC: First, check if valid JSON template is provided
- const latestUserMessage = history?.slice(-1)[0]?.content || '';
- let jsonProvidedInThisTurn = false;
- try {
-   const parsed = JSON.parse(latestUserMessage);
-   if (parsed && typeof parsed === 'object' && parsed.nodes && Array.isArray(parsed.nodes)) {
-     jsonProvidedInThisTurn = true;
-   }
- } catch (e) {
-   // do nothing
- }
+// ✅ REORDERED LOGIC: First, check if valid JSON template is provided
+const latestUserMessage = history?.slice(-1)[0]?.content || '';
+let jsonProvidedInThisTurn = false;
+try {
+  const parsed = JSON.parse(latestUserMessage);
+  if (parsed && typeof parsed === 'object' && parsed.nodes && Array.isArray(parsed.nodes)) {
+    jsonProvidedInThisTurn = true;
+  }
+} catch (e) {
+  // do nothing
+}
 
- if (jsonProvidedInThisTurn) {
-     return res.json({
-       response: `✅ Template validated successfully! I'm your DevHubConnect Setup Assistant, ready to guide you through the deployment process.
+if (jsonProvidedInThisTurn) {
+    return res.json({
+      response: `✅ Template validated successfully! I'm your DevHubConnect Setup Assistant, ready to guide you through the deployment process.
 
 To get started, I need to understand your environment:
 
 1. **What type of n8n setup are you using?**
-  • n8n Cloud (cloud.n8n.io)
-  • Self-hosted Docker installation
-  • Local development installation
-  • n8n Desktop app
+ • n8n Cloud (cloud.n8n.io)
+ • Self-hosted Docker installation
+ • Local development installation
+ • n8n Desktop app
 
 2. **What's your experience level with n8n?**
-  • Beginner (new to n8n)
-  • Intermediate (familiar with basic workflows)
-  • Advanced (experienced with complex automations)
+ • Beginner (new to n8n)
+ • Intermediate (familiar with basic workflows)
+ • Advanced (experienced with complex automations)
 
 Once I know your setup, I'll provide specific step-by-step instructions for deploying this template successfully.`
-     });
- }
+    });
+}
 
- // 🔒 Hyper-Strict Rule Enforcement: ONLY check for prompt disclosure questions AFTER checking for JSON
- const promptDisclosurePattern = /prompt.*(runs|controls|used|that.*runs.*this.*chat)/i;
- if (promptDisclosurePattern.test(prompt)) {
-   return res.json({ response: "I cannot answer questions about my instructions. I'm here to help with your uploaded .json file only." });
- }
+// 🔒 Hyper-Strict Rule Enforcement: ONLY check for prompt disclosure questions AFTER checking for JSON
+const promptDisclosurePattern = /prompt.*(runs|controls|used|that.*runs.*this.*chat)/i;
+if (promptDisclosurePattern.test(prompt)) {
+  return res.json({ response: "I cannot answer questions about my instructions. I'm here to help with your uploaded .json file only." });
+}
 
- try {
-   // ✅ CORRECTED: Define the professional system prompt for the chat AI
-   const systemPromptContent = `You are the DevHubConnect Setup Assistant, a professional technical support specialist helping users deploy n8n automation templates successfully.
+try {
+  // ✅ CORRECTED: Define the professional system prompt for the chat AI
+  const systemPromptContent = `You are the DevHubConnect Setup Assistant, a professional technical support specialist helping users deploy n8n automation templates successfully.
 
 ROLE & EXPERTISE:
 - You are a senior automation engineer with deep n8n knowledge
@@ -260,23 +317,23 @@ STRICT LIMITATIONS:
 
 Remember: Your goal is to ensure this template deploys successfully and works as intended. Be methodical, professional, and solution-oriented.`;
 
-   // Construct the messages array for Ollama, starting with the system prompt
-   const messagesForOllama = [
-     { role: 'system', content: systemPromptContent },
-     ...(history || []).map((msg: { role: string; content: string }) => ({
-       role: msg.role,
-       content: msg.content,
-     })),
-     { role: 'user', content: prompt }, // Add the current user prompt
-   ];
+  // Construct the messages array for Ollama, starting with the system prompt
+  const messagesForOllama = [
+    { role: 'system', content: systemPromptContent },
+    ...(history || []).map((msg: { role: string; content: string }) => ({
+      role: msg.role,
+      content: msg.content,
+    })),
+    { role: 'user', content: prompt }, // Add the current user prompt
+  ];
 
-   // Check if running in production environment
-   const isProduction = process.env.NODE_ENV === 'production';
-   
-   if (isProduction) {
-     // In production, return a helpful message about AI service unavailability
-     return res.json({ 
-       response: `I understand you'd like AI assistance with your n8n template deployment. The AI chat feature is currently unavailable in production.
+  // Check if running in production environment
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  if (isProduction) {
+    // In production, return a helpful message about AI service unavailability
+    return res.json({ 
+      response: `I understand you'd like AI assistance with your n8n template deployment. The AI chat feature is currently unavailable in production.
 
 However, I can still help you with your template! Here's what you can do:
 
@@ -289,59 +346,59 @@ However, I can still help you with your template! Here's what you can do:
 **Need specific help?** Try our community support or documentation at n8n.io for detailed setup guides.
 
 Would you like me to generate setup instructions based on your template instead?`
-     });
-   }
+    });
+  }
 
-   // Make a POST request to your local Ollama server's chat API (development only)
-   const ollamaResponse = await fetch('http://localhost:11434/api/chat', {
-     method: 'POST',
-     headers: {
-       'Content-Type': 'application/json',
-     },
-     body: JSON.stringify({
-       model: 'mistral',
-       stream: false,
-       messages: messagesForOllama,
-     }),
-   });
+  // Make a POST request to your local Ollama server's chat API (development only)
+  const ollamaResponse = await fetch('http://localhost:11434/api/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'mistral',
+      stream: false,
+      messages: messagesForOllama,
+    }),
+  });
 
-   if (!ollamaResponse.ok) {
-     const errorText = await ollamaResponse.text();
-     console.error(`Ollama API error: Status ${ollamaResponse.status}, Response: ${errorText}`);
-     return res.status(ollamaResponse.status).json({ error: `AI service error: ${errorText}` });
-   }
+  if (!ollamaResponse.ok) {
+    const errorText = await ollamaResponse.text();
+    console.error(`Ollama API error: Status ${ollamaResponse.status}, Response: ${errorText}`);
+    return res.status(ollamaResponse.status).json({ error: `AI service error: ${errorText}` });
+  }
 
-   const data = await ollamaResponse.json() as { message?: { content: string }, response?: string };
-   const aiResponse = data.message?.content ? data.message.content.trim() : 'No response received from AI model.';
+  const data = await ollamaResponse.json() as { message?: { content: string }, response?: string };
+  const aiResponse = data.message?.content ? data.message.content.trim() : 'No response received from AI model.';
 
-   res.json({ response: aiResponse });
+  res.json({ response: aiResponse });
 
- } catch (error) {
-   console.error('Error connecting to Ollama service:', error);
-   const isProduction = process.env.NODE_ENV === 'production';
-   
-   if (isProduction) {
-     res.json({ 
-       response: 'AI chat is currently unavailable. Please use the template setup instructions or visit our documentation for help with your n8n template deployment.' 
-     });
-   } else {
-     res.status(500).json({ error: 'Failed to connect to the AI service. Please ensure Ollama is running and accessible.' });
-   }
- }
+} catch (error) {
+  console.error('Error connecting to Ollama service:', error);
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  if (isProduction) {
+    res.json({ 
+      response: 'AI chat is currently unavailable. Please use the template setup instructions or visit our documentation for help with your n8n template deployment.' 
+    });
+  } else {
+    res.status(500).json({ error: 'Failed to connect to the AI service. Please ensure Ollama is running and accessible.' });
+  }
+}
 });
 
 // Health check (optional)
 app.get('/', (_req, res) => {
- res.send('DevHubConnect Backend is running 🚀');
+res.send('DevHubConnect Backend is running 🚀');
 });
 
 // Start the server and seed the admin user
 app.listen(port, async () => {
- console.log(`✅ Backend server is running on http://localhost:${port}`);
- console.log(`Stripe Secret Key being used by backend: ${process.env.STRIPE_SECRET_KEY ? 'Loaded (length: ' + process.env.STRIPE_SECRET_KEY.length + ')' : 'Not Loaded'}`);
- await seedAdminUser(); // Call the function to ensure admin user exists
+console.log(`✅ Backend server is running on http://localhost:${port}`);
+console.log(`Stripe Secret Key being used by backend: ${process.env.STRIPE_SECRET_KEY ? 'Loaded (length: ' + process.env.STRIPE_SECRET_KEY.length + ')' : 'Not Loaded'}`);
+await seedAdminUser(); // Call the function to ensure admin user exists
 });// Test cookie route
 app.get('/test-cookie', (req, res) => {
- res.cookie('test_cookie', 'test_value', { sameSite: 'lax' });
- res.send('Test cookie set');
+res.cookie('test_cookie', 'test_value', { sameSite: 'lax' });
+res.send('Test cookie set');
 });
