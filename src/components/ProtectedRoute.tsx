@@ -14,30 +14,16 @@ interface AuthContextType {
   isLoading: boolean;
 }
 
-// ✅ ENHANCED: Updated to check BOTH session auth AND localStorage
+// ✅ SIMPLIFIED: Use only AuthProvider, no phantom window.authChecker
 const useAuth = (): AuthContextType => {
   const [user, setUser] = React.useState<User | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
-  const { currentUser: sessionUser, token: sessionToken } = useAuthProvider();
+  const { currentUser: sessionUser, token: sessionToken, isLoading: providerLoading } = useAuthProvider();
 
   React.useEffect(() => {
     const checkAuth = () => {
       try {
-        // ✅ ENHANCED: First check global auth checker
-        if (window.authChecker && window.authChecker.isAuthenticated && window.authChecker.user) {
-          const authUser = window.authChecker.user;
-          console.log('🔐 Global Auth Found:', authUser.username);
-          setUser({
-            id: authUser.id,
-            email: authUser.email || '',
-            role: 'user',
-            isAdmin: false
-          });
-          setIsLoading(false);
-          return;
-        }
-
-        // ✅ ENHANCED: Second check session auth from AuthProvider
+        // ✅ SIMPLIFIED: Use only AuthProvider session
         if (sessionUser && sessionToken) {
           console.log('🔐 Session Auth Found:', sessionUser.email);
           setUser({
@@ -50,10 +36,10 @@ const useAuth = (): AuthContextType => {
           return;
         }
 
-        // ✅ FALLBACK: Check localStorage (existing code preserved)
+        // ✅ FALLBACK: Check localStorage for persistence
         const token = localStorage.getItem('token');
-        const adminAuth = localStorage.getItem('admin_auth'); // ✅ ADDED: Check admin_auth
-        const savedUser = localStorage.getItem('devhub_user'); // ✅ FIXED: Changed from 'user' to 'devhub_user'
+        const adminAuth = localStorage.getItem('admin_auth');
+        const savedUser = localStorage.getItem('devhub_user');
         
         console.log('🔐 Auth Check:', {
           hasSessionUser: !!sessionUser,
@@ -74,7 +60,7 @@ const useAuth = (): AuthContextType => {
             }
           }
 
-          // ✅ FIXED: Handle admin_auth case
+          // Handle admin_auth case
           if (adminAuth === 'true' || userData?.isAdmin) {
             setUser({
               id: userData?.id || 'admin',
@@ -100,12 +86,14 @@ const useAuth = (): AuthContextType => {
         console.error('Auth check failed:', error);
         setUser(null);
       } finally {
-        setIsLoading(false);
+        if (!providerLoading) {
+          setIsLoading(false);
+        }
       }
     };
 
     checkAuth();
-  }, [sessionUser, sessionToken]); // ✅ ENHANCED: Re-run when session auth changes
+  }, [sessionUser, sessionToken, providerLoading]);
 
   return { user, isLoading };
 };
@@ -119,7 +107,14 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div className="text-center p-12">Loading authentication...</div>;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading authentication...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
@@ -131,7 +126,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
   if (requiredRole && user.role !== requiredRole) {
     console.warn(`User ${user.email} (role: ${user.role}) attempted to access a ${requiredRole} route.`);
     
-    // ✅ IMPROVED: Better redirect logic
+    // Better redirect logic
     if (requiredRole === 'admin') {
       return <Navigate to="/admin" replace />; // Redirect to admin login for admin routes
     } else {

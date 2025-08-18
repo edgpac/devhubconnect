@@ -1,5 +1,4 @@
 import React, { createContext, useState, useEffect, useContext } from "react";
-import { API_ENDPOINTS, apiCall } from '../../config/api';
 
 type User = {
   id: string;
@@ -43,17 +42,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.user) {
-          console.log('✅ Session valid:', data.user.email || data.user.username);
+        // ✅ FIXED: Backend returns flat user data, not nested in success/user
+        if (data && data.id) {
+          console.log('✅ Session valid:', data.email || data.name);
           
           const user = {
-            id: data.user.id,
-            email: data.user.email,
-            name: data.user.name || data.user.username,
-            role: data.user.role,
-            isAdmin: data.user.role === 'admin',
-            username: data.user.username,
-            github_id: data.user.github_id
+            id: data.id,
+            email: data.email,
+            name: data.name,
+            role: data.role,
+            isAdmin: data.isAdmin || data.role === 'admin',
+            username: data.name || data.email?.split('@')[0],
+            github_id: data.id
           };
           
           setCurrentUser(user);
