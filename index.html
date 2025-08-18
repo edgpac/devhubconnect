@@ -71,7 +71,7 @@
               this.updateUI();
               return true;
             } else {
-              console.log('❌ User not authenticated');
+              console.log('❌ User not authenticated, status:', response.status);
               this.user = null;
               this.isAuthenticated = false;
               this.updateUI();
@@ -140,7 +140,13 @@
           if (urlParams.get('success') === 'true') {
             console.log('🎉 OAuth success detected! Checking session...');
             window.history.replaceState({}, document.title, window.location.pathname);
-            setTimeout(() => this.checkAuthStatus(), 1000);
+            
+            // ✅ FIXED: Increased delay to ensure session cookie is fully set
+            setTimeout(() => {
+              console.log('🔄 Checking auth status after OAuth success...');
+              this.checkAuthStatus();
+            }, 2000); // Changed from 1000ms to 2000ms
+            
           } else if (urlParams.get('auth_error')) {
             console.log('❌ OAuth error detected:', urlParams.get('auth_error'));
             alert('Authentication failed. Please try again.');
