@@ -25,8 +25,18 @@ async function fetchTemplateForEdit(id: string | undefined) {
   return data.template;
 }
 
-async function updateTemplate(data: { id: string | undefined; name: string; description: string; price: number; imageUrl?: string; workflowJson: any }) {
+// ✅ FIXED: Updated interface to match server expectations
+async function updateTemplate(data: { 
+  id: string | undefined; 
+  name: string; 
+  description: string; 
+  price: number; 
+  image_url?: string; 
+  workflow_json: any 
+}) {
   if (!data.id) throw new Error("No ID provided for update");
+  
+  console.log('🔧 Sending update data:', data);
   
   // ✅ FIXED: Use session cookies instead of JWT tokens
   const response = await fetch(`/api/templates/${data.id}`, {
@@ -37,7 +47,13 @@ async function updateTemplate(data: { id: string | undefined; name: string; desc
     },
     body: JSON.stringify(data),
   });
-  if (!response.ok) throw new Error("Failed to update template.");
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ Server error response:', errorText);
+    throw new Error(`Failed to update template: ${response.status} ${response.statusText}`);
+  }
+  
   return response.json();
 }
 
@@ -96,6 +112,10 @@ export const TemplateEdit = () => {
       queryClient.invalidateQueries({ queryKey: ['template', id] });
       navigate(`/template/${id}`);
     },
+    onError: (error: Error) => {
+      console.error('❌ Update mutation error:', error);
+      alert(`Update failed: ${error.message}`);
+    }
   });
 
   const deleteMutation = useMutation({
@@ -114,27 +134,43 @@ export const TemplateEdit = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      updateMutation.mutate({
-        id, name, description, imageUrl,
-        price: parseFloat(price),
-        workflowJson: JSON.parse(workflowJson),
-      });
+      // ✅ FIXED: Use server field names and proper price conversion
+      const updateData = {
+        id,
+        name,
+        description,
+        image_url: imageUrl, // ✅ Use server field name
+        price: Math.round(parseFloat(price) * 100), // ✅ Convert to cents
+        workflow_json: JSON.parse(workflowJson), // ✅ Use server field name
+      };
+      
+      console.log('🚀 Submitting update:', updateData);
+      updateMutation.mutate(updateData);
     } catch (error) {
-      alert("Invalid JSON format.");
+      console.error('❌ JSON parse error:', error);
+      alert("Invalid JSON format in workflow.");
     }
   };
 
   const handleSaveAndView = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await updateMutation.mutateAsync({
-        id, name, description, imageUrl,
-        price: parseFloat(price),
-        workflowJson: JSON.parse(workflowJson),
-      });
-      navigate(`/templates/${id}`);
+      // ✅ FIXED: Use server field names and proper price conversion
+      const updateData = {
+        id,
+        name,
+        description,
+        image_url: imageUrl, // ✅ Use server field name
+        price: Math.round(parseFloat(price) * 100), // ✅ Convert to cents
+        workflow_json: JSON.parse(workflowJson), // ✅ Use server field name
+      };
+      
+      console.log('🚀 Save and view:', updateData);
+      await updateMutation.mutateAsync(updateData);
+      navigate(`/template/${id}`); // ✅ FIXED: Correct route path
     } catch (error) {
-      alert("Invalid JSON format.");
+      console.error('❌ Save and view error:', error);
+      alert("Invalid JSON format in workflow or update failed.");
     }
   };
 
