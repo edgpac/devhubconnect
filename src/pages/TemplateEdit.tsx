@@ -85,7 +85,7 @@ export const TemplateEdit = () => {
       setDescription(template.description);
       setPrice((template.price / 100).toFixed(2));
       setWorkflowJson(JSON.stringify(template.workflowJson || template.workflow_json || {}, null, 2));
-      setImageUrl(template.imageUrl || '');
+      setImageUrl(template.imageUrl || template.image_url || '');
     }
   }, [template]);
 
