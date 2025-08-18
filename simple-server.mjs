@@ -345,18 +345,48 @@ function parseWorkflowDetails(workflowJson) {
     return { steps: 0, apps: [], hasWorkflow: false };
   }
 }
-// ✅ PART 3: AUTHENTICATION & MIDDLEWARE - ALL FIXES APPLIED
 
-// JWT-based admin authentication
+// ✅ FIXED: Enhanced requireAdminAuth to support both JWT and session cookies
 const requireAdminAuth = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
   try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+      // ✅ NEW: Check session cookies as fallback (like authenticateJWT does)
+      const sessionId = req.cookies?.devhub_session;
+      
+      if (!sessionId || typeof sessionId !== 'string' || sessionId.length > 100) {
+        return res.status(401).json({ 
+          error: 'Admin authentication required',
+          message: 'Please log in as an administrator'
+        });
+      }
+
+      // ✅ NEW: Validate session with proper checks
+      const sessionResult = await pool.query(
+        'SELECT user_id, expires_at FROM sessions WHERE id = $1 AND is_active = true',
+        [sessionId]
+      );
+
+      if (sessionResult.rows.length === 0 || new Date() > sessionResult.rows[0].expires_at) {
+        return res.status(401).json({ error: 'Session expired' });
+      }
+
+      const userResult = await pool.query(
+        'SELECT id, email, name, role FROM users WHERE id = $1 AND is_active = true AND role = $2',
+        [sessionResult.rows[0].user_id, 'admin']
+      );
+
+      if (userResult.rows.length === 0) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      req.user = userResult.rows[0];
+      return next();
+    }
+
+    // ✅ EXISTING: Handle JWT tokens (keep this part the same)
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     const result = await pool.query(
@@ -371,8 +401,8 @@ const requireAdminAuth = async (req, res, next) => {
     req.user = decoded;
     next();
   } catch (error) {
-    console.log('JWT verification failed:', error.message);
-    return res.status(403).json({ error: 'Invalid or expired token' });
+    console.error('Admin authentication failed:', error.message);
+    return res.status(403).json({ error: 'Admin authentication failed' });
   }
 };
 
