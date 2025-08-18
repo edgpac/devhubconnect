@@ -120,7 +120,8 @@ console.log('  - GITHUB_CLIENT_SECRET:', process.env.GITHUB_CLIENT_SECRET ? 'SET
 console.log('  - JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
 console.log('  - DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
 console.log('  - GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'SET' : 'NOT SET');
-// ✅ PART 2: AI FUNCTIONS & SECURITY - ALL FIXES APPLIED
+
+// ✅ PART 2: AI FUNCTIONS & SECURITY - ALL FIXES APPLIED WITH CORRECT MODEL
 
 // ✅ ENHANCED: Template analysis with Groq AI - SECURE & COMPLETE
 async function analyzeTemplateQuestion(prompt, templateContext, userId) {
@@ -154,7 +155,7 @@ Do not include any harmful, inappropriate, or non-technical content.`;
         { role: "system", content: systemPrompt },
         { role: "user", content: prompt }
       ],
-      model: "llama-3.1-70b-versatile",
+      model: "llama-3.3-70b-versatile",
       temperature: 0.3,
       max_tokens: 300,
       top_p: 0.9
@@ -216,7 +217,7 @@ Keep it practical and under 400 words. Focus only on technical setup instruction
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: systemPrompt }],
-      model: "llama-3.1-70b-versatile",
+      model: "llama-3.3-70b-versatile",
       temperature: 0.2,
       max_tokens: 500,
       top_p: 0.8
