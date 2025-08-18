@@ -1,4 +1,5 @@
-// Updated imports with security additions
+// ✅ PART 1: IMPORTS & BASIC SETUP - ALL FIXES APPLIED
+import 'dotenv/config';
 import express from 'express';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -8,26 +9,73 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import pg from 'pg';
 const { Pool } = pg;
-import Stripe from 'stripe';                    // Used for payments
+import Stripe from 'stripe';
 import cors from 'cors';
-import jwt from 'jsonwebtoken';                 // Used for JWT tokens
-import bcrypt from 'bcrypt';                    // Used for password hashing
-import rateLimit from 'express-rate-limit';    // Add for security
-import crypto from 'crypto';                   // Add for secure random generation
-import cookieParser from 'cookie-parser';      // FIXED: Add missing cookie parser
-const pgSession = require('connect-pg-simple'); // Used for session store
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
+import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
+import cookieParser from 'cookie-parser';
+import Groq from 'groq-sdk';  // ✅ FIXED: Added missing Groq import
+const pgSession = require('connect-pg-simple');
 
 // Environment Variables and Configuration
 const port = process.env.PORT || 3000;
 const frontendUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://devhubconnect-production.up.railway.app' : 'http://localhost:3000');
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+// ✅ FIXED: Safe Stripe initialization with validation
+let stripe = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  try {
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    console.log('✅ Stripe initialized successfully');
+  } catch (error) {
+    console.error('❌ Stripe initialization failed:', error.message);
+  }
+} else {
+  console.warn('⚠️ STRIPE_SECRET_KEY not configured - payment features disabled');
+}
+
 const app = express();
 app.set('trust proxy', 1);
 
-// FIXED: Add cookie parser middleware BEFORE other middleware
-app.use(cookieParser());
+// ✅ GROQ INTEGRATION - SECURE & PROPERLY INITIALIZED
+let groq = null;
+if (process.env.GROQ_API_KEY) {
+  try {
+    groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    console.log('✅ Groq API initialized successfully');
+  } catch (error) {
+    console.error('❌ Groq initialization failed:', error.message);
+  }
+} else {
+  console.warn('⚠️ GROQ_API_KEY not configured - AI features will use fallbacks');
+}
+
+// ✅ SECURE: Rate limiting for AI requests
+const AI_REQUEST_LIMITS = new Map();
+const MAX_AI_REQUESTS_PER_MINUTE = 10;
+
+function checkAIRateLimit(userId) {
+  const now = Date.now();
+  const userRequests = AI_REQUEST_LIMITS.get(userId) || [];
+  
+  // Remove requests older than 1 minute
+  const recentRequests = userRequests.filter(time => now - time < 60000);
+  
+  if (recentRequests.length >= MAX_AI_REQUESTS_PER_MINUTE) {
+    return false;
+  }
+  
+  // Add current request
+  recentRequests.push(now);
+  AI_REQUEST_LIMITS.set(userId, recentRequests);
+  return true;
+}
+
 // Middleware Setup
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
@@ -49,21 +97,179 @@ if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
 
 // Security: Rate limiting
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 auth attempts per IP
+  windowMs: 15 * 60 * 1000,
+  max: 5,
   message: { error: 'Too many authentication attempts, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
 const callbackLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 10, // Allow more callback attempts
+  windowMs: 5 * 60 * 1000,
+  max: 10,
   message: { error: 'Too many callback attempts, please try again later.' }
 });
 
 // Security: State storage for CSRF protection
 const stateStore = new Map();
+
+console.log('🔍 Environment Variables Check:');
+console.log('  - FRONTEND_URL:', process.env.FRONTEND_URL ? 'SET' : 'NOT SET');
+console.log('  - GITHUB_CLIENT_ID:', process.env.GITHUB_CLIENT_ID ? 'SET' : 'NOT SET');
+console.log('  - GITHUB_CLIENT_SECRET:', process.env.GITHUB_CLIENT_SECRET ? 'SET' : 'NOT SET');
+console.log('  - JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
+console.log('  - DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
+console.log('  - GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'SET' : 'NOT SET');
+// ✅ PART 2: AI FUNCTIONS & SECURITY - ALL FIXES APPLIED
+
+// ✅ ENHANCED: Template analysis with Groq AI - SECURE & COMPLETE
+async function analyzeTemplateQuestion(prompt, templateContext, userId) {
+  // Security: Sanitize inputs
+  if (!prompt || typeof prompt !== 'string' || prompt.length > 1000) {
+    throw new Error('Invalid prompt');
+  }
+  
+  if (!templateContext?.templateId || typeof templateContext.templateId !== 'string') {
+    throw new Error('Invalid template context');
+  }
+
+  // Rate limiting
+  if (!checkAIRateLimit(userId)) {
+    throw new Error('Rate limit exceeded. Please wait before making another AI request.');
+  }
+
+  try {
+    if (!groq) {
+      return getFallbackResponse(prompt, templateContext);
+    }
+
+    const systemPrompt = `You are an expert n8n automation assistant. Help users set up their template: ${templateContext.templateId}
+
+Provide specific, actionable instructions. Keep responses under 200 words.
+Focus on practical steps for n8n workflow setup, credentials, testing, and troubleshooting.
+Do not include any harmful, inappropriate, or non-technical content.`;
+
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt }
+      ],
+      model: "llama-3.1-70b-versatile",
+      temperature: 0.3,
+      max_tokens: 300,
+      top_p: 0.9
+    });
+
+    const response = chatCompletion.choices[0]?.message?.content;
+    
+    if (response && response.trim()) {
+      return `🤖 **AI Assistant for ${templateContext.templateId}:**\n\n${response}\n\n💡 Need more help? Ask specific questions about credentials, webhooks, or testing!`;
+    }
+  } catch (error) {
+    console.error('Groq API error:', error.message);
+    // Don't expose API errors to users
+  }
+  
+  // Always fallback gracefully
+  return getFallbackResponse(prompt, templateContext);
+}
+
+// ✅ ENHANCED: Setup instructions with Groq - SECURE & COMPLETE
+async function generateInstructionsWithGroq(workflow, templateId, userId) {
+  // Security validations
+  if (!workflow || typeof workflow !== 'object') {
+    throw new Error('Invalid workflow data');
+  }
+  
+  if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
+    throw new Error('Invalid template ID');
+  }
+
+  // Rate limiting
+  if (!checkAIRateLimit(userId)) {
+    throw new Error('Rate limit exceeded');
+  }
+
+  try {
+    if (!groq) {
+      return null; // Will use fallback
+    }
+
+    const nodeTypes = workflow.nodes?.map(node => node.type).join(', ') || 'unknown';
+    const nodeCount = workflow.nodes?.length || 0;
+    
+    // Security: Limit node count to prevent abuse
+    if (nodeCount > 100) {
+      throw new Error('Workflow too complex for AI analysis');
+    }
+    
+    const systemPrompt = `Generate setup instructions for an n8n workflow template called "${templateId}".
+The workflow has ${nodeCount} nodes: ${nodeTypes}
+
+Create a professional setup guide with:
+1. Import steps for n8n
+2. Credential configuration for each service
+3. Testing instructions
+4. Common troubleshooting tips
+
+Keep it practical and under 400 words. Focus only on technical setup instructions.`;
+
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [{ role: "user", content: systemPrompt }],
+      model: "llama-3.1-70b-versatile",
+      temperature: 0.2,
+      max_tokens: 500,
+      top_p: 0.8
+    });
+
+    return chatCompletion.choices[0]?.message?.content;
+  } catch (error) {
+    console.error('Groq API error:', error.message);
+    return null; // Will use fallback
+  }
+}
+
+// ✅ SECURE: Fallback response function - COMPLETE & SAFE
+function getFallbackResponse(prompt, templateContext) {
+  const lowerPrompt = prompt.toLowerCase();
+  
+  // Predefined safe responses based on keywords
+  if (lowerPrompt.includes('webhook')) {
+    return `🔗 **Webhook Setup for ${templateContext.templateId}:**
+1. Copy the webhook URL from the Webhook node
+2. Use this URL in your external service
+3. Test with a sample request
+4. Check n8n execution logs for verification`;
+  }
+  
+  if (lowerPrompt.includes('credential') || lowerPrompt.includes('api key')) {
+    return `🔑 **Adding Credentials:**
+1. Go to Settings → Credentials in n8n
+2. Click "Create New Credential"
+3. Select your service type
+4. Enter API key/credentials
+5. Test connection and save`;
+  }
+  
+  if (lowerPrompt.includes('test') || lowerPrompt.includes('run')) {
+    return `🧪 **Testing Your Workflow:**
+1. Click "Execute Workflow" button
+2. Check each node's output
+3. Look for error messages
+4. Use manual mode for debugging
+5. Activate when working properly`;
+  }
+  
+  return `✅ I can help with your **${templateContext.templateId}** template!
+
+Try asking:
+- "How do I add credentials?"
+- "Where is my webhook URL?"
+- "How do I test this workflow?"
+- "What API keys do I need?"
+
+What specific setup step do you need help with?`;
+}
 
 // Security: Input validation
 function validateAndSanitizeUser(githubUser, primaryEmail) {
@@ -89,6 +295,56 @@ setInterval(async () => {
     console.error('❌ Session cleanup error:', error);
   }
 }, 60 * 60 * 1000); // Every hour
+
+// Helper function to convert database field names to frontend format
+function convertFieldNames(template) {
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description,
+    price: template.price,
+    currency: template.currency,
+    imageUrl: template.image_url,
+    workflowJson: template.workflow_json,
+    status: template.status,
+    isPublic: template.is_public,
+    creatorId: template.creator_id,
+    createdAt: template.created_at,
+    updatedAt: template.updated_at,
+    downloadCount: template.download_count,
+    viewCount: template.view_count,
+    rating: template.rating,
+    ratingCount: template.rating_count,
+    stripePriceId: template.stripe_price_id
+  };
+}
+
+// Helper function to parse workflow details
+function parseWorkflowDetails(workflowJson) {
+  try {
+    if (!workflowJson) return { steps: 0, apps: [], hasWorkflow: false };
+    
+    const workflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
+    const steps = workflow.nodes ? workflow.nodes.length : 0;
+    const apps = workflow.nodes ? 
+      [...new Set(workflow.nodes
+        .map(node => {
+          let type = node.type || 'Unknown';
+          if (type.startsWith('n8n-nodes-base.')) {
+            type = type.replace('n8n-nodes-base.', '');
+          }
+          return type;
+        })
+        .filter(type => type !== 'Unknown' && type !== 'Set' && type !== 'NoOp')
+      )] : [];
+    
+    return { steps, apps: apps.slice(0, 10), hasWorkflow: true };
+  } catch (error) {
+    console.error('Error parsing workflow:', error);
+    return { steps: 0, apps: [], hasWorkflow: false };
+  }
+}
+// ✅ PART 3: AUTHENTICATION & MIDDLEWARE - ALL FIXES APPLIED
 
 // JWT-based admin authentication
 const requireAdminAuth = async (req, res, next) => {
@@ -119,7 +375,7 @@ const requireAdminAuth = async (req, res, next) => {
   }
 };
 
-// Security: Enhanced JWT verification middleware
+// ✅ SECURE: Enhanced JWT verification middleware
 const authenticateJWT = async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -178,13 +434,9 @@ const authenticateJWT = async (req, res, next) => {
   }
 };
 
-console.log('🔍 Environment Variables Check:');
-console.log('  - FRONTEND_URL:', process.env.FRONTEND_URL ? 'SET' : 'NOT SET');
-console.log('  - GITHUB_CLIENT_ID:', process.env.GITHUB_CLIENT_ID ? 'SET' : 'NOT SET');
-console.log('  - GITHUB_CLIENT_SECRET:', process.env.GITHUB_CLIENT_SECRET ? 'SET' : 'NOT SET');
-console.log('  - JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
-console.log('  - DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
-// Security: GitHub OAuth initiation with CSRF protection
+// ==================== AUTHENTICATION ROUTES ====================
+
+// ✅ SECURE: GitHub OAuth initiation with CSRF protection
 app.get('/auth/github', authLimiter, (req, res) => {
   try {
     const state = crypto.randomBytes(32).toString('hex');
@@ -218,7 +470,7 @@ app.get('/auth/github', authLimiter, (req, res) => {
   }
 });
 
-// Security: GitHub OAuth callback with comprehensive validation
+// ✅ SECURE: GitHub OAuth callback with comprehensive validation
 app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
   const { code, state, error } = req.query;
   
@@ -421,8 +673,9 @@ app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
     res.redirect(`${frontendUrl}/auth/error?error=internal_error`);
   }
 });
+// ✅ PART 4: AUTH ENDPOINTS & USER MANAGEMENT - ALL FIXES APPLIED
 
-// FIXED: Session-based profile endpoint with validation - returns flat user data as frontend expects
+// ✅ SECURE: Session-based profile endpoint - returns flat user data as frontend expects
 app.get('/auth/profile/session', async (req, res) => {
   try {
     const sessionId = req.cookies?.devhub_session;
@@ -457,7 +710,7 @@ app.get('/auth/profile/session', async (req, res) => {
 
     const userData = user.rows[0];
     
-    // FIXED: Return flat user data as frontend expects (not nested in 'user' object)
+    // ✅ FIXED: Return flat user data as frontend expects (not nested in 'user' object)
     res.json({
       id: userData.id,
       email: userData.email,
@@ -475,7 +728,7 @@ app.get('/auth/profile/session', async (req, res) => {
   }
 });
 
-// FIXED: Add missing refresh endpoint for frontend compatibility
+// ✅ SECURE: Auth refresh endpoint for frontend compatibility
 app.post('/api/auth/refresh', async (req, res) => {
   try {
     const sessionId = req.cookies?.devhub_session;
@@ -508,7 +761,7 @@ app.post('/api/auth/refresh', async (req, res) => {
   }
 });
 
-// FIXED: Support both GET and POST for logout endpoint
+// ✅ SECURE: Support both GET and POST for logout endpoint
 app.route('/auth/logout')
   .get(async (req, res) => {
     try {
@@ -589,7 +842,8 @@ app.route('/auth/logout')
       });
     }
   });
-  // FIXED: Secure admin login endpoint with bcrypt and privacy protection
+
+// ✅ SECURE: Admin login endpoint with bcrypt and privacy protection
 app.post('/api/admin/login', async (req, res) => {
   try {
     const { password } = req.body;
@@ -643,7 +897,7 @@ app.post('/api/admin/login', async (req, res) => {
   }
 });
 
-// Session health check endpoint
+// ✅ SECURE: Session health check endpoint
 app.get('/api/auth/health', async (req, res) => {
   try {
     // Check database connection
@@ -675,7 +929,7 @@ app.get('/api/auth/health', async (req, res) => {
   }
 });
 
-// User profile endpoint
+// ✅ SECURE: User profile endpoint
 app.get('/api/user/profile', (req, res) => {
   if (req.user) {
     res.json({
@@ -696,55 +950,7 @@ app.get('/api/user/profile', (req, res) => {
   }
 });
 
-// Helper function to convert database field names to frontend format
-function convertFieldNames(template) {
-  return {
-    id: template.id,
-    name: template.name,
-    description: template.description,
-    price: template.price,
-    currency: template.currency,
-    imageUrl: template.image_url,
-    workflowJson: template.workflow_json,
-    status: template.status,
-    isPublic: template.is_public,
-    creatorId: template.creator_id,
-    createdAt: template.created_at,
-    updatedAt: template.updated_at,
-    downloadCount: template.download_count,
-    viewCount: template.view_count,
-    rating: template.rating,
-    ratingCount: template.rating_count,
-    stripePriceId: template.stripe_price_id
-  };
-}
-
-function parseWorkflowDetails(workflowJson) {
-  try {
-    if (!workflowJson) return { steps: 0, apps: [], hasWorkflow: false };
-    
-    const workflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
-    const steps = workflow.nodes ? workflow.nodes.length : 0;
-    const apps = workflow.nodes ? 
-      [...new Set(workflow.nodes
-        .map(node => {
-          let type = node.type || 'Unknown';
-          if (type.startsWith('n8n-nodes-base.')) {
-            type = type.replace('n8n-nodes-base.', '');
-          }
-          return type;
-        })
-        .filter(type => type !== 'Unknown' && type !== 'Set' && type !== 'NoOp')
-      )] : [];
-    
-    return { steps, apps: apps.slice(0, 10), hasWorkflow: true };
-  } catch (error) {
-    console.error('Error parsing workflow:', error);
-    return { steps: 0, apps: [], hasWorkflow: false };
-  }
-}
-
-// ✅ MISSING: /api/auth/user endpoint (frontend expects this)
+// ✅ SECURE: /api/auth/user endpoint (frontend expects this)
 app.get('/api/auth/user', (req, res) => {
   if (req.user) {
     res.json({ 
@@ -761,14 +967,30 @@ app.get('/api/auth/user', (req, res) => {
   }
 });
 
-// Error page route
+// ✅ SECURE: Error page route
 app.get('/auth/error', (req, res) => {
   const error = req.query.error || 'unknown_error';
   console.log('🔴 Auth error page accessed:', error);
   res.redirect(`${frontendUrl}/?auth_error=${error}`);
 });
 
-// Template Details Endpoint
+// ✅ SECURE: Dashboard routes
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+app.get('/admin/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+app.get('/admin/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+// ✅ PART 5: TEMPLATE & API ENDPOINTS - ALL FIXES APPLIED
+
+// ==================== TEMPLATE ENDPOINTS ====================
+
+// ✅ SECURE: Template Details Endpoint (FIXED - REMOVED DUPLICATE)
 app.get('/api/templates/:id', async (req, res) => {
   try {
     console.log('📄 Fetching template details for:', req.params.id, 'by user:', req.user?.email || req.user?.username || 'unauthenticated');
@@ -792,201 +1014,14 @@ app.get('/api/templates/:id', async (req, res) => {
     }
     
     const template = result.rows[0];
-    
-  // ✅ GROQ INTEGRATION - Add this at the top with other imports
-import Groq from 'groq-sdk';
-
-// ✅ SECURE: Initialize Groq with error handling
-let groq = null;
-if (process.env.GROQ_API_KEY) {
-  try {
-    groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    console.log('✅ Groq API initialized successfully');
-  } catch (error) {
-    console.error('❌ Groq initialization failed:', error.message);
-  }
-} else {
-  console.warn('⚠️ GROQ_API_KEY not configured - AI features will use fallbacks');
-}
-
-// ✅ SECURE: Rate limiting for AI requests
-const AI_REQUEST_LIMITS = new Map();
-const MAX_AI_REQUESTS_PER_MINUTE = 10;
-
-function checkAIRateLimit(userId) {
-  const now = Date.now();
-  const userRequests = AI_REQUEST_LIMITS.get(userId) || [];
-  
-  // Remove requests older than 1 minute
-  const recentRequests = userRequests.filter(time => now - time < 60000);
-  
-  if (recentRequests.length >= MAX_AI_REQUESTS_PER_MINUTE) {
-    return false;
-  }
-  
-  // Add current request
-  recentRequests.push(now);
-  AI_REQUEST_LIMITS.set(userId, recentRequests);
-  return true;
-}
-
-// ✅ ENHANCED: Template analysis with Groq AI - REPLACES your existing function
-async function analyzeTemplateQuestion(prompt, templateContext, userId) {
-  // Security: Sanitize inputs
-  if (!prompt || typeof prompt !== 'string' || prompt.length > 1000) {
-    throw new Error('Invalid prompt');
-  }
-  
-  if (!templateContext?.templateId || typeof templateContext.templateId !== 'string') {
-    throw new Error('Invalid template context');
-  }
-
-  // Rate limiting
-  if (!checkAIRateLimit(userId)) {
-    throw new Error('Rate limit exceeded. Please wait before making another AI request.');
-  }
-
-  try {
-    if (!groq) {
-      return getFallbackResponse(prompt, templateContext);
-    }
-
-    const systemPrompt = `You are an expert n8n automation assistant. Help users set up their template: ${templateContext.templateId}
-
-Provide specific, actionable instructions. Keep responses under 200 words.
-Focus on practical steps for n8n workflow setup, credentials, testing, and troubleshooting.
-Do not include any harmful, inappropriate, or non-technical content.`;
-
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt }
-      ],
-      model: "llama-3.1-70b-versatile",
-      temperature: 0.3,
-      max_tokens: 300,
-      top_p: 0.9
-    });
-
-    const response = chatCompletion.choices[0]?.message?.content;
-    
-    if (response && response.trim()) {
-      return `🤖 **AI Assistant for ${templateContext.templateId}:**\n\n${response}\n\n💡 Need more help? Ask specific questions about credentials, webhooks, or testing!`;
-    }
-  } catch (error) {
-    console.error('Groq API error:', error.message);
-    // Don't expose API errors to users
-  }
-  
-  // Always fallback gracefully
-  return getFallbackResponse(prompt, templateContext);
-}
-
-// ✅ ENHANCED: Setup instructions with Groq - REPLACES your existing function
-async function generateInstructionsWithGroq(workflow, templateId, userId) {
-  // Security validations
-  if (!workflow || typeof workflow !== 'object') {
-    throw new Error('Invalid workflow data');
-  }
-  
-  if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
-    throw new Error('Invalid template ID');
-  }
-
-  // Rate limiting
-  if (!checkAIRateLimit(userId)) {
-    throw new Error('Rate limit exceeded');
-  }
-
-  try {
-    if (!groq) {
-      return null; // Will use fallback
-    }
-
-    const nodeTypes = workflow.nodes?.map(node => node.type).join(', ') || 'unknown';
-    const nodeCount = workflow.nodes?.length || 0;
-    
-    // Security: Limit node count to prevent abuse
-    if (nodeCount > 100) {
-      throw new Error('Workflow too complex for AI analysis');
-    }
-    
-    const systemPrompt = `Generate setup instructions for an n8n workflow template called "${templateId}".
-The workflow has ${nodeCount} nodes: ${nodeTypes}
-
-Create a professional setup guide with:
-1. Import steps for n8n
-2. Credential configuration for each service
-3. Testing instructions
-4. Common troubleshooting tips
-
-Keep it practical and under 400 words. Focus only on technical setup instructions.`;
-
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [{ role: "user", content: systemPrompt }],
-      model: "llama-3.1-70b-versatile",
-      temperature: 0.2,
-      max_tokens: 500,
-      top_p: 0.8
-    });
-
-    return chatCompletion.choices[0]?.message?.content;
-  } catch (error) {
-    console.error('Groq API error:', error.message);
-    return null; // Will use fallback
-  }
-}
-
-// ✅ SECURE: Fallback response function - REPLACES your existing function
-function getFallbackResponse(prompt, templateContext) {
-  const lowerPrompt = prompt.toLowerCase();
-  
-  // Predefined safe responses based on keywords
-  if (lowerPrompt.includes('webhook')) {
-    return `🔗 **Webhook Setup for ${templateContext.templateId}:**
-1. Copy the webhook URL from the Webhook node
-2. Use this URL in your external service
-3. Test with a sample request
-4. Check n8n execution logs for verification`;
-  }
-  
-  if (lowerPrompt.includes('credential') || lowerPrompt.includes('api key')) {
-    return `🔑 **Adding Credentials:**
-1. Go to Settings → Credentials in n8n
-2. Click "Create New Credential"
-3. Select your service type
-4. Enter API key/credentials
-5. Test connection and save`;
-  }
-  
-  if (lowerPrompt.includes('test') || lowerPrompt.includes('run')) {
-    return `🧪 **Testing Your Workflow:**
-1. Click "Execute Workflow" button
-2. Check each node's output
-3. Look for error messages
-4. Use manual mode for debugging
-5. Activate when working properly`;
-  }
-  
-  return `✅ I can help with your **${templateContext.templateId}** template!
-
-Try asking:
-- "How do I add credentials?"
-- "Where is my webhook URL?"
-- "How do I test this workflow?"
-- "What API keys do I need?"
-
-What specific setup step do you need help with?`;
-}
-
-res.json({ success: true, template: template });
+    res.json({ success: true, template: template });
   } catch (error) {
     console.error('Error fetching template details:', error);
     res.status(500).json({ error: 'Failed to fetch template details' });
   }
 });
 
-// Template update endpoint
+// ✅ SECURE: Template update endpoint
 app.patch('/api/templates/:id', requireAdminAuth, async (req, res) => {
   try {
     const templateId = req.params.id;
@@ -1015,7 +1050,7 @@ app.patch('/api/templates/:id', requireAdminAuth, async (req, res) => {
   }
 });
 
-// ✅ FIXED: Enhanced /api/templates endpoint with proper field conversion
+// ✅ SECURE: Enhanced /api/templates endpoint with proper field conversion
 app.get('/api/templates', async (req, res) => {
   try {
     console.log('📋 Fetching templates for user:', req.user?.email || req.user?.username || 'unauthenticated');
@@ -1050,7 +1085,7 @@ app.get('/api/templates', async (req, res) => {
   }
 });
 
-// ✅ MISSING: /api/recommendations endpoint
+// ✅ SECURE: /api/recommendations endpoint
 app.get('/api/recommendations', async (req, res) => {
   try {
     console.log('🔍 Fetching recommendations...');
@@ -1103,8 +1138,8 @@ app.get('/api/recommendations', async (req, res) => {
   }
 });
 
-// ✅ MISSING: /api/user/purchases endpoint  
-app.get('/api/user/purchases', async (req, res) => {
+// ✅ SECURE: /api/user/purchases endpoint  
+app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
@@ -1153,119 +1188,14 @@ app.get('/api/user/purchases', async (req, res) => {
   }
 });
 
-// FIXED: Add missing dashboard routes
-app.get('/dashboard', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-app.get('/admin/dashboard', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-app.get('/admin/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
 // Template List Endpoint (redirect to main templates endpoint)
 app.get('/api/templates/list', async (req, res) => {
-  // Redirect to the main templates endpoint
   res.redirect('/api/templates');
 });
 
-// Template Details Endpoint
-app.get('/api/templates/:id', async (req, res) => {
-  try {
-    console.log('📄 Fetching template details for:', req.params.id, 'by user:', req.user?.email || req.user?.username || 'unauthenticated');
-    const templateId = req.params.id;
-    if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
-      return res.status(400).json({ error: 'Invalid template ID' });
-    }
-    
-    await pool.query(
-      'UPDATE templates SET view_count = COALESCE(view_count, 0) + 1 WHERE id = $1',
-      [templateId]
-    );
-    
-    const result = await pool.query(
-      'SELECT id, name, description, price, currency, image_url, workflow_json, rating, COALESCE(download_count, 0) as download_count, COALESCE(view_count, 0) as view_count FROM templates WHERE id = $1',
-      [templateId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Template not found' });
-    }
-    
-    res.json({ success: true, template: result.rows[0] });
-  } catch (error) {
-    console.error('Error fetching template details:', error);
-    res.status(500).json({ error: 'Failed to fetch template details' });
-  }
-});
+// ==================== AI ENDPOINTS ====================
 
-// Admin Template List Endpoint
-app.get('/api/admin/templates', requireAdminAuth, async (req, res) => {
-  try {
-    console.log('📋 Admin fetching template list:', req.user.email || req.user.username);
-    const result = await pool.query(`
-      SELECT id, name, description, price, currency, image_url, status, is_public, 
-             creator_id, created_at, updated_at, rating, 
-             COALESCE(download_count, 0) as download_count, 
-             COALESCE(view_count, 0) as view_count
-      FROM templates 
-      ORDER BY created_at DESC 
-      LIMIT 100
-    `);
-    res.json({ success: true, templates: result.rows });
-  } catch (error) {
-    console.error('Error fetching admin templates:', error);
-    res.status(500).json({ error: 'Failed to fetch admin templates' });
-  }
-});
-
-// Template upload endpoint for JSON processing
-app.post('/api/templates/upload', requireAdminAuth, async (req, res) => {
-  try {
-    const { workflowJson, templateName, description, price } = req.body;
-    
-    // Validate JSON format
-    let parsedWorkflow;
-    try {
-      parsedWorkflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
-    } catch (error) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Invalid JSON format',
-        details: 'Please ensure your workflow JSON is properly formatted'
-      });
-    }
-
-    // Validate workflow structure
-    if (!parsedWorkflow.nodes || !Array.isArray(parsedWorkflow.nodes)) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Invalid workflow structure',
-        details: 'Workflow must contain a nodes array'
-      });
-    }
-    
-    console.log('✅ Template JSON validated successfully');
-    res.json({ 
-      success: true, 
-      message: 'Template validated and processed',
-      nodeCount: parsedWorkflow.nodes.length
-    });
-    
-  } catch (error) {
-    console.error('Template upload error:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to process template',
-      details: error.message
-    });
-  }
-});
-
-// ✅ AI Chat Endpoint
+// ✅ ENHANCED: AI Chat Endpoint - NOW WITH WORKING GROQ INTEGRATION
 app.post('/api/ask-ai', authenticateJWT, async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ 
@@ -1404,9 +1334,103 @@ Ask me specific questions like:
     });
   }
 });
+// ✅ PART 6: ADMIN, STRIPE & SERVER STARTUP - FINAL PART WITH ALL FIXES
 
-// ✅ FIXED Stripe Checkout Session (removed passport middleware)
-app.post('/api/stripe/create-checkout-session', async (req, res) => {
+// ==================== ADMIN ENDPOINTS ====================
+
+// ✅ SECURE: Admin Template List Endpoint
+app.get('/api/admin/templates', requireAdminAuth, async (req, res) => {
+  try {
+    console.log('📋 Admin fetching template list:', req.user.email || req.user.username);
+    const result = await pool.query(`
+      SELECT id, name, description, price, currency, image_url, status, is_public, 
+             creator_id, created_at, updated_at, rating, 
+             COALESCE(download_count, 0) as download_count, 
+             COALESCE(view_count, 0) as view_count
+      FROM templates 
+      ORDER BY created_at DESC 
+      LIMIT 100
+    `);
+    res.json({ success: true, templates: result.rows });
+  } catch (error) {
+    console.error('Error fetching admin templates:', error);
+    res.status(500).json({ error: 'Failed to fetch admin templates' });
+  }
+});
+
+// ✅ SECURE: Template upload endpoint for JSON processing
+app.post('/api/templates/upload', requireAdminAuth, async (req, res) => {
+  try {
+    const { workflowJson, templateName, description, price } = req.body;
+    
+    // Validate JSON format
+    let parsedWorkflow;
+    try {
+      parsedWorkflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
+    } catch (error) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid JSON format',
+        details: 'Please ensure your workflow JSON is properly formatted'
+      });
+    }
+
+    // Validate workflow structure
+    if (!parsedWorkflow.nodes || !Array.isArray(parsedWorkflow.nodes)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid workflow structure',
+        details: 'Workflow must contain a nodes array'
+      });
+    }
+    
+    console.log('✅ Template JSON validated successfully');
+    res.json({ 
+      success: true, 
+      message: 'Template validated and processed',
+      nodeCount: parsedWorkflow.nodes.length
+    });
+    
+  } catch (error) {
+    console.error('Template upload error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to process template',
+      details: error.message
+    });
+  }
+});
+
+// ✅ SECURE: Set Admin Role Endpoint
+app.post('/api/admin/set-admin-role', requireAdminAuth, async (req, res) => {
+  try {
+    console.log('🔐 Admin role change requested by:', req.user.email || req.user.username);
+    const { userId, role } = req.body;
+    if (!userId || !['user', 'admin'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid user ID or role' });
+    }
+    await pool.query('UPDATE users SET role = $1 WHERE id = $2', [role, userId]);
+    console.log(`✅ Admin role change by ${req.user.email || req.user.username}: User ${userId} set to ${role}`);
+    res.json({ success: true, message: `User ${userId} role updated to ${role}` });
+  } catch (error) {
+    console.error('Error setting admin role:', error);
+    res.status(500).json({ error: 'Failed to set admin role' });
+  }
+});
+
+// ==================== STRIPE PAYMENT ENDPOINTS ====================
+
+// ✅ SECURE: Stripe Checkout Session (FIXED - removed passport middleware)
+app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res) => {
+  // ✅ FIXED: Check if Stripe is configured
+  if (!stripe) {
+    return res.status(503).json({ 
+      error: 'Payment system unavailable',
+      message: 'Stripe is not configured. Please contact support.',
+      disabled: true
+    });
+  }
+
   // ✅ FIXED: Check authentication manually instead of using passport middleware
   if (!req.user) {
     console.log('❌ Unauthorized checkout attempt - user not logged in');
@@ -1495,24 +1519,9 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   }
 });
 
-// Set Admin Role Endpoint
-app.post('/api/admin/set-admin-role', requireAdminAuth, async (req, res) => {
-  try {
-    console.log('🔐 Admin role change requested by:', req.user.email || req.user.username);
-    const { userId, role } = req.body;
-    if (!userId || !['user', 'admin'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid user ID or role' });
-    }
-    await pool.query('UPDATE users SET role = $1 WHERE id = $2', [role, userId]);
-    console.log(`✅ Admin role change by ${req.user.email || req.user.username}: User ${userId} set to ${role}`);
-    res.json({ success: true, message: `User ${userId} role updated to ${role}` });
-  } catch (error) {
-    console.error('Error setting admin role:', error);
-    res.status(500).json({ error: 'Failed to set admin role' });
-  }
-});
+// ==================== SPA ROUTING & FALLBACKS ====================
 
-// ✅ SPA ROUTING FIX: Serve React app for all non-API routes
+// ✅ SECURE: SPA ROUTING FIX - Serve React app for all non-API routes
 app.get('*', (req, res) => {
   // Don't interfere with API routes
   if (req.path.startsWith('/api/')) {
@@ -1523,7 +1532,9 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// Server Startup with Consolidated Logging
+// ==================== SERVER STARTUP & ERROR HANDLING ====================
+
+// ✅ ENHANCED: Server Startup with Consolidated Logging
 const server = app.listen(port, '0.0.0.0', async () => {
   console.log('\n🚀 ========================================');
   console.log('   DEVHUBCONNECT AI SYSTEM STARTING');
@@ -1550,21 +1561,60 @@ const server = app.listen(port, '0.0.0.0', async () => {
   console.log('   POST /api/admin/login - Admin password login');
   console.log('   GET  /api/admin/templates - Admin template list');
   console.log('   POST /api/stripe/create-checkout-session - Create Stripe checkout');
-  console.log('   GET  /api/purchases - User purchases');
   console.log('   POST /api/admin/set-admin-role - Grant admin role');
   console.log('   GET  /dashboard - User dashboard');
   console.log('   GET  /admin/dashboard - Admin dashboard');
   console.log('   GET  /admin/login - Admin login page');
   console.log('');
+  console.log('🤖 AI FEATURES:');
+  console.log('   ✅ Groq Integration: ' + (groq ? 'ACTIVE' : 'FALLBACK MODE'));
+  console.log('   ✅ Rate Limiting: 10 requests/minute per user');
+  console.log('   ✅ Secure Fallbacks: Always functional');
+  console.log('');
+  console.log('🔒 SECURITY FEATURES:');
+  console.log('   ✅ JWT Authentication with session validation');
+  console.log('   ✅ CSRF protection for OAuth');
+  console.log('   ✅ Input validation and sanitization');
+  console.log('   ✅ Rate limiting on auth and AI endpoints');
+  console.log('   ✅ Secure cookie handling');
+  console.log('');
   console.log('✅ System fully initialized and ready for requests!');
   console.log('========================================\n');
 });
 
-// Server Error Handling
+// ✅ ENHANCED: Server Error Handling
 server.on('error', (error) => {
   console.error('🚨 Server error:', error);
   if (error.code === 'EADDRINUSE') {
     console.error(`❌ Port ${port} is already in use. Please use a different port.`);
     process.exit(1);
   }
+  if (error.code === 'EACCES') {
+    console.error(`❌ Permission denied. Cannot bind to port ${port}.`);
+    process.exit(1);
+  }
 });
+
+// ✅ ENHANCED: Graceful shutdown handling
+process.on('SIGTERM', async () => {
+  console.log('🔄 SIGTERM received. Starting graceful shutdown...');
+  server.close(async () => {
+    console.log('✅ HTTP server closed.');
+    await pool.end();
+    console.log('✅ Database pool closed.');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', async () => {
+  console.log('🔄 SIGINT received. Starting graceful shutdown...');
+  server.close(async () => {
+    console.log('✅ HTTP server closed.');
+    await pool.end();
+    console.log('✅ Database pool closed.');
+    process.exit(0);
+  });
+});
+
+// ✅ FINAL: Export for testing (optional)
+export default app;
