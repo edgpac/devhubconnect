@@ -15,7 +15,7 @@ import { loadStripe } from '@stripe/stripe-js';
 // REPLACE WITH YOUR ACTUAL STRIPE PUBLISHABLE KEY
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51RgVfSBS72lorg0VlXnIXjmsGBjriHLK36isBNmKnsbYjkHmTkz6Rp0hK0QboFaJLnzl0qA2FyLMq3hA5ofFEneN005HATkECJ');
 
-
+// ✅ FIXED: Updated interface to include backend fields
 interface Template {
   id: number;
   name: string;
@@ -23,6 +23,14 @@ interface Template {
   price: number;
   imageUrl?: string;
   workflowJson: { nodes?: { id: string; name: string; type: string }[] };
+  // ✅ ADD: Fields that backend actually sends
+  steps?: number;
+  integratedApps?: string[];
+  workflowDetails?: {
+    steps: number;
+    apps: string[];
+    hasWorkflow: boolean;
+  };
   purchased?: boolean;
   isOwner?: boolean;
   hasAccess?: boolean;
@@ -95,7 +103,9 @@ export const TemplateDetail = () => {
   const deterministicViewsCount = getDeterministicRandom(String(template.id) + "-views", 300, 1500);
   const deterministicRating = (4 + getDeterministicRandom(String(template.id) + "-rating", 1, 9) / 10).toFixed(1);
 
-  const integratedApps = getIntegratedApps(template.workflowJson?.nodes);
+  // ✅ FIXED: Use backend data instead of parsing frontend
+  const integratedApps = template.integratedApps || template.workflowDetails?.apps || getIntegratedApps(template.workflowJson?.nodes);
+  const stepCount = template.steps || template.workflowDetails?.steps || 0;
 
   // ✅ FIXED: Proper admin detection using AuthProvider
   const isAdmin = currentUser?.role === 'admin' || currentUser?.isAdmin || false;
@@ -229,12 +239,10 @@ export const TemplateDetail = () => {
                             Steps Included
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            {Array.isArray(template.workflowJson?.nodes) && template.workflowJson.nodes.length > 0 ? (
-                                template.workflowJson.nodes.map((node) => (
-                                    <span key={node.id} className="bg-gray-200 text-gray-800 text-xs font-medium px-2.5 py-1 rounded-full">
-                                        {node.name}
-                                    </span>
-                                ))
+                            {stepCount > 0 ? (
+                                <span className="bg-green-100 text-green-800 text-sm font-medium px-3 py-1 rounded-full">
+                                    {stepCount} steps in workflow
+                                </span>
                             ) : (
                                 <p className="text-xs text-gray-500">No steps defined.</p>
                             )}
