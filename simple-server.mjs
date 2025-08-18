@@ -793,17 +793,193 @@ app.get('/api/templates/:id', async (req, res) => {
     
     const template = result.rows[0];
     
-    // 🔍 ADD THIS DEBUGGING:
-    console.log('🔍 Template ID:', template.id);
-    console.log('🔍 Has workflow_json:', !!template.workflow_json);
-    console.log('🔍 Workflow JSON type:', typeof template.workflow_json);
+  // ✅ GROQ INTEGRATION - Add this at the top with other imports
+import Groq from 'groq-sdk';
+
+// ✅ SECURE: Initialize Groq with error handling
+let groq = null;
+if (process.env.GROQ_API_KEY) {
+  try {
+    groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    console.log('✅ Groq API initialized successfully');
+  } catch (error) {
+    console.error('❌ Groq initialization failed:', error.message);
+  }
+} else {
+  console.warn('⚠️ GROQ_API_KEY not configured - AI features will use fallbacks');
+}
+
+// ✅ SECURE: Rate limiting for AI requests
+const AI_REQUEST_LIMITS = new Map();
+const MAX_AI_REQUESTS_PER_MINUTE = 10;
+
+function checkAIRateLimit(userId) {
+  const now = Date.now();
+  const userRequests = AI_REQUEST_LIMITS.get(userId) || [];
+  
+  // Remove requests older than 1 minute
+  const recentRequests = userRequests.filter(time => now - time < 60000);
+  
+  if (recentRequests.length >= MAX_AI_REQUESTS_PER_MINUTE) {
+    return false;
+  }
+  
+  // Add current request
+  recentRequests.push(now);
+  AI_REQUEST_LIMITS.set(userId, recentRequests);
+  return true;
+}
+
+// ✅ ENHANCED: Template analysis with Groq AI - REPLACES your existing function
+async function analyzeTemplateQuestion(prompt, templateContext, userId) {
+  // Security: Sanitize inputs
+  if (!prompt || typeof prompt !== 'string' || prompt.length > 1000) {
+    throw new Error('Invalid prompt');
+  }
+  
+  if (!templateContext?.templateId || typeof templateContext.templateId !== 'string') {
+    throw new Error('Invalid template context');
+  }
+
+  // Rate limiting
+  if (!checkAIRateLimit(userId)) {
+    throw new Error('Rate limit exceeded. Please wait before making another AI request.');
+  }
+
+  try {
+    if (!groq) {
+      return getFallbackResponse(prompt, templateContext);
+    }
+
+    const systemPrompt = `You are an expert n8n automation assistant. Help users set up their template: ${templateContext.templateId}
+
+Provide specific, actionable instructions. Keep responses under 200 words.
+Focus on practical steps for n8n workflow setup, credentials, testing, and troubleshooting.
+Do not include any harmful, inappropriate, or non-technical content.`;
+
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt }
+      ],
+      model: "llama-3.1-70b-versatile",
+      temperature: 0.3,
+      max_tokens: 300,
+      top_p: 0.9
+    });
+
+    const response = chatCompletion.choices[0]?.message?.content;
     
-    if (template.workflow_json) {
-      const parsed = parseWorkflowDetails(template.workflow_json);
-      console.log('🔍 Parsed workflow details:', parsed);
+    if (response && response.trim()) {
+      return `🤖 **AI Assistant for ${templateContext.templateId}:**\n\n${response}\n\n💡 Need more help? Ask specific questions about credentials, webhooks, or testing!`;
+    }
+  } catch (error) {
+    console.error('Groq API error:', error.message);
+    // Don't expose API errors to users
+  }
+  
+  // Always fallback gracefully
+  return getFallbackResponse(prompt, templateContext);
+}
+
+// ✅ ENHANCED: Setup instructions with Groq - REPLACES your existing function
+async function generateInstructionsWithGroq(workflow, templateId, userId) {
+  // Security validations
+  if (!workflow || typeof workflow !== 'object') {
+    throw new Error('Invalid workflow data');
+  }
+  
+  if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
+    throw new Error('Invalid template ID');
+  }
+
+  // Rate limiting
+  if (!checkAIRateLimit(userId)) {
+    throw new Error('Rate limit exceeded');
+  }
+
+  try {
+    if (!groq) {
+      return null; // Will use fallback
+    }
+
+    const nodeTypes = workflow.nodes?.map(node => node.type).join(', ') || 'unknown';
+    const nodeCount = workflow.nodes?.length || 0;
+    
+    // Security: Limit node count to prevent abuse
+    if (nodeCount > 100) {
+      throw new Error('Workflow too complex for AI analysis');
     }
     
-    res.json({ success: true, template: template });
+    const systemPrompt = `Generate setup instructions for an n8n workflow template called "${templateId}".
+The workflow has ${nodeCount} nodes: ${nodeTypes}
+
+Create a professional setup guide with:
+1. Import steps for n8n
+2. Credential configuration for each service
+3. Testing instructions
+4. Common troubleshooting tips
+
+Keep it practical and under 400 words. Focus only on technical setup instructions.`;
+
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [{ role: "user", content: systemPrompt }],
+      model: "llama-3.1-70b-versatile",
+      temperature: 0.2,
+      max_tokens: 500,
+      top_p: 0.8
+    });
+
+    return chatCompletion.choices[0]?.message?.content;
+  } catch (error) {
+    console.error('Groq API error:', error.message);
+    return null; // Will use fallback
+  }
+}
+
+// ✅ SECURE: Fallback response function - REPLACES your existing function
+function getFallbackResponse(prompt, templateContext) {
+  const lowerPrompt = prompt.toLowerCase();
+  
+  // Predefined safe responses based on keywords
+  if (lowerPrompt.includes('webhook')) {
+    return `🔗 **Webhook Setup for ${templateContext.templateId}:**
+1. Copy the webhook URL from the Webhook node
+2. Use this URL in your external service
+3. Test with a sample request
+4. Check n8n execution logs for verification`;
+  }
+  
+  if (lowerPrompt.includes('credential') || lowerPrompt.includes('api key')) {
+    return `🔑 **Adding Credentials:**
+1. Go to Settings → Credentials in n8n
+2. Click "Create New Credential"
+3. Select your service type
+4. Enter API key/credentials
+5. Test connection and save`;
+  }
+  
+  if (lowerPrompt.includes('test') || lowerPrompt.includes('run')) {
+    return `🧪 **Testing Your Workflow:**
+1. Click "Execute Workflow" button
+2. Check each node's output
+3. Look for error messages
+4. Use manual mode for debugging
+5. Activate when working properly`;
+  }
+  
+  return `✅ I can help with your **${templateContext.templateId}** template!
+
+Try asking:
+- "How do I add credentials?"
+- "Where is my webhook URL?"
+- "How do I test this workflow?"
+- "What API keys do I need?"
+
+What specific setup step do you need help with?`;
+}
+
+res.json({ success: true, template: template });
   } catch (error) {
     console.error('Error fetching template details:', error);
     res.status(500).json({ error: 'Failed to fetch template details' });
@@ -1089,7 +1265,7 @@ app.post('/api/templates/upload', requireAdminAuth, async (req, res) => {
   }
 });
 
-// ✅ FIXED: AI Chat Endpoint with working functions
+// ✅ AI Chat Endpoint
 app.post('/api/ask-ai', authenticateJWT, async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ 
@@ -1107,19 +1283,125 @@ app.post('/api/ask-ai', authenticateJWT, async (req, res) => {
   try {
     console.log('🧠 AI chat request by:', req.user.email || req.user.username);
     
-    // FIXED: Simple response without calling missing functions
-    const response = `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`;
+    // ✅ FIXED: Actually analyze template with GROQ AI
+    if (templateContext && templateContext.hasValidTemplate) {
+      const response = await analyzeTemplateQuestion(prompt, templateContext, req.user.id);
+      return res.json({ response, source: 'groq_ai_analysis' });
+    }
     
-    // FIXED: Simple logging without missing function
-    console.log(`💬 Chat: AI response for user ${req.user.id}`);
-
+    // Generic helper response
+    const response = `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`;
     res.json({ response, source: 'smart_fallback' });
 
   } catch (error) {
     console.error('❌ Chat error for user:', req.user.email || req.user.username, error);
-    const fallbackResponse = `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`;
     
+    // Handle rate limiting
+    if (error.message.includes('Rate limit')) {
+      return res.status(429).json({ 
+        error: 'Too many requests',
+        message: 'Please wait a moment before asking another question.',
+        retryAfter: 60
+      });
+    }
+    
+    const fallbackResponse = `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`;
     res.json({ response: fallbackResponse });
+  }
+});
+
+// ✅ ENHANCED: Generate Setup Instructions Endpoint - NOW WITH WORKING GROQ
+app.post('/api/generate-setup-instructions', authenticateJWT, async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ 
+      error: 'Authentication required',
+      message: 'You must be signed in to generate setup instructions',
+      loginUrl: '/auth/github'
+    });
+  }
+
+  const { workflow, templateId, purchaseId } = req.body;
+  if (!workflow || !templateId) {
+    return res.status(400).json({ error: 'Workflow and templateId are required.' });
+  }
+
+  try {
+    console.log('📋 Generating setup instructions for:', templateId);
+    
+    const nodeTypes = workflow.nodes?.map((node) => node.type).filter(Boolean) || [];
+    const uniqueServices = [...new Set(nodeTypes)]
+      .map(service => service.replace('n8n-nodes-base.', ''))
+      .filter(service => !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(service))
+      .slice(0, 5);
+
+    // ✅ TRY GROQ FIRST
+    const groqInstructions = await generateInstructionsWithGroq(workflow, templateId, req.user.id);
+    
+    if (groqInstructions) {
+      return res.json({ 
+        success: true,
+        instructions: groqInstructions,
+        source: 'groq_ai',
+        metadata: {
+          nodeCount: workflow.nodes?.length || 0,
+          services: uniqueServices,
+          workflowType: 'AI Generated'
+        }
+      });
+    }
+
+    // ✅ FALLBACK TO STRUCTURED TEMPLATE
+    const instructions = `# ${templateId.replace(/[_-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+
+## 🎯 Workflow Overview
+This template contains **${workflow.nodes?.length || 0} nodes** designed to streamline your automation processes.
+
+## 🚀 Quick Setup Guide
+
+**Step 1: Import Template**
+1. Open your n8n instance (cloud.n8n.io or self-hosted)
+2. Navigate to **"Workflows"** → **"Add workflow"** → **"Import from JSON"**
+3. Paste your downloaded template JSON
+4. Click **"Import"** to create the workflow
+
+**Step 2: Configure Services**
+${uniqueServices.length > 0 ? uniqueServices.map(service => {
+  return `• **${service}:** Go to Credentials → Add → "${service}" → Configure API connection`;
+}).join('\n') : '• Review each node for any required configuration'}
+
+**Step 3: Test & Activate**
+1. **Manual Test:** Click **"Test workflow"** button
+2. **Check Executions:** Review execution log for errors
+3. **Activate:** Toggle the **"Active"** switch when ready
+
+## 💬 Need Help?
+Ask me specific questions like:
+- *"How do I add OpenAI credentials?"*
+- *"Where do I find my webhook URL?"*
+- *"How do I test this workflow?"*
+
+---
+**Template ID:** ${templateId}  
+**Nodes:** ${workflow.nodes?.length || 0}  
+**Services:** ${uniqueServices.join(', ') || 'Core n8n'}`;
+
+    res.json({ 
+      success: true,
+      instructions: instructions,
+      source: 'structured_analysis',
+      metadata: {
+        nodeCount: workflow.nodes?.length || 0,
+        services: uniqueServices,
+        workflowType: 'n8n Automation'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error generating setup instructions:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate setup instructions.',
+      details: error.message
+    });
   }
 });
 
@@ -1230,163 +1512,6 @@ app.post('/api/admin/set-admin-role', requireAdminAuth, async (req, res) => {
   }
 });
 
-// Helper Functions for AI
-function generateStructuredFallback(prompt, templateContext, history) {
-  return `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`;
-}
-
-function getConversationSummary(history) {
-  if (!history || !Array.isArray(history)) return 'No conversation history provided.';
-  return history
-    .slice(-3)
-    .map((msg, i) => `Turn ${i + 1} (${msg.role}): ${msg.content.substring(0, 100)}...`)
-    .join('\n');
-}
-
-function generateSmartFallback(prompt, templateContext, history) {
-  return {
-    response: generateStructuredFallback(prompt, templateContext, history),
-    confidence: 0.7
-  };
-}
-
-function isPromptDisclosure(prompt) {
-  return false; // Simplified for this example
-}
-
-async function checkLearnedResponses(prompt, templateId) {
-  return null; // Simplified for this example
-}
-
-async function logChatInteraction(templateId, prompt, response, userId, type) {
-  // Simplified logging for this example
-  console.log(`💬 Chat: ${type} for user ${userId}`);
-}
-
-async function learnFromInteraction(prompt, response, templateId, success) {
-  // Simplified learning for this example
-  console.log(`🎓 Learning from interaction: ${success ? 'success' : 'failure'}`);
-}
-
-// ✅ AI Chat Endpoint
-app.post('/api/ask-ai', authenticateJWT, async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ 
-      error: 'Authentication required',
-      message: 'You must be signed in to use the AI chat feature',
-      loginUrl: '/auth/github'
-    });
-  }
-
-  const { prompt, history, templateContext } = req.body;
-  if (!prompt) {
-    return res.status(400).json({ error: 'Prompt is required in the request body.' });
-  }
-
-  try {
-    console.log('🧠 AI chat request by:', req.user.email || req.user.username);
-    
-    // Use smart fallback for now
-    const smartFallback = generateSmartFallback(prompt, templateContext, history);
-    const response = smartFallback.response;
-    
-    await logChatInteraction(
-      templateContext?.templateId || 'general_chat',
-      prompt,
-      response,
-      req.user.id,
-      'smart_fallback'
-    );
-
-    res.json({ response, source: 'smart_fallback' });
-
-  } catch (error) {
-    console.error('❌ Chat error for user:', req.user.email || req.user.username, error);
-    const fallbackResponse = `I'm here to help with your n8n template setup! Try asking about specific steps like "How do I add credentials in n8n?" or "Where do I paste my API key?"`;
-    
-    res.json({ response: fallbackResponse });
-  }
-});
-
-// ✅ Generate Setup Instructions Endpoint
-app.post('/api/generate-setup-instructions', authenticateJWT, async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ 
-      error: 'Authentication required',
-      message: 'You must be signed in to generate setup instructions',
-      loginUrl: '/auth/github'
-    });
-  }
-
-  const { workflow, templateId, purchaseId } = req.body;
-  if (!workflow || !templateId) {
-    return res.status(400).json({ error: 'Workflow and templateId are required.' });
-  }
-
-  try {
-    console.log('📋 Generating setup instructions for:', templateId);
-    
-    const nodeTypes = workflow.nodes?.map((node) => node.type).filter(Boolean) || [];
-    const uniqueServices = [...new Set(nodeTypes)]
-      .map(service => service.replace('n8n-nodes-base.', ''))
-      .filter(service => !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(service))
-      .slice(0, 5);
-
-    const instructions = `# ${templateId.replace(/[_-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-
-## 🎯 Workflow Overview
-This template contains **${workflow.nodes?.length || 0} nodes** designed to streamline your automation processes.
-
-## 🚀 Quick Setup Guide
-
-**Step 1: Import Template**
-1. Open your n8n instance (cloud.n8n.io or self-hosted)
-2. Navigate to **"Workflows"** → **"Add workflow"** → **"Import from JSON"**
-3. Paste your downloaded template JSON
-4. Click **"Import"** to create the workflow
-
-**Step 2: Configure Services**
-${uniqueServices.length > 0 ? uniqueServices.map(service => {
-  return `• **${service}:** Go to Credentials → Add → "${service}" → Configure API connection`;
-}).join('\n') : '• Review each node for any required configuration'}
-
-**Step 3: Test & Activate**
-1. **Manual Test:** Click **"Test workflow"** button
-2. **Check Executions:** Review execution log for errors
-3. **Activate:** Toggle the **"Active"** switch when ready
-
-## 💬 Need Help?
-Ask me specific questions like:
-- *"How do I add OpenAI credentials?"*
-- *"Where do I find my webhook URL?"*
-- *"How do I test this workflow?"*
-
----
-**Template ID:** ${templateId}  
-**Nodes:** ${workflow.nodes?.length || 0}  
-**Services:** ${uniqueServices.join(', ') || 'Core n8n'}`;
-
-    res.json({ 
-      success: true,
-      instructions: instructions,
-      source: 'structured_fallback',
-      metadata: {
-        nodeCount: workflow.nodes?.length || 0,
-        services: uniqueServices,
-        workflowType: 'General Automation'
-      }
-    });
-
-  } catch (error) {
-    console.error('❌ Error generating setup instructions:', error);
-    res.status(500).json({ 
-      error: 'Failed to generate setup instructions.',
-      details: error.message,
-      fallback: true
-    });
-  }
-});
-
 // ✅ SPA ROUTING FIX: Serve React app for all non-API routes
 app.get('*', (req, res) => {
   // Don't interfere with API routes
@@ -1417,8 +1542,8 @@ const server = app.listen(port, '0.0.0.0', async () => {
   console.log('   ✅ Admin password login - /api/admin/login');
   console.log('');
   console.log('🌐 ENDPOINTS AVAILABLE:');
-  console.log('   POST /api/ask-ai - AI chat system');
-  console.log('   POST /api/generate-setup-instructions - Generate template instructions');
+  console.log('   POST /api/ask-ai - AI chat system (NOW WITH GROQ!)');
+  console.log('   POST /api/generate-setup-instructions - Generate template instructions (NOW WITH GROQ!)');
   console.log('   GET  /api/templates - Template list');
   console.log('   GET  /api/recommendations - Recommended templates');
   console.log('   GET  /api/user/purchases - User purchases');
