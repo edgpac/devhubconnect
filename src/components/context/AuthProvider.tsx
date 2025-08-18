@@ -8,7 +8,7 @@ type User = {
   isAdmin?: boolean;
   username?: string;
   github_id?: string;
-  avatar?: string;  // ← ADD THIS LINE
+  avatar?: string;  // ✅ FIXED: Added avatar field
 };
 
 type AuthContextType = {
@@ -55,7 +55,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             role: data.role,
             isAdmin: data.isAdmin || data.role === 'admin',
             username: data.name || data.email?.split('@')[0],
-            github_id: data.id
+            github_id: data.id,
+            avatar: data.avatar || data.avatar_url  // ✅ FIXED: Map avatar field
           };
           
           setCurrentUser(user);
@@ -78,6 +79,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // ✅ NEW: Handle OAuth callback
+  const handleOAuthCallback = async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    if (urlParams.get('success') === 'true') {
+      console.log('🎉 OAuth success detected! Checking session...');
+      
+      // Clean URL first
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Wait for session to be fully established
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Check for new session
+      await checkSession();
+    } else if (urlParams.get('auth_error')) {
+      console.log('❌ OAuth error detected:', urlParams.get('auth_error'));
+      clearAuth();
+      // Could show toast/alert here
+    }
+  };
+
   // Clear authentication state
   const clearAuth = () => {
     console.log('🔓 Clearing auth state');
@@ -91,6 +114,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const initAuth = async () => {
       console.log('🚀 Initializing Auth Checker...');
+      
+      // ✅ NEW: Handle OAuth callback first
+      await handleOAuthCallback();
       
       // Check if we have stored auth
       const storedToken = localStorage.getItem('token');
