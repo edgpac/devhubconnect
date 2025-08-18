@@ -810,6 +810,35 @@ app.get('/api/templates/:id', async (req, res) => {
   }
 });
 
+// Template update endpoint
+app.patch('/api/templates/:id', requireAdminAuth, async (req, res) => {
+  try {
+    const templateId = req.params.id;
+    const { name, description, price, workflowJson, imageUrl } = req.body;
+    
+    console.log('🔧 Updating template:', templateId, 'by user:', req.user.email);
+    
+    if (!name || !description || price === undefined) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    const result = await pool.query(
+      'UPDATE templates SET name = $1, description = $2, price = $3, workflow_json = $4, image_url = $5, updated_at = NOW() WHERE id = $6 RETURNING *',
+      [name, description, Math.round(parseFloat(price) * 100), workflowJson, imageUrl, templateId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+    
+    console.log('✅ Template updated successfully');
+    res.json({ success: true, template: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating template:', error);
+    res.status(500).json({ error: 'Failed to update template' });
+  }
+});
+
 // ✅ FIXED: Enhanced /api/templates endpoint with proper field conversion
 app.get('/api/templates', async (req, res) => {
   try {
