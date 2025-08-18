@@ -23,7 +23,8 @@ interface Template {
   price: number;
   imageUrl?: string;
   image_url?: string; // ✅ ADD: Backend field name
-  workflowJson: { nodes?: { id: string; name: string; type: string }[] };
+  workflowJson?: { nodes?: { id: string; name: string; type: string }[] };
+  workflow_json?: { nodes?: { id: string; name: string; type: string }[] }; // ✅ ADD: Backend field name
   // ✅ ADD: Fields that backend actually sends
   steps?: number;
   integratedApps?: string[];
@@ -38,7 +39,7 @@ interface Template {
 }
 
 const handleDownloadJson = (template: Template) => {
-    if (!template.workflowJson) return;
+    if (!template.workflowJson && !template.workflow_json) return;
     const downloadUrl = `/api/templates/${template.id}/download-workflow`;
     
     const a = document.createElement("a");
@@ -106,6 +107,8 @@ export const TemplateDetail = () => {
     imageUrl: template.imageUrl,
     image_url: template.image_url,
     finalImageUrl: imageUrl,
+    workflowJson: template.workflowJson,
+    workflow_json: template.workflow_json,
     hasImageUrl: !!imageUrl,
     imageUrlType: typeof imageUrl,
     imageUrlLength: imageUrl?.length
@@ -119,9 +122,10 @@ export const TemplateDetail = () => {
   const deterministicViewsCount = getDeterministicRandom(String(template.id) + "-views", 300, 1500);
   const deterministicRating = (4 + getDeterministicRandom(String(template.id) + "-rating", 1, 9) / 10).toFixed(1);
 
-  // ✅ FIXED: Use backend data instead of parsing frontend
-  const integratedApps = template.integratedApps || template.workflowDetails?.apps || getIntegratedApps(template.workflowJson?.nodes);
-  const stepCount = template.steps || template.workflowDetails?.steps || 0;
+  // ✅ FIXED: Use both field names for workflow data parsing
+  const workflowNodes = template.workflowJson?.nodes || template.workflow_json?.nodes;
+  const integratedApps = template.integratedApps || template.workflowDetails?.apps || getIntegratedApps(workflowNodes);
+  const stepCount = template.steps || template.workflowDetails?.steps || workflowNodes?.length || 0;
 
   // ✅ FIXED: Proper admin detection using AuthProvider
   const isAdmin = currentUser?.role === 'admin' || currentUser?.isAdmin || false;
@@ -282,7 +286,7 @@ export const TemplateDetail = () => {
                             Integrated Apps
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            {integratedApps.length > 0 ? (
+                            {integratedApps && integratedApps.length > 0 ? (
                                 integratedApps.map((appType) => (
                                     <span key={appType} className="bg-blue-100 text-blue-800 text-xs font-medium capitalize px-2.5 py-1 rounded-full">
                                         {appType}
