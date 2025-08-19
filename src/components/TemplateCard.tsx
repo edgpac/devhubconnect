@@ -132,10 +132,10 @@ export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
    <Card className="h-full flex flex-col hover:shadow-lg transition-shadow duration-200">
      {/* Template Image */}
      <div className="relative overflow-hidden rounded-t-lg">
-       {/* ✅ MAIN FIX: Use the resolved imageUrl variable */}
-       {imageUrl ? (
+       {/* ✅ FIXED: Use the resolved imageUrl variable and handle both field names */}
+       {(template.imageUrl || template.image_url) ? (
          <img 
-           src={imageUrl} 
+           src={template.imageUrl || template.image_url} 
            alt={template.name}
            className="w-full h-48 object-cover transition-transform duration-300 ease-in-out hover:scale-110"
            onError={(e) => {
@@ -148,7 +148,7 @@ export const TemplateCard = ({ template, onPreview }: TemplateCardProps) => {
        ) : null}
        
        {/* ✅ Always show fallback div, hide it when image loads successfully */}
-       <div className={`w-full h-48 bg-gray-100 flex items-center justify-center transition-transform duration-300 ease-in-out hover:scale-110 image-fallback ${imageUrl ? 'hidden' : ''}`}>
+       <div className={`w-full h-48 bg-gray-100 flex items-center justify-center transition-transform duration-300 ease-in-out hover:scale-110 image-fallback ${(template.imageUrl || template.image_url) ? 'hidden' : ''}`}>
          <div className="text-center text-gray-400">
            <div className="text-4xl mb-2">📋</div>
            <div className="text-sm">Workflow Preview</div>
