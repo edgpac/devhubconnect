@@ -134,7 +134,10 @@ const TemplateUpload: React.FC<TemplateUploadProps> = ({
                  <Button 
                    variant="outline" 
                    className="mx-auto"
-                   onClick={() => fileInputRef.current?.click()}
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     fileInputRef.current?.click();
+                   }}
                  >
                    <FileText className="h-4 w-4 mr-2" />
                    Browse Files
