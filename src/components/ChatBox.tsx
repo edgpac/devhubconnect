@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import TemplateUpload from './TemplateUpload';
+import ChatInterface from './ChatInterface';
 import { ValidationResult } from '../services/dhcValidator';
 
 export default function ChatBox() {
@@ -13,12 +15,18 @@ export default function ChatBox() {
   const [loading, setLoading] = useState(false);
   // State to store validated template
   const [validatedTemplate, setValidatedTemplate] = useState<ValidationResult | null>(null);
+  // State to control the full-screen chat interface
+  const [showChatInterface, setShowChatInterface] = useState(false);
+  
+  // Navigation hook for React Router
+  const navigate = useNavigate();
 
   /**
    * Handles template validation success
    */
   const handleTemplateValidated = async (validation: ValidationResult) => {
     setValidatedTemplate(validation);
+    setShowChatInterface(true); // Open the full-screen chat interface
     
     // Add success message to chat
     const successMessage = {
@@ -147,6 +155,7 @@ export default function ChatBox() {
    */
   const resetChat = () => {
     setValidatedTemplate(null);
+    setShowChatInterface(false);
     setMessages([
       { role: 'assistant', text: '👋 Welcome! Please upload your DevHubConnect template (.json file) to get started with setup instructions.' }
     ]);
@@ -167,91 +176,107 @@ export default function ChatBox() {
   };
 
   return (
-    <div className="p-4 border rounded-md w-full shadow-md font-sans bg-white max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-800">DevHubConnect Setup Assistant</h2>
-        {validatedTemplate && (
-          <div className="flex gap-2">
-            <button
-              onClick={copyInstructions}
-              className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors"
-            >
-              📋 Copy Instructions
-            </button>
-            <button
-              onClick={resetChat}
-              className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 transition-colors"
-            >
-              🔄 New Template
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Template Upload Section - Show only if no template is validated */}
-      {!validatedTemplate && (
-        <div className="mb-6">
-          <TemplateUpload onTemplateValidated={handleTemplateValidated} />
-        </div>
+    <>
+      {/* Full-screen chat interface */}
+      {showChatInterface && validatedTemplate && (
+        <ChatInterface
+          validatedTemplate={validatedTemplate}
+          onClose={() => setShowChatInterface(false)}
+          onBack={() => setShowChatInterface(false)}
+          onGoHome={() => navigate('/')}
+          onGoToDashboard={() => navigate('/dashboard')}
+        />
       )}
 
-      {/* Validated Template Info */}
-      {validatedTemplate && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-center gap-2 text-green-700">
-            <span className="text-lg">✅</span>
-            <div>
-              <div className="font-medium">Template: {validatedTemplate.templateId}</div>
-              <div className="text-sm opacity-75">Purchase ID: {validatedTemplate.purchaseId}</div>
+      {/* Original ChatBox interface - hidden when full-screen chat is open */}
+      {!showChatInterface && (
+        <div className="p-4 border rounded-md w-full shadow-md font-sans bg-white max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-800">DevHubConnect Setup Assistant</h2>
+            {validatedTemplate && (
+              <div className="flex gap-2">
+                <button
+                  onClick={copyInstructions}
+                  className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors"
+                >
+                  📋 Copy Instructions
+                </button>
+                <button
+                  onClick={resetChat}
+                  className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 transition-colors"
+                >
+                  🔄 New Template
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Template Upload Section - Show only if no template is validated */}
+          {!validatedTemplate && (
+            <div className="mb-6">
+              <TemplateUpload onTemplateValidated={handleTemplateValidated} />
             </div>
+          )}
+
+          {/* Validated Template Info */}
+          {validatedTemplate && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center gap-2 text-green-700">
+                <span className="text-lg">✅</span>
+                <div>
+                  <div className="font-medium">Template: {validatedTemplate.templateId}</div>
+                  <div className="text-sm opacity-75">Purchase ID: {validatedTemplate.purchaseId}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Message display area */}
+          <div className="h-96 overflow-y-auto space-y-3 mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+            {messages.map((msg, i) => (
+              <div
+                key={i}
+                className={`text-sm p-3 rounded-lg shadow-sm ${
+                  msg.role === 'user'
+                    ? 'bg-blue-500 text-white ml-auto max-w-[85%] text-right'
+                    : 'bg-white text-gray-800 mr-auto max-w-[90%] text-left border border-gray-200'
+                }`}
+                style={{ wordBreak: 'break-word' }}
+              >
+                <pre className="whitespace-pre-wrap font-sans">{msg.text}</pre>
+              </div>
+            ))}
+            {loading && (
+              <div className="text-sm italic text-gray-500 p-3 text-center">
+                <span className="inline-block animate-pulse">🤖 AI is thinking...</span>
+              </div>
+            )}
           </div>
+
+          {/* Input section - Only show if template is validated */}
+          {validatedTemplate && (
+            <>
+              <input
+                type="text"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Ask questions about your template setup..."
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={loading}
+              />
+              <button
+                onClick={sendMessage}
+                className="mt-3 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition duration-200 ease-in-out shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={loading || !input.trim()}
+              >
+                Send Message
+              </button>
+            </>
+          )}
         </div>
       )}
-
-      {/* Message display area */}
-      <div className="h-96 overflow-y-auto space-y-3 mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`text-sm p-3 rounded-lg shadow-sm ${
-              msg.role === 'user'
-                ? 'bg-blue-500 text-white ml-auto max-w-[85%] text-right'
-                : 'bg-white text-gray-800 mr-auto max-w-[90%] text-left border border-gray-200'
-            }`}
-            style={{ wordBreak: 'break-word' }}
-          >
-            <pre className="whitespace-pre-wrap font-sans">{msg.text}</pre>
-          </div>
-        ))}
-        {loading && (
-          <div className="text-sm italic text-gray-500 p-3 text-center">
-            <span className="inline-block animate-pulse">🤖 AI is thinking...</span>
-          </div>
-        )}
-      </div>
-
-      {/* Input section - Only show if template is validated */}
-      {validatedTemplate && (
-        <>
-          <input
-            type="text"
-            className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Ask questions about your template setup..."
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={loading}
-          />
-          <button
-            onClick={sendMessage}
-            className="mt-3 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition duration-200 ease-in-out shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={loading || !input.trim()}
-          >
-            Send Message
-          </button>
-        </>
-      )}
-    </div>
+    </>
   );
 }
