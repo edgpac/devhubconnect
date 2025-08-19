@@ -1248,7 +1248,7 @@ app.get('/api/templates/:id/download', authenticateJWT, async (req, res) => {
     console.log('✅ Template download successful:', templateId, filename, 'by', req.user.email);
 
     // Send the workflow JSON
-    res.json(template.workflow_json);
+    res.send(JSON.stringify(template.workflow_json, null, 2));
 
   } catch (error) {
     console.error('❌ Template download error:', error);
