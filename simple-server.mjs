@@ -1471,32 +1471,29 @@ app.post('/api/ai/generate-template-details', requireAdminAuth, async (req, res)
         .filter(type => !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(type))
       )] : [];
 
-    // Return enhanced template details
-    res.json({
-      success: true,
-      enhancedDetails: {
-        name: templateName,
-        description: description || `Automated workflow with ${nodeCount} nodes`,
-        nodeCount: nodeCount,
-        integratedApps: serviceTypes.slice(0, 10),
-        category: serviceTypes.length > 0 ? serviceTypes[0] : 'Automation',
-        complexity: nodeCount < 5 ? 'Simple' : nodeCount < 15 ? 'Intermediate' : 'Advanced',
-        estimatedSetupTime: nodeCount < 5 ? '5-10 minutes' : nodeCount < 15 ? '15-30 minutes' : '30+ minutes'
-      },
-      metadata: {
-        totalNodes: nodeCount,
-        serviceCount: serviceTypes.length,
-        aiEnhanced: false,
-        generatedAt: new Date().toISOString()
-      }
-    });
-
-  } catch (error) {
-    console.error('AI generation error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to generate template details'
-    });
+    // Return enhanced template details (FIXED FORMAT)
+res.json({
+  success: true,
+  // ✅ FIX: Return fields that frontend expects
+  name: templateName || `${serviceTypes[0] || 'Automation'} Workflow`,
+  description: description || `Automated workflow with ${nodeCount} nodes using ${serviceTypes.slice(0,3).join(', ')}`,
+  price: nodeCount < 5 ? 999 : nodeCount < 15 ? 1999 : 2999, // Price in cents
+  
+  // ✅ BONUS: Keep the enhanced details too
+  enhancedDetails: {
+    name: templateName,
+    description: description || `Automated workflow with ${nodeCount} nodes`,
+    nodeCount: nodeCount,
+    integratedApps: serviceTypes.slice(0, 10),
+    category: serviceTypes.length > 0 ? serviceTypes[0] : 'Automation',
+    complexity: nodeCount < 5 ? 'Simple' : nodeCount < 15 ? 'Intermediate' : 'Advanced',
+    estimatedSetupTime: nodeCount < 5 ? '5-10 minutes' : nodeCount < 15 ? '15-30 minutes' : '30+ minutes'
+  },
+  metadata: {
+    totalNodes: nodeCount,
+    serviceCount: serviceTypes.length,
+    aiEnhanced: false,
+    generatedAt: new Date().toISOString()
   }
 });
 
