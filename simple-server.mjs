@@ -1600,7 +1600,7 @@ app.get('/api/admin/templates', requireAdminAuth, async (req, res) => {
   }
 });
 
-// ✅ MISSING ROUTE: Template creation endpoint
+// ✅ FIXED: Template creation endpoint with correct database schema
 app.post('/api/templates', requireAdminAuth, async (req, res) => {
   try {
     const { name, description, price, workflowJson, imageUrl } = req.body;
@@ -1642,32 +1642,25 @@ app.post('/api/templates', requireAdminAuth, async (req, res) => {
       });
     }
     
-    // Generate unique template ID
-    const templateId = Date.now().toString();
-    
-    // Insert template into database
+    // ✅ FIXED: Insert template with correct schema (id auto-increments)
     const result = await pool.query(`
       INSERT INTO templates (
-        id, name, description, price, currency, image_url, workflow_json, 
-        status, is_public, creator_id, created_at, updated_at,
-        download_count, view_count, rating, rating_count
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW(), $11, $12, $13, $14)
+        name, description, price, workflow_json, image_url, 
+        creator_id, currency, status, is_public, download_count, view_count
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `, [
-      templateId,
       name.trim(),
       description.trim(), 
       priceInCents,
-      'usd',
+      parsedWorkflow, // Use object directly for JSONB
       imageUrl || null,
-      JSON.stringify(parsedWorkflow),
-      'active',
-      true, // is_public
       req.user.id, // creator_id
+      'USD', // currency (must match VARCHAR(3))
+      'draft', // status (use default enum value)
+      true, // is_public
       0, // download_count
-      0, // view_count  
-      4.5, // default rating
-      0 // rating_count
+      0  // view_count
     ]);
     
     const template = result.rows[0];
@@ -1695,8 +1688,7 @@ app.post('/api/templates', requireAdminAuth, async (req, res) => {
       message: error.message,
       code: error.code,
       constraint: error.constraint,
-      detail: error.detail,
-      stack: error.stack
+      detail: error.detail
     });
     
     // Handle specific PostgreSQL errors
