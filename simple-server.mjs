@@ -1170,6 +1170,156 @@ app.get('/api/recommendations', async (req, res) => {
   }
 });
 
+// ✅ SECURE: Template download endpoint for purchased templates
+app.get('/api/templates/:id/download', authenticateJWT, async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ 
+      error: 'Authentication required',
+      message: 'You must be logged in to download templates'
+    });
+  }
+
+  try {
+    const templateId = req.params.id;
+    console.log('📥 Download request for template:', templateId, 'by user:', req.user.email);
+
+    // Validate template ID
+    if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
+      return res.status(400).json({ error: 'Invalid template ID' });
+    }
+
+    // Check if template exists
+    const templateResult = await pool.query(
+      'SELECT id, name, workflow_json, price FROM templates WHERE id = $1',
+      [templateId]
+    );
+
+    if (templateResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    const template = templateResult.rows[0];
+
+    // Check if user has purchased this template
+    const purchaseResult = await pool.query(`
+      SELECT p.id, p.status, p.purchased_at 
+      FROM purchases p 
+      WHERE p.user_id = $1 AND p.template_id = $2 AND p.status = 'completed'
+      ORDER BY p.purchased_at DESC 
+      LIMIT 1
+    `, [req.user.id, templateId]);
+
+    if (purchaseResult.rows.length === 0) {
+      console.log('❌ Download denied - user has not purchased template:', req.user.email, templateId);
+      return res.status(403).json({ 
+        error: 'Access denied',
+        message: 'You must purchase this template before downloading',
+        needsPurchase: true
+      });
+    }
+
+    // Validate workflow JSON exists
+    if (!template.workflow_json) {
+      return res.status(500).json({ 
+        error: 'Template data unavailable',
+        message: 'This template does not have workflow data available'
+      });
+    }
+
+    // Update download count
+    await pool.query(
+      'UPDATE templates SET download_count = COALESCE(download_count, 0) + 1 WHERE id = $1',
+      [templateId]
+    );
+
+    // Prepare download filename
+    const sanitizedName = template.name
+      .replace(/[^a-zA-Z0-9\-_\s]/g, '') // Remove special chars
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .toLowerCase();
+    
+    const filename = `${sanitizedName}-${templateId}.json`;
+
+    // Set headers for file download
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+
+    console.log('✅ Template download successful:', templateId, filename, 'by', req.user.email);
+
+    // Send the workflow JSON
+    res.json(template.workflow_json);
+
+  } catch (error) {
+    console.error('❌ Template download error:', error);
+    res.status(500).json({ 
+      error: 'Download failed',
+      message: 'Failed to download template. Please try again.'
+    });
+  }
+});
+
+// ✅ ALTERNATIVE: Template preview endpoint (for View Preview buttons)
+app.get('/api/templates/:id/preview', async (req, res) => {
+  try {
+    const templateId = req.params.id;
+    console.log('👁️ Preview request for template:', templateId);
+
+    // Validate template ID
+    if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
+      return res.status(400).json({ error: 'Invalid template ID' });
+    }
+
+    // Get template details (public info only)
+    const result = await pool.query(`
+      SELECT 
+        id, name, description, price, image_url, 
+        created_at, download_count, view_count, rating,
+        workflow_json
+      FROM templates 
+      WHERE id = $1 AND is_public = true
+    `, [templateId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found or not public' });
+    }
+
+    const template = result.rows[0];
+
+    // Update view count
+    await pool.query(
+      'UPDATE templates SET view_count = COALESCE(view_count, 0) + 1 WHERE id = $1',
+      [templateId]
+    );
+
+    // Return template info with workflow for preview
+    res.json({
+      success: true,
+      template: {
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        price: template.price,
+        imageUrl: template.image_url,
+        workflowJson: template.workflow_json,
+        stats: {
+          downloads: template.download_count || 0,
+          views: template.view_count || 0,
+          rating: template.rating || 0
+        },
+        createdAt: template.created_at
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Template preview error:', error);
+    res.status(500).json({ 
+      error: 'Preview failed',
+      message: 'Failed to load template preview'
+    });
+  }
+});
+
 // ✅ SECURE: /api/user/purchases endpoint  
 app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
   if (!req.user) {
