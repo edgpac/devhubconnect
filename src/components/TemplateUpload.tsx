@@ -101,7 +101,7 @@ const TemplateUpload: React.FC<TemplateUploadProps> = ({
        <CardContent className="p-6">
          <div 
            className={`
-             relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 min-h-[300px] flex flex-col items-center justify-center
+             relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 min-h-[300px] flex flex-col items-center justify-center cursor-pointer
              ${dragActive ? 'border-blue-400 bg-blue-50' : ''}
              ${isValidating ? 'border-yellow-400 bg-yellow-50' : ''}
              ${validationError ? 'border-red-400 bg-red-50' : ''}
@@ -110,6 +110,7 @@ const TemplateUpload: React.FC<TemplateUploadProps> = ({
            onDrop={handleDrop}
            onDragOver={handleDragOver}
            onDragLeave={handleDragLeave}
+           onClick={() => fileInputRef.current?.click()}
          >
            <input
              ref={fileInputRef}
@@ -121,28 +122,30 @@ const TemplateUpload: React.FC<TemplateUploadProps> = ({
            />
            
            {!validatedTemplate && !isValidating && !validationError && (
-             <label htmlFor="template-file-input" className="cursor-pointer w-full">
-               <div className="space-y-4">
-                 <Upload className="h-16 w-16 mx-auto text-gray-400" />
-                 <div>
-                   <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                     Upload DevHubConnect Template
-                   </h3>
-                   <p className="text-gray-500 mb-4">
-                     Drag & drop your .json template file here or click to browse
-                   </p>
-                   <Button variant="outline" className="mx-auto">
-                     <FileText className="h-4 w-4 mr-2" />
-                     Browse Files
-                   </Button>
-                 </div>
-                 <div className="text-xs text-gray-400 space-y-1">
-                   <p>✓ Only templates purchased from DevHubConnect.com are supported</p>
-                   <p>✓ File must be in .json format</p>
-                   <p>✓ Maximum file size: 10MB</p>
-                 </div>
+             <div className="space-y-4">
+               <Upload className="h-16 w-16 mx-auto text-gray-400" />
+               <div>
+                 <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                   Upload DevHubConnect Template
+                 </h3>
+                 <p className="text-gray-500 mb-4">
+                   Select your .json template file to get started
+                 </p>
+                 <Button 
+                   variant="outline" 
+                   className="mx-auto"
+                   onClick={() => fileInputRef.current?.click()}
+                 >
+                   <FileText className="h-4 w-4 mr-2" />
+                   Browse Files
+                 </Button>
                </div>
-             </label>
+               <div className="text-xs text-gray-400 space-y-1">
+                 <p>✓ Only templates purchased from DevHubConnect.com are supported</p>
+                 <p>✓ File must be in .json format</p>
+                 <p>✓ Maximum file size: 10MB</p>
+               </div>
+             </div>
            )}
            
            {isValidating && (

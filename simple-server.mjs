@@ -207,13 +207,14 @@ async function generateInstructionsWithGroq(workflow, templateId, userId) {
     const systemPrompt = `Generate setup instructions for an n8n workflow template called "${templateId}".
 The workflow has ${nodeCount} nodes: ${nodeTypes}
 
-Create a professional setup guide with:
-1. Import steps for n8n
+The user already has this validated DevHubConnect template file. Create a professional setup guide with:
+1. Import steps for n8n (assume they have the JSON file ready)
 2. Credential configuration for each service
 3. Testing instructions
 4. Common troubleshooting tips
 
-Keep it practical and under 400 words. Focus only on technical setup instructions.`;
+Keep it practical and under 400 words. Focus only on technical setup instructions.
+Do not mention drag-and-drop, file uploads, or template selection - assume they already have the template.`;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: systemPrompt }],
