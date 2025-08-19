@@ -1429,6 +1429,77 @@ Ask me specific questions like:
     });
   }
 });
+
+// ✅ NEW: AI template generation endpoint for admin dashboard
+app.post('/api/ai/generate-template-details', requireAdminAuth, async (req, res) => {
+  try {
+    const { workflowJson, templateName, description } = req.body;
+    
+    if (!workflowJson) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Workflow JSON is required' 
+      });
+    }
+
+    // Rate limiting check
+    if (!checkAIRateLimit(req.user.id)) {
+      return res.status(429).json({
+        success: false,
+        error: 'Rate limit exceeded. Please wait before generating again.'
+      });
+    }
+
+    console.log('🤖 Generating AI template details for admin:', req.user.email);
+
+    // Parse workflow safely
+    let workflow;
+    try {
+      workflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid workflow JSON format'
+      });
+    }
+
+    // Extract workflow metadata
+    const nodeCount = workflow.nodes?.length || 0;
+    const serviceTypes = workflow.nodes ? 
+      [...new Set(workflow.nodes
+        .map(node => node.type?.replace('n8n-nodes-base.', '') || 'Unknown')
+        .filter(type => !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(type))
+      )] : [];
+
+    // Return enhanced template details
+    res.json({
+      success: true,
+      enhancedDetails: {
+        name: templateName,
+        description: description || `Automated workflow with ${nodeCount} nodes`,
+        nodeCount: nodeCount,
+        integratedApps: serviceTypes.slice(0, 10),
+        category: serviceTypes.length > 0 ? serviceTypes[0] : 'Automation',
+        complexity: nodeCount < 5 ? 'Simple' : nodeCount < 15 ? 'Intermediate' : 'Advanced',
+        estimatedSetupTime: nodeCount < 5 ? '5-10 minutes' : nodeCount < 15 ? '15-30 minutes' : '30+ minutes'
+      },
+      metadata: {
+        totalNodes: nodeCount,
+        serviceCount: serviceTypes.length,
+        aiEnhanced: false,
+        generatedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('AI generation error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate template details'
+    });
+  }
+});
+
 // ✅ PART 6: ADMIN, STRIPE & SERVER STARTUP - FINAL PART WITH ALL FIXES
 
 // ==================== ADMIN ENDPOINTS ====================
