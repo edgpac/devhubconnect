@@ -1691,20 +1691,41 @@ app.post('/api/templates', requireAdminAuth, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error creating template:', error);
+    console.error('❌ DETAILED Error creating template:', {
+      message: error.message,
+      code: error.code,
+      constraint: error.constraint,
+      detail: error.detail,
+      stack: error.stack
+    });
     
-    // Handle duplicate template errors
-    if (error.code === '23505') { // PostgreSQL unique constraint violation
+    // Handle specific PostgreSQL errors
+    if (error.code === '23505') { // Unique constraint violation
       return res.status(409).json({
         success: false,
         error: 'Template with similar content already exists'
       });
     }
     
+    if (error.code === '23502') { // NOT NULL violation
+      return res.status(400).json({
+        success: false,
+        error: `Missing required field: ${error.column}`
+      });
+    }
+    
+    if (error.code === '42703') { // Undefined column
+      return res.status(500).json({
+        success: false,
+        error: `Database schema error: ${error.message}`
+      });
+    }
+    
     res.status(500).json({
       success: false,
       error: 'Failed to create template',
-      details: error.message
+      details: error.message,
+      errorCode: error.code
     });
   }
 });
