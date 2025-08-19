@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Bot, User, FileText, Download, ArrowLeft } from 'lucide-react';
+import { X, Send, Bot, User, FileText, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ValidationResult } from '../services/dhcValidator';
@@ -108,9 +108,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    // Could add a toast notification here
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Show success feedback
+      alert('Response copied to clipboard!');
+      console.log('✅ Text copied to clipboard');
+    } catch (error) {
+      console.error('❌ Failed to copy text:', error);
+      // Fallback method for older browsers
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        alert('Response copied to clipboard!');
+        console.log('✅ Text copied using fallback method');
+      } catch (fallbackError) {
+        console.error('❌ Fallback copy method also failed:', fallbackError);
+        alert('Could not copy to clipboard. Please select and copy the text manually.');
+      }
+    }
   };
 
   return (
@@ -169,10 +189,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <span className="text-blue-700">{validatedTemplate.purchaseId}</span>
             </div>
           </div>
-          <Button variant="outline" size="sm" className="text-blue-700 border-blue-300">
-            <Download className="h-4 w-4 mr-2" />
-            Download JSON
-          </Button>
         </div>
       </div>
 
