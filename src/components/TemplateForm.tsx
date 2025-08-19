@@ -59,15 +59,17 @@ export default function TemplateForm() {
 
     setLoading(true);
     try {
-      const response = await apiCall(API_ENDPOINTS.ASK_AI, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          prompt: `Analyze this workflow JSON and generate a compelling title, detailed description, appropriate price, and relevant tags. The workflow contains: ${JSON.stringify(formData.workflowJson).slice(0, 500)}...`,
-          history: [],
-        }),
+      const response = await fetch('/api/ai/generate-template-details', {
+  method: 'POST',
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    workflowJson: formData.workflowJson,
+    templateName: formData.title,
+    description: formData.description
+  }),
       });
 
       if (!response.ok) {
