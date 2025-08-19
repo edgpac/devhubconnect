@@ -181,10 +181,22 @@ export default function ChatBox() {
       {showChatInterface && validatedTemplate && (
         <ChatInterface
           validatedTemplate={validatedTemplate}
-          onClose={() => setShowChatInterface(false)}
-          onBack={() => setShowChatInterface(false)}
-          onGoHome={() => navigate('/')}
-          onGoToDashboard={() => navigate('/dashboard')}
+          onClose={() => {
+            setShowChatInterface(false);
+            resetChat();
+          }}
+          onBack={() => {
+            setShowChatInterface(false);
+            resetChat();
+          }}
+          onGoHome={() => {
+            resetChat();
+            navigate('/');
+          }}
+          onGoToDashboard={() => {
+            resetChat();
+            navigate('/dashboard');
+          }}
         />
       )}
 
