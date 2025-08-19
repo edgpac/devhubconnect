@@ -1239,11 +1239,11 @@ app.get('/api/purchases/', authenticateJWT, async (req, res) => {
         t.name,
         t.description,
         t.price,
-        t.image_url as imageUrl,
-        t.workflow_json as workflowJson,
-        t.created_at as createdAt,
-        t.download_count as downloadCount,
-        t.view_count as viewCount,
+        t.image_url as "imageUrl",
+        t.workflow_json as "workflowJson",
+        t.created_at as "createdAt",
+        t.download_count as "downloadCount",
+        t.view_count as "viewCount",
         t.rating
       FROM purchases p
       LEFT JOIN templates t ON p.template_id = t.id
