@@ -1600,6 +1600,115 @@ app.get('/api/admin/templates', requireAdminAuth, async (req, res) => {
   }
 });
 
+// ✅ MISSING ROUTE: Template creation endpoint
+app.post('/api/templates', requireAdminAuth, async (req, res) => {
+  try {
+    const { name, description, price, workflowJson, imageUrl } = req.body;
+    
+    console.log('📤 Creating new template:', name, 'by admin:', req.user.email);
+    
+    // Validate required fields
+    if (!name || !description || price === undefined || !workflowJson) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Missing required fields: name, description, price, and workflowJson are required' 
+      });
+    }
+    
+    // Validate price
+    const numericPrice = parseFloat(price);
+    if (isNaN(numericPrice) || numericPrice < 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Price must be a valid positive number' 
+      });
+    }
+    
+    // Convert price to cents
+    const priceInCents = Math.round(numericPrice * 100);
+    
+    // Validate workflow JSON
+    let parsedWorkflow;
+    try {
+      parsedWorkflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
+      if (!parsedWorkflow.nodes || !Array.isArray(parsedWorkflow.nodes)) {
+        throw new Error('Workflow must contain a nodes array');
+      }
+    } catch (error) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid workflow JSON format',
+        details: error.message
+      });
+    }
+    
+    // Generate unique template ID
+    const templateId = Date.now().toString();
+    
+    // Insert template into database
+    const result = await pool.query(`
+      INSERT INTO templates (
+        id, name, description, price, currency, image_url, workflow_json, 
+        status, is_public, creator_id, created_at, updated_at,
+        download_count, view_count, rating, rating_count
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW(), $11, $12, $13, $14)
+      RETURNING *
+    `, [
+      templateId,
+      name.trim(),
+      description.trim(), 
+      priceInCents,
+      'usd',
+      imageUrl || null,
+      JSON.stringify(parsedWorkflow),
+      'active',
+      true, // is_public
+      req.user.id, // creator_id
+      0, // download_count
+      0, // view_count  
+      4.5, // default rating
+      0 // rating_count
+    ]);
+    
+    const template = result.rows[0];
+    
+    console.log('✅ Template created successfully:', template.id, template.name);
+    
+    res.json({
+      success: true,
+      message: 'Template created successfully',
+      template: {
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        price: template.price,
+        imageUrl: template.image_url,
+        workflowJson: template.workflow_json,
+        createdAt: template.created_at,
+        isPublic: template.is_public,
+        status: template.status
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error creating template:', error);
+    
+    // Handle duplicate template errors
+    if (error.code === '23505') { // PostgreSQL unique constraint violation
+      return res.status(409).json({
+        success: false,
+        error: 'Template with similar content already exists'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create template',
+      details: error.message
+    });
+  }
+});
+
 // ✅ SECURE: Template upload endpoint for JSON processing
 app.post('/api/templates/upload', requireAdminAuth, async (req, res) => {
   try {
