@@ -1782,6 +1782,94 @@ app.post('/api/admin/set-admin-role', requireAdminAuth, async (req, res) => {
   }
 });
 
+// ✅ MISSING ROUTE: Template deletion endpoint
+app.delete('/api/templates/:id', requireAdminAuth, async (req, res) => {
+  try {
+    const templateId = req.params.id;
+    
+    console.log('🗑️ Admin deleting template:', templateId, 'by user:', req.user.email || req.user.username);
+    
+    // Validate template ID
+    if (!templateId || isNaN(templateId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid template ID' 
+      });
+    }
+
+    // Check if template exists before deletion
+    const checkResult = await pool.query(
+      'SELECT id, name FROM templates WHERE id = $1',
+      [templateId]
+    );
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Template not found' 
+      });
+    }
+
+    const templateName = checkResult.rows[0].name;
+
+    // Check for existing purchases (optional - you might want to prevent deletion if purchased)
+    const purchaseCheck = await pool.query(
+      'SELECT COUNT(*) as purchase_count FROM purchases WHERE template_id = $1 AND status = $2',
+      [templateId, 'completed']
+    );
+
+    const purchaseCount = parseInt(purchaseCheck.rows[0].purchase_count);
+    
+    // Optional: Uncomment if you want to prevent deletion of purchased templates
+    // if (purchaseCount > 0) {
+    //   return res.status(409).json({
+    //     success: false,
+    //     error: `Cannot delete template with ${purchaseCount} existing purchases`
+    //   });
+    // }
+
+    // Delete the template
+    const deleteResult = await pool.query(
+      'DELETE FROM templates WHERE id = $1 RETURNING id, name',
+      [templateId]
+    );
+
+    if (deleteResult.rows.length === 0) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to delete template' 
+      });
+    }
+
+    console.log(`✅ Template deleted successfully: ${templateId} (${templateName}) by ${req.user.email}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Template deleted successfully',
+      deletedId: templateId,
+      templateName: templateName,
+      hadPurchases: purchaseCount > 0
+    });
+
+  } catch (error) {
+    console.error('❌ Error deleting template:', error);
+    
+    // Handle foreign key constraint violations
+    if (error.code === '23503') {
+      return res.status(409).json({
+        success: false,
+        error: 'Cannot delete template: it has associated records (purchases, etc.)'
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error while deleting template',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // ==================== STRIPE PAYMENT ENDPOINTS ====================
 
 // ✅ SECURE: Stripe Checkout Session (FIXED - removed passport middleware)
