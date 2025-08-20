@@ -2023,6 +2023,63 @@ app.delete('/api/templates/:id', requireAdminAuth, async (req, res) => {
 
 // ==================== STRIPE PAYMENT ENDPOINTS ====================
 
+// ✅ SECURE: Stripe Webhook Endpoint
+app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!endpointSecret) {
+    console.error('❌ STRIPE_WEBHOOK_SECRET not configured');
+    return res.status(500).send('Webhook secret not configured');
+  }
+
+  let event;
+  try {
+    // Security: Verify webhook signature
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error('❌ Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  try {
+    // Handle checkout session completion
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const { userId, templateId } = session.metadata;
+
+      if (!userId || !templateId) {
+        console.error('❌ Missing metadata in webhook:', session.id);
+        return res.status(400).send('Missing required metadata');
+      }
+
+      // Security: Update purchase status with transaction safety
+      const result = await pool.query(`
+        UPDATE purchases 
+        SET status = 'completed', 
+            completed_at = NOW(),
+            stripe_payment_intent_id = $1
+        WHERE user_id = $2 
+        AND template_id = $3 
+        AND stripe_session_id = $4 
+        AND status = 'pending'
+        RETURNING id
+      `, [session.payment_intent, userId, templateId, session.id]);
+
+      if (result.rows.length > 0) {
+        console.log('✅ Purchase completed via webhook:', result.rows[0].id);
+      } else {
+        console.warn('⚠️ No pending purchase found for webhook:', session.id);
+      }
+    }
+
+    res.json({received: true});
+  } catch (error) {
+    console.error('❌ Webhook processing error:', error);
+    res.status(500).send('Webhook processing failed');
+  }
+});
+
 // ✅ SECURE: Stripe Checkout Session (FIXED - removed passport middleware)
 app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res) => {
   // ✅ FIXED: Check if Stripe is configured
