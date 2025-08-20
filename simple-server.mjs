@@ -27,14 +27,14 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 // ✅ FIXED: Safe Stripe initialization with validation
 let stripe = null;
 if (process.env.STRIPE_SECRET_KEY) {
-  try {
-    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-    console.log('✅ Stripe initialized successfully');
-  } catch (error) {
-    console.error('❌ Stripe initialization failed:', error.message);
-  }
+ try {
+   stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+   console.log('✅ Stripe initialized successfully');
+ } catch (error) {
+   console.error('❌ Stripe initialization failed:', error.message);
+ }
 } else {
-  console.warn('⚠️ STRIPE_SECRET_KEY not configured - payment features disabled');
+ console.warn('⚠️ STRIPE_SECRET_KEY not configured - payment features disabled');
 }
 
 const app = express();
@@ -43,14 +43,14 @@ app.set('trust proxy', 1);
 // ✅ GROQ INTEGRATION - SECURE & PROPERLY INITIALIZED
 let groq = null;
 if (process.env.GROQ_API_KEY) {
-  try {
-    groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    console.log('✅ Groq API initialized successfully');
-  } catch (error) {
-    console.error('❌ Groq initialization failed:', error.message);
-  }
+ try {
+   groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+   console.log('✅ Groq API initialized successfully');
+ } catch (error) {
+   console.error('❌ Groq initialization failed:', error.message);
+ }
 } else {
-  console.warn('⚠️ GROQ_API_KEY not configured - AI features will use fallbacks');
+ console.warn('⚠️ GROQ_API_KEY not configured - AI features will use fallbacks');
 }
 
 // ✅ SECURE: Rate limiting for AI requests
@@ -58,56 +58,111 @@ const AI_REQUEST_LIMITS = new Map();
 const MAX_AI_REQUESTS_PER_MINUTE = 10;
 
 function checkAIRateLimit(userId) {
-  const now = Date.now();
-  const userRequests = AI_REQUEST_LIMITS.get(userId) || [];
-  
-  // Remove requests older than 1 minute
-  const recentRequests = userRequests.filter(time => now - time < 60000);
-  
-  if (recentRequests.length >= MAX_AI_REQUESTS_PER_MINUTE) {
-    return false;
-  }
-  
-  // Add current request
-  recentRequests.push(now);
-  AI_REQUEST_LIMITS.set(userId, recentRequests);
-  return true;
+ const now = Date.now();
+ const userRequests = AI_REQUEST_LIMITS.get(userId) || [];
+ 
+ // Remove requests older than 1 minute
+ const recentRequests = userRequests.filter(time => now - time < 60000);
+ 
+ if (recentRequests.length >= MAX_AI_REQUESTS_PER_MINUTE) {
+   return false;
+ }
+ 
+ // Add current request
+ recentRequests.push(now);
+ AI_REQUEST_LIMITS.set(userId, recentRequests);
+ return true;
 }
 
 // Middleware Setup
 app.use(cookieParser());
+
+// ✅ STRIPE WEBHOOK - MUST BE BEFORE express.json()
+app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
+ const sig = req.headers['stripe-signature'];
+ const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+ if (!endpointSecret) {
+   console.error('❌ STRIPE_WEBHOOK_SECRET not configured');
+   return res.status(500).send('Webhook secret not configured');
+ }
+
+ let event;
+ try {
+   event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+ } catch (err) {
+   console.error('❌ Webhook signature verification failed:', err.message);
+   return res.status(400).send(`Webhook Error: ${err.message}`);
+ }
+
+ try {
+   if (event.type === 'checkout.session.completed') {
+     const session = event.data.object;
+     const { userId, templateId } = session.metadata;
+
+     if (!userId || !templateId) {
+       console.error('❌ Missing metadata in webhook:', session.id);
+       return res.status(400).send('Missing required metadata');
+     }
+
+     const result = await pool.query(`
+       UPDATE purchases 
+       SET status = 'completed', 
+           completed_at = NOW(),
+           stripe_payment_intent_id = $1
+       WHERE user_id = $2 
+       AND template_id = $3 
+       AND stripe_session_id = $4 
+       AND status = 'pending'
+       RETURNING id
+     `, [session.payment_intent, userId, templateId, session.id]);
+
+     if (result.rows.length > 0) {
+       console.log('✅ Purchase completed via webhook:', result.rows[0].id);
+     } else {
+       console.warn('⚠️ No pending purchase found for webhook:', session.id);
+     }
+   }
+
+   res.json({received: true});
+ } catch (error) {
+   console.error('❌ Webhook processing error:', error);
+   res.status(500).send('Webhook processing failed');
+ }
+});
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
-  origin: frontendUrl,
-  credentials: true
+ origin: frontendUrl,
+ credentials: true
 }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // Security: Validate required environment variables
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
-  console.error('❌ CRITICAL: JWT_SECRET missing or too weak (minimum 32 characters)');
-  process.exit(1);
+ console.error('❌ CRITICAL: JWT_SECRET missing or too weak (minimum 32 characters)');
+ process.exit(1);
 }
 
 if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
-  console.error('❌ CRITICAL: GitHub OAuth credentials missing');
-  process.exit(1);
+ console.error('❌ CRITICAL: GitHub OAuth credentials missing');
+ process.exit(1);
 }
 
 // Security: Rate limiting
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: 'Too many authentication attempts, please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
+ windowMs: 15 * 60 * 1000,
+ max: 5,
+ message: { error: 'Too many authentication attempts, please try again later.' },
+ standardHeaders: true,
+ legacyHeaders: false,
 });
 
 const callbackLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000,
-  max: 10,
-  message: { error: 'Too many callback attempts, please try again later.' }
+ windowMs: 5 * 60 * 1000,
+ max: 10,
+ message: { error: 'Too many callback attempts, please try again later.' }
 });
 
 // Security: State storage for CSRF protection
@@ -125,86 +180,86 @@ console.log('  - GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'SET' : 'NOT SET');
 
 // ✅ ENHANCED: Template analysis with Groq AI - SECURE & COMPLETE
 async function analyzeTemplateQuestion(prompt, templateContext, userId) {
-  // Security: Sanitize inputs
-  if (!prompt || typeof prompt !== 'string' || prompt.length > 1000) {
-    throw new Error('Invalid prompt');
-  }
-  
-  if (!templateContext?.templateId || typeof templateContext.templateId !== 'string') {
-    throw new Error('Invalid template context');
-  }
+ // Security: Sanitize inputs
+ if (!prompt || typeof prompt !== 'string' || prompt.length > 1000) {
+   throw new Error('Invalid prompt');
+ }
+ 
+ if (!templateContext?.templateId || typeof templateContext.templateId !== 'string') {
+   throw new Error('Invalid template context');
+ }
 
-  // Rate limiting
-  if (!checkAIRateLimit(userId)) {
-    throw new Error('Rate limit exceeded. Please wait before making another AI request.');
-  }
+ // Rate limiting
+ if (!checkAIRateLimit(userId)) {
+   throw new Error('Rate limit exceeded. Please wait before making another AI request.');
+ }
 
-  try {
-    if (!groq) {
-      return getFallbackResponse(prompt, templateContext);
-    }
+ try {
+   if (!groq) {
+     return getFallbackResponse(prompt, templateContext);
+   }
 
-    const systemPrompt = `You are an expert n8n automation assistant. Help users set up their template: ${templateContext.templateId}
+   const systemPrompt = `You are an expert n8n automation assistant. Help users set up their template: ${templateContext.templateId}
 
 Provide specific, actionable instructions. Keep responses under 200 words.
 Focus on practical steps for n8n workflow setup, credentials, testing, and troubleshooting.
 Do not include any harmful, inappropriate, or non-technical content.`;
 
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt }
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.3,
-      max_tokens: 300,
-      top_p: 0.9
-    });
+   const chatCompletion = await groq.chat.completions.create({
+     messages: [
+       { role: "system", content: systemPrompt },
+       { role: "user", content: prompt }
+     ],
+     model: "llama-3.3-70b-versatile",
+     temperature: 0.3,
+     max_tokens: 300,
+     top_p: 0.9
+   });
 
-    const response = chatCompletion.choices[0]?.message?.content;
-    
-    if (response && response.trim()) {
-      return `🤖 **AI Assistant for ${templateContext.templateId}:**\n\n${response}\n\n💡 Need more help? Ask specific questions about credentials, webhooks, or testing!`;
-    }
-  } catch (error) {
-    console.error('Groq API error:', error.message);
-    // Don't expose API errors to users
-  }
-  
-  // Always fallback gracefully
-  return getFallbackResponse(prompt, templateContext);
+   const response = chatCompletion.choices[0]?.message?.content;
+   
+   if (response && response.trim()) {
+     return `🤖 **AI Assistant for ${templateContext.templateId}:**\n\n${response}\n\n💡 Need more help? Ask specific questions about credentials, webhooks, or testing!`;
+   }
+ } catch (error) {
+   console.error('Groq API error:', error.message);
+   // Don't expose API errors to users
+ }
+ 
+ // Always fallback gracefully
+ return getFallbackResponse(prompt, templateContext);
 }
 
 // ✅ ENHANCED: Setup instructions with Groq - SECURE & COMPLETE
 async function generateInstructionsWithGroq(workflow, templateId, userId) {
-  // Security validations
-  if (!workflow || typeof workflow !== 'object') {
-    throw new Error('Invalid workflow data');
-  }
-  
-  if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
-    throw new Error('Invalid template ID');
-  }
+ // Security validations
+ if (!workflow || typeof workflow !== 'object') {
+   throw new Error('Invalid workflow data');
+ }
+ 
+ if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
+   throw new Error('Invalid template ID');
+ }
 
-  // Rate limiting
-  if (!checkAIRateLimit(userId)) {
-    throw new Error('Rate limit exceeded');
-  }
+ // Rate limiting
+ if (!checkAIRateLimit(userId)) {
+   throw new Error('Rate limit exceeded');
+ }
 
-  try {
-    if (!groq) {
-      return null; // Will use fallback
-    }
+ try {
+   if (!groq) {
+     return null; // Will use fallback
+   }
 
-    const nodeTypes = workflow.nodes?.map(node => node.type).join(', ') || 'unknown';
-    const nodeCount = workflow.nodes?.length || 0;
-    
-    // Security: Limit node count to prevent abuse
-    if (nodeCount > 100) {
-      throw new Error('Workflow too complex for AI analysis');
-    }
-    
-    const systemPrompt = `Generate setup instructions for an n8n workflow template called "${templateId}".
+   const nodeTypes = workflow.nodes?.map(node => node.type).join(', ') || 'unknown';
+   const nodeCount = workflow.nodes?.length || 0;
+   
+   // Security: Limit node count to prevent abuse
+   if (nodeCount > 100) {
+     throw new Error('Workflow too complex for AI analysis');
+   }
+   
+   const systemPrompt = `Generate setup instructions for an n8n workflow template called "${templateId}".
 The workflow has ${nodeCount} nodes: ${nodeTypes}
 
 The user already has this validated DevHubConnect template file. Create a professional setup guide with:
@@ -216,53 +271,53 @@ The user already has this validated DevHubConnect template file. Create a profes
 Keep it practical and under 400 words. Focus only on technical setup instructions.
 Do not mention drag-and-drop, file uploads, or template selection - assume they already have the template.`;
 
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [{ role: "user", content: systemPrompt }],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.2,
-      max_tokens: 500,
-      top_p: 0.8
-    });
+   const chatCompletion = await groq.chat.completions.create({
+     messages: [{ role: "user", content: systemPrompt }],
+     model: "llama-3.3-70b-versatile",
+     temperature: 0.2,
+     max_tokens: 500,
+     top_p: 0.8
+   });
 
-    return chatCompletion.choices[0]?.message?.content;
-  } catch (error) {
-    console.error('Groq API error:', error.message);
-    return null; // Will use fallback
-  }
+   return chatCompletion.choices[0]?.message?.content;
+ } catch (error) {
+   console.error('Groq API error:', error.message);
+   return null; // Will use fallback
+ }
 }
 
 // ✅ SECURE: Fallback response function - COMPLETE & SAFE
 function getFallbackResponse(prompt, templateContext) {
-  const lowerPrompt = prompt.toLowerCase();
-  
-  // Predefined safe responses based on keywords
-  if (lowerPrompt.includes('webhook')) {
-    return `🔗 **Webhook Setup for ${templateContext.templateId}:**
+ const lowerPrompt = prompt.toLowerCase();
+ 
+ // Predefined safe responses based on keywords
+ if (lowerPrompt.includes('webhook')) {
+   return `🔗 **Webhook Setup for ${templateContext.templateId}:**
 1. Copy the webhook URL from the Webhook node
 2. Use this URL in your external service
 3. Test with a sample request
 4. Check n8n execution logs for verification`;
-  }
-  
-  if (lowerPrompt.includes('credential') || lowerPrompt.includes('api key')) {
-    return `🔑 **Adding Credentials:**
+ }
+ 
+ if (lowerPrompt.includes('credential') || lowerPrompt.includes('api key')) {
+   return `🔑 **Adding Credentials:**
 1. Go to Settings → Credentials in n8n
 2. Click "Create New Credential"
 3. Select your service type
 4. Enter API key/credentials
 5. Test connection and save`;
-  }
-  
-  if (lowerPrompt.includes('test') || lowerPrompt.includes('run')) {
-    return `🧪 **Testing Your Workflow:**
+ }
+ 
+ if (lowerPrompt.includes('test') || lowerPrompt.includes('run')) {
+   return `🧪 **Testing Your Workflow:**
 1. Click "Execute Workflow" button
 2. Check each node's output
 3. Look for error messages
 4. Use manual mode for debugging
 5. Activate when working properly`;
-  }
-  
-  return `✅ I can help with your **${templateContext.templateId}** template!
+ }
+ 
+ return `✅ I can help with your **${templateContext.templateId}** template!
 
 Try asking:
 - "How do I add credentials?"
@@ -275,27 +330,27 @@ What specific setup step do you need help with?`;
 
 // Security: Input validation
 function validateAndSanitizeUser(githubUser, primaryEmail) {
-  return {
-    githubId: String(githubUser.id).substring(0, 50),
-    name: String(githubUser.name || githubUser.login || '').substring(0, 100),
-    email: String(primaryEmail).toLowerCase().substring(0, 320),
-    avatarUrl: String(githubUser.avatar_url || '').substring(0, 500),
-    githubLogin: String(githubUser.login || '').substring(0, 100)
-  };
+ return {
+   githubId: String(githubUser.id).substring(0, 50),
+   name: String(githubUser.name || githubUser.login || '').substring(0, 100),
+   email: String(primaryEmail).toLowerCase().substring(0, 320),
+   avatarUrl: String(githubUser.avatar_url || '').substring(0, 500),
+   githubLogin: String(githubUser.login || '').substring(0, 100)
+ };
 }
 
 // Security: Session cleanup job
 setInterval(async () => {
-  try {
-    const result = await pool.query(
-      'DELETE FROM sessions WHERE expires_at < NOW() OR is_active = false'
-    );
-    if (result.rowCount > 0) {
-      console.log(`🧹 Cleaned up ${result.rowCount} expired sessions`);
-    }
-  } catch (error) {
-    console.error('❌ Session cleanup error:', error);
-  }
+ try {
+   const result = await pool.query(
+     'DELETE FROM sessions WHERE expires_at < NOW() OR is_active = false'
+   );
+   if (result.rowCount > 0) {
+     console.log(`🧹 Cleaned up ${result.rowCount} expired sessions`);
+   }
+ } catch (error) {
+   console.error('❌ Session cleanup error:', error);
+ }
 }, 60 * 60 * 1000); // Every hour
 
 // Helper function to convert database field names to frontend format
@@ -2022,63 +2077,6 @@ app.delete('/api/templates/:id', requireAdminAuth, async (req, res) => {
 });
 
 // ==================== STRIPE PAYMENT ENDPOINTS ====================
-
-// ✅ SECURE: Stripe Webhook Endpoint
-app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  if (!endpointSecret) {
-    console.error('❌ STRIPE_WEBHOOK_SECRET not configured');
-    return res.status(500).send('Webhook secret not configured');
-  }
-
-  let event;
-  try {
-    // Security: Verify webhook signature
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-  } catch (err) {
-    console.error('❌ Webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  try {
-    // Handle checkout session completion
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const { userId, templateId } = session.metadata;
-
-      if (!userId || !templateId) {
-        console.error('❌ Missing metadata in webhook:', session.id);
-        return res.status(400).send('Missing required metadata');
-      }
-
-      // Security: Update purchase status with transaction safety
-      const result = await pool.query(`
-        UPDATE purchases 
-        SET status = 'completed', 
-            completed_at = NOW(),
-            stripe_payment_intent_id = $1
-        WHERE user_id = $2 
-        AND template_id = $3 
-        AND stripe_session_id = $4 
-        AND status = 'pending'
-        RETURNING id
-      `, [session.payment_intent, userId, templateId, session.id]);
-
-      if (result.rows.length > 0) {
-        console.log('✅ Purchase completed via webhook:', result.rows[0].id);
-      } else {
-        console.warn('⚠️ No pending purchase found for webhook:', session.id);
-      }
-    }
-
-    res.json({received: true});
-  } catch (error) {
-    console.error('❌ Webhook processing error:', error);
-    res.status(500).send('Webhook processing failed');
-  }
-});
 
 // ✅ SECURE: Stripe Checkout Session (FIXED - removed passport middleware)
 app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res) => {
