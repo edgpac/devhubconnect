@@ -835,7 +835,6 @@ app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
     res.redirect(`${frontendUrl}/auth/error?error=internal_error`);
   }
 });
-// ✅ PART 4: AUTH ENDPOINTS & USER MANAGEMENT - ALL FIXES APPLIED
 
 // ✅ SECURE: Session-based profile endpoint - returns flat user data as frontend expects
 app.get('/auth/profile/session', async (req, res) => {
@@ -1148,11 +1147,11 @@ app.get('/admin/dashboard', (req, res) => {
 app.get('/admin/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
-// ✅ PART 5: TEMPLATE & API ENDPOINTS - ALL FIXES APPLIED
+
+// ✅ PART 5: TEMPLATE & API ENDPOINTS 
 
 // ==================== TEMPLATE ENDPOINTS ====================
 
-// ✅ SECURE: Template Details Endpoint (FIXED - REMOVED DUPLICATE)
 app.get('/api/templates/:id', async (req, res) => {
   try {
     console.log('📄 Fetching template details for:', req.params.id, 'by user:', req.user?.email || req.user?.username || 'unauthenticated');
@@ -1496,6 +1495,70 @@ app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching user purchases:', error);
+    res.status(500).json({ error: 'Failed to fetch purchases' });
+  }
+});
+
+// ✅ FIXED: Add missing endpoint without trailing slash
+app.get('/api/purchases', authenticateJWT, async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    console.log('📦 Fetching purchases for user via /api/purchases:', req.user.email || req.user.username);
+    
+    const result = await pool.query(`
+      SELECT 
+        p.id as purchase_id,
+        p.amount_paid,
+        p.currency,
+        p.status,
+        p.purchased_at,
+        t.id,
+        t.name,
+        t.description,
+        t.price,
+        t.image_url as "imageUrl",
+        t.workflow_json as "workflowJson",
+        t.created_at as "createdAt",
+        t.download_count as "downloadCount",
+        t.view_count as "viewCount",
+        t.rating
+      FROM purchases p
+      LEFT JOIN templates t ON p.template_id = t.id
+      WHERE p.user_id = $1 AND p.status = 'completed'
+      ORDER BY p.purchased_at DESC
+    `, [req.user.id]);
+
+    const formattedPurchases = result.rows.map(row => ({
+      purchaseInfo: {
+        purchaseId: row.purchase_id,
+        amountPaid: row.amount_paid,
+        currency: row.currency,
+        status: row.status,
+        purchasedAt: row.purchased_at
+      },
+      template: {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        price: row.price,
+        imageUrl: row.imageUrl,
+        workflowJson: row.workflowJson,
+        createdAt: row.createdAt,
+        downloadCount: row.downloadCount,
+        viewCount: row.viewCount,
+        rating: row.rating,
+        purchased: true
+      }
+    }));
+
+    console.log('✅ Found', formattedPurchases.length, 'purchases for user via /api/purchases');
+    res.json({ success: true, purchases: formattedPurchases });
+
+  } catch (error) {
+    console.error('Error fetching user purchases via /api/purchases:', error);
     res.status(500).json({ error: 'Failed to fetch purchases' });
   }
 });
