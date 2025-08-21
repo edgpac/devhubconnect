@@ -77,7 +77,7 @@ function checkAIRateLimit(userId) {
 // Middleware Setup
 app.use(cookieParser());
 
-// ✅ CRITICAL FIX: STRIPE WEBHOOK MUST BE BEFORE express.json() AND FIXED METADATA ISSUE
+// ✅ CRITICAL FIX: STRIPE WEBHOOK MUST BE BEFORE express.json() AND FIXED PURCHASE LOGIC
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
  const sig = req.headers['stripe-signature'];
  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -103,7 +103,6 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
      console.log('🎉 Payment successful for session:', session.id);
    
      try {
-       // ✅ CRITICAL FIX: Get metadata from session, not session.metadata directly
        const templateId = session.metadata?.templateId;
        const userId = session.metadata?.userId;
        const customerEmail = session.customer_details?.email;
@@ -156,43 +155,24 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
          break;
        }
 
-       // ✅ CRITICAL FIX: Update existing pending purchase instead of creating new one
-       const updateResult = await pool.query(`
-         UPDATE purchases 
-         SET status = 'completed', 
-             completed_at = NOW(),
-             stripe_payment_intent_id = $1
-         WHERE user_id = $2 
-         AND template_id = $3 
-         AND stripe_session_id = $4 
-         AND status = 'pending'
-         RETURNING id
-       `, [session.payment_intent, userId, dbTemplateId, session.id]);
+       // ✅ FIXED: Simple approach - create purchase as completed immediately (like old version)
+       const purchaseResult = await pool.query(`
+         INSERT INTO purchases (
+           user_id, template_id, stripe_session_id, 
+           amount_paid, currency, status, purchased_at, completed_at
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, NOW(), NOW()
+         ) RETURNING *
+       `, [
+         userId,
+         dbTemplateId,
+         session.id,
+         amountPaid,
+         session.currency || 'usd',
+         'completed'
+       ]);
 
-       if (updateResult.rows.length > 0) {
-         console.log('✅ Purchase completed via webhook:', updateResult.rows[0].id);
-       } else {
-         console.warn('⚠️ No pending purchase found to update for session:', session.id);
-         
-         // ✅ FALLBACK: Create new completed purchase if none exists
-         const insertResult = await pool.query(`
-           INSERT INTO purchases (
-             user_id, template_id, stripe_session_id, 
-             amount_paid, currency, status, purchased_at, completed_at
-           ) VALUES (
-             $1, $2, $3, $4, $5, $6, NOW(), NOW()
-           ) RETURNING id
-         `, [
-           userId,
-           dbTemplateId,
-           session.id,
-           amountPaid,
-           session.currency || 'usd',
-           'completed'
-         ]);
-         
-         console.log('✅ New purchase created via webhook:', insertResult.rows[0].id);
-       }
+       console.log('✅ Purchase completed via webhook:', purchaseResult.rows[0].id);
 
      } catch (error) {
        console.error('❌ Error recording purchase:', error);
