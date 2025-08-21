@@ -14,7 +14,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { GuidancePage } from "./pages/GuidancePage";
 import NotFound from "./pages/NotFound";
 import { SuccessPage } from "./pages/SuccessPage";
-import Analytics from "./pages/Analytics";
+import { Analytics } from '@/pages/Analytics';
 import { AuthSuccess } from "./pages/AuthSuccess";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";

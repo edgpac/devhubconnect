@@ -1137,6 +1137,58 @@ app.get('/admin/analytics', authenticateJWT, async (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
+// ✅ SECURE: Admin analytics data endpoint
+app.get('/api/admin/analytics-data', authenticateJWT, async (req, res) => {
+  // Check if user is admin
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  
+  try {
+    console.log('📊 Fetching analytics data for admin:', req.user.id);
+    
+    // Get template performance data
+    const topTemplates = await pool.query(`
+      SELECT 
+        t.id,
+        t.name,
+        COUNT(p.id) as purchase_count,
+        SUM(p.amount_paid) as total_revenue,
+        COALESCE(t.download_count, 0) as download_count
+      FROM templates t
+      LEFT JOIN purchases p ON t.id = p.template_id AND p.status = 'completed'
+      GROUP BY t.id, t.name, t.download_count
+      ORDER BY purchase_count DESC, total_revenue DESC
+      LIMIT 10
+    `);
+    
+    // Get total statistics
+    const totalStats = await pool.query(`
+      SELECT 
+        COUNT(DISTINCT u.id) as total_users,
+        COUNT(DISTINCT p.id) as total_purchases,
+        SUM(p.amount_paid) as total_revenue
+      FROM users u
+      CROSS JOIN purchases p
+      WHERE p.status = 'completed'
+    `);
+    
+    console.log('✅ Analytics data fetched successfully');
+    
+    res.json({
+      topTemplates: topTemplates.rows,
+      totalRevenue: totalStats.rows[0]?.total_revenue || 0,
+      totalPurchases: totalStats.rows[0]?.total_purchases || 0,
+      totalUsers: totalStats.rows[0]?.total_users || 0,
+      lastUpdated: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Analytics data error:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics data' });
+  }
+});
+
 // ✅ PART 5: TEMPLATE & API ENDPOINTS 
 
 // ==================== TEMPLATE ENDPOINTS ====================
