@@ -1231,48 +1231,51 @@ app.get('/api/recommendations', async (req, res) => {
   try {
     console.log('🔍 Fetching recommendations...');
     
-    // Get popular templates as recommendations
-    const popularTemplates = await pool.query(`
+    // 🔒 NEW: Get user's purchased templates to exclude them
+    let excludedTemplateIds = [];
+    const userId = req.user?.id; // From JWT if user is logged in
+    
+    if (userId) {
+      console.log(`🔍 Checking purchased templates for user: ${userId}`);
+      const userPurchases = await pool.query(
+        'SELECT template_id FROM purchases WHERE user_id = $1',
+        [userId]
+      );
+      excludedTemplateIds = userPurchases.rows.map(row => row.template_id);
+      console.log(`🚫 Excluding ${excludedTemplateIds.length} owned templates: [${excludedTemplateIds.join(', ')}]`);
+    }
+
+    // Get popular templates as recommendations (excluding owned ones)
+    let queryText = `
       SELECT 
         t.*,
         COALESCE(t.download_count, 0) as downloads,
-        COALESCE(t.view_count, 0) as views,
-        COALESCE(t.rating, 4.5) as rating
-      FROM templates t 
-      WHERE t.is_public = true 
+        COALESCE(t.view_count, 0) as views
+      FROM templates t
+      WHERE t.id IS NOT NULL`;
+    
+    let queryParams = [];
+    
+    // 🔒 EXCLUDE owned templates if user is logged in
+    if (excludedTemplateIds.length > 0) {
+      const placeholders = excludedTemplateIds.map((_, index) => `$${index + 1}`).join(',');
+      queryText += ` AND t.id NOT IN (${placeholders})`;
+      queryParams = excludedTemplateIds;
+    }
+    
+    queryText += `
       ORDER BY 
         COALESCE(t.download_count, 0) DESC,
-        COALESCE(t.view_count, 0) DESC,
         t.created_at DESC
-      LIMIT 12
-    `);
+      LIMIT 12`;
 
-    const formattedTemplates = popularTemplates.rows.map(template => {
-      const converted = convertFieldNames(template);
-      const workflowDetails = parseWorkflowDetails(template.workflow_json);
-      
-      return {
-        ...converted,
-        workflowDetails,
-        steps: workflowDetails.steps,
-        integratedApps: workflowDetails.apps,
-        _recommendationScore: Math.random() * 0.3 + 0.7,
-        recommended: true
-      };
-    });
+    console.log(`🔍 Final query: ${queryText}`);
+    console.log(`🔍 Query params: [${queryParams.join(', ')}]`);
 
-    console.log(`✅ Found ${formattedTemplates.length} recommended templates`);
+    const popularTemplates = await pool.query(queryText, queryParams);
 
-    res.json({ 
-      recommendations: formattedTemplates,
-      metadata: {
-        total: formattedTemplates.length,
-        personalized: false,
-        trending_boost_applied: true,
-        filters_applied: {},
-        source: 'popular_templates'
-      }
-    });
+    console.log(`✅ Found ${popularTemplates.rows.length} recommended templates`);
+    res.json(popularTemplates.rows);
   } catch (error) {
     console.error('Recommendations error:', error);
     res.status(500).json({ error: 'Failed to fetch recommendations' });
