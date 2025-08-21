@@ -1226,27 +1226,33 @@ app.get('/api/templates', async (req, res) => {
   }
 });
 
-// ✅ SECURE: /api/recommendations endpoint
-app.get('/api/recommendations', async (req, res) => {
+// ✅ SECURE: /api/recommendations endpoint - USE SAME LOGIC AS STRIPE
+app.get('/api/recommendations', authenticateJWT, async (req, res) => {
   try {
     console.log('🔍 Fetching recommendations...');
     
-    // 🔒 Get user's purchased templates to exclude them
-    let excludedTemplateIds = [];
-    const userId = req.user?.id; // From JWT if user is logged in
-    
-    if (userId) {
-      console.log(`🔍 Checking purchased templates for user: ${userId}`);
-      const userPurchases = await pool.query(
-        'SELECT template_id FROM purchases WHERE user_id = $1',
-        [userId]
-      );
-      excludedTemplateIds = userPurchases.rows.map(row => row.template_id);
-      console.log(`🚫 Excluding ${excludedTemplateIds.length} owned templates: [${excludedTemplateIds.join(', ')}]`);
+    if (!req.user) {
+      console.log('❌ No user found in request - not authenticated');
+      return res.status(401).json({ error: 'Authentication required for personalized recommendations' });
     }
 
-    // Get templates as recommendations (excluding owned ones)
-    // 🔧 INCREASE LIMIT to ensure we get 12 after exclusions
+    const userId = req.user.id;
+    console.log(`🔍 Authenticated user: ${userId} (${req.user.email || req.user.username})`);
+    
+    // 🔒 USE EXACT SAME QUERY AS STRIPE PURCHASE VALIDATION
+    const userPurchases = await pool.query(
+      'SELECT template_id FROM purchases WHERE user_id = $1 AND status IN ($2, $3)',
+      [userId, 'completed', 'pending']
+    );
+    
+    const ownedTemplateIds = userPurchases.rows.map(row => row.template_id);
+    console.log(`🚫 User owns ${ownedTemplateIds.length} templates: [${ownedTemplateIds.join(', ')}]`);
+
+    if (ownedTemplateIds.length === 0) {
+      console.log('ℹ️ User has no purchases - showing all templates');
+    }
+
+    // Get templates EXCLUDING owned ones (same as Stripe validation)
     let queryText = `
       SELECT 
         t.*,
@@ -1258,11 +1264,11 @@ app.get('/api/recommendations', async (req, res) => {
     
     let queryParams = [];
     
-    // 🔒 EXCLUDE owned templates if user is logged in
-    if (excludedTemplateIds.length > 0) {
-      const placeholders = excludedTemplateIds.map((_, index) => `$${index + 1}`).join(',');
+    // 🔒 EXCLUDE owned templates (SAME LOGIC AS STRIPE)
+    if (ownedTemplateIds.length > 0) {
+      const placeholders = ownedTemplateIds.map((_, index) => `$${index + 1}`).join(',');
       queryText += ` AND t.id NOT IN (${placeholders})`;
-      queryParams = excludedTemplateIds;
+      queryParams = ownedTemplateIds;
     }
     
     queryText += `
@@ -1270,15 +1276,23 @@ app.get('/api/recommendations', async (req, res) => {
         COALESCE(t.download_count, 0) DESC,
         COALESCE(t.view_count, 0) DESC,
         t.created_at DESC
-      LIMIT 50`; // 🔧 Get 50 templates, then we'll format and take 12
+      LIMIT 50`;
 
-    console.log(`🔍 Final query excludes ${excludedTemplateIds.length} owned templates`);
+    console.log(`🔍 Query will exclude ${ownedTemplateIds.length} owned templates`);
+    console.log(`🔍 Looking for templates NOT IN: [${ownedTemplateIds.join(', ')}]`);
 
-    const popularTemplates = await pool.query(queryText, queryParams);
+    const availableTemplates = await pool.query(queryText, queryParams);
+    console.log(`📋 Found ${availableTemplates.rows.length} available templates after exclusions`);
 
-    const formattedTemplates = popularTemplates.rows.slice(0, 12).map(template => {
+    const formattedTemplates = availableTemplates.rows.slice(0, 12).map(template => {
       const converted = convertFieldNames(template);
       const workflowDetails = parseWorkflowDetails(template.workflow_json);
+      
+      // 🔒 DOUBLE-CHECK: Ensure this template is NOT owned (extra safety)
+      if (ownedTemplateIds.includes(template.id)) {
+        console.log(`⚠️ WARNING: Template ${template.id} should have been excluded but wasn't!`);
+        return null;
+      }
       
       return {
         ...converted,
@@ -1286,25 +1300,36 @@ app.get('/api/recommendations', async (req, res) => {
         steps: workflowDetails.steps,
         integratedApps: workflowDetails.apps,
         _recommendationScore: Math.random() * 0.3 + 0.7,
-        recommended: true
+        recommended: true,
+        // 🔒 DEBUG: Add ownership info for verification
+        _debug: {
+          templateId: template.id,
+          userOwnsThis: false,
+          excludedIds: ownedTemplateIds
+        }
       };
-    });
+    }).filter(Boolean); // Remove any null entries
 
-    console.log(`✅ Found ${formattedTemplates.length} recommended templates (from ${popularTemplates.rows.length} available)`);
+    console.log(`✅ Returning ${formattedTemplates.length} recommendations (excluded ${ownedTemplateIds.length} owned templates)`);
+
+    // 🔒 FINAL SAFETY CHECK: Log first few recommended template IDs
+    const recommendedIds = formattedTemplates.map(t => t.id).slice(0, 5);
+    console.log(`🎯 First 5 recommended template IDs: [${recommendedIds.join(', ')}]`);
 
     res.json({ 
       recommendations: formattedTemplates,
       metadata: {
         total: formattedTemplates.length,
-        personalized: userId ? true : false,
+        personalized: true,
         trending_boost_applied: true,
         filters_applied: {},
-        source: 'popular_templates_filtered',
-        excluded_count: excludedTemplateIds.length
+        source: 'purchase_validated_recommendations',
+        excluded_count: ownedTemplateIds.length,
+        user_id: userId
       }
     });
   } catch (error) {
-    console.error('Recommendations error:', error);
+    console.error('❌ Recommendations error:', error);
     res.status(500).json({ error: 'Failed to fetch recommendations' });
   }
 });
