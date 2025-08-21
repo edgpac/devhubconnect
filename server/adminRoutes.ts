@@ -89,7 +89,6 @@ function extractJsonFromResponse(response: string): any {
   }
 
   // Method 2: Try to extract from code blocks
-  // FIXED: Removed the newline in the regex and adjusted to match ```json\n{...}```
   const codeBlockMatch = cleaned.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
   if (codeBlockMatch && codeBlockMatch[1]) {
     try {
@@ -145,7 +144,6 @@ function extractJsonFromResponse(response: string): any {
     }
   }
 
-  // FIXED: Changed to template literal for string interpolation
   throw new Error(`No valid JSON object found in response. Response was: "${cleaned}"`);
 }
 
@@ -164,7 +162,6 @@ function generateFallbackDetails(workflowJson: any): any {
       const nodeTypes = workflowJson.nodes.map((node: any) => node.type).filter(Boolean);
       const uniqueTypes = [...new Set(nodeTypes)].slice(0, 3);
       if (uniqueTypes.length > 0) {
-        // FIXED: Changed to template literal
         name = `${uniqueTypes.join(' + ')} Workflow`;
       }
     }
@@ -174,7 +171,6 @@ function generateFallbackDetails(workflowJson: any): any {
 
   return {
     name: name.length > 60 ? name.substring(0, 57) + '...' : name,
-    // FIXED: Changed to template literal for the description string
     description: `Setup Instructions for ${name}\n\nOverview\nThis workflow contains ${nodeCount} nodes and implements automated business logic.\n\nPrerequisites\n- n8n instance (cloud or self-hosted)\n- API credentials as required by individual nodes\n\nSetup Steps\n1. Configure n8n Environment\n   - Ensure n8n is installed and running\n   - Log into your n8n instance\n   - Create a new workflow\n\n2. Import Workflow\n   - Copy the provided JSON workflow configuration\n   - In n8n, go to Workflow > Import from Clipboard\n   - Paste the JSON and import\n   - Save the workflow\n\n3. Configure Credentials\n   - Review each node for required credentials\n   - Set up API keys and authentication as needed\n   - Test connections to external services\n\n4. Test the Workflow\n   - Activate the workflow\n   - Test with sample data\n   - Verify all nodes execute correctly\n\n5. Deployment\n   - Save and activate the workflow\n   - Monitor workflow executions\n   - Set up error handling as needed\n\nNotes\n- Review and customize node configurations for your use case\n- Test thoroughly before production use\n- Monitor API usage and quotas`,
     price: 349
   };
@@ -210,79 +206,10 @@ adminRouter.post('/login', async (req: Request, res: Response) => {
   }
 });
 
-// ✅ NEW: Analytics data endpoint for admin dashboard
-adminRouter.get('/analytics-data', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
-  try {
-    console.log('📊 Fetching analytics data for admin:', req.user?.id);
-    
-    // Get popular templates by downloads
-    const popularByDownloads = await db.select({
-      id: templates.id,
-      name: templates.name,
-      price: templates.price,
-      downloadCount: templates.downloadCount,
-      viewCount: templates.viewCount
-    }).from(templates)
-    .orderBy(templates.downloadCount)
-    .limit(10);
-    
-    // Mock popular templates by purchases (since we don't have purchases table in this schema)
-    const popularByPurchases = [
-      { templateId: 1, templateName: 'Email Automation Workflow', category: 'automation', purchaseCount: 15, totalRevenue: 5235 },
-      { templateId: 2, templateName: 'Slack Integration Template', category: 'workflow', purchaseCount: 12, totalRevenue: 4188 },
-      { templateId: 3, templateName: 'Data Processing Pipeline', category: 'automation', purchaseCount: 8, totalRevenue: 2792 }
-    ];
-    
-    // Mock category stats
-    const categoryStats = [
-      { category: 'automation', templateCount: 15, totalDownloads: 245, avgRating: 4.5 },
-      { category: 'workflow', templateCount: 8, totalDownloads: 128, avgRating: 4.2 }
-    ];
-    
-    // Mock search terms data
-    const topSearchTerms = [
-      { searchTerm: 'email automation', searchCount: 45 },
-      { searchTerm: 'slack integration', searchCount: 32 },
-      { searchTerm: 'data processing', searchCount: 28 },
-      { searchTerm: 'webhook handler', searchCount: 24 },
-      { searchTerm: 'api connector', searchCount: 19 }
-    ];
-    
-    // Mock revenue stats
-    const revenueStats = {
-      totalRevenue: 12215,
-      totalSales: 35,
-      avgOrderValue: 349
-    };
-    
-    // Mock user stats
-    const userStats = {
-      totalUsers: 156,
-      activeUsers: 89
-    };
-    
-    console.log('✅ Analytics data fetched successfully');
-    
-    // Return data in the exact format the frontend expects
-    res.json({
-      success: true,
-      data: {
-        popularByDownloads: popularByDownloads,
-        popularByPurchases: popularByPurchases,
-        categoryStats: categoryStats,
-        topSearchTerms: topSearchTerms,
-        revenueStats: revenueStats,
-        userStats: userStats
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Analytics data error:', error);
-    res.status(500).json({ error: 'Failed to fetch analytics data' });
-  }
-});
+// ❌ REMOVED: Analytics data endpoint - this was competing with simple-server.mjs
+// The analytics endpoint in simple-server.mjs should handle this instead
 
-// ✅ NEW: Get all templates for admin management
+// ✅ Get all templates for admin management
 adminRouter.get('/templates', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
   try {
     const allTemplates = await db.select({
@@ -302,7 +229,7 @@ adminRouter.get('/templates', verifyAdminToken, async (req: AuthenticatedAdminRe
   }
 });
 
-// ✅ NEW: Update template endpoint (FIX FOR ADMIN PANEL)
+// ✅ Update template endpoint
 adminRouter.put('/templates/:id', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -344,39 +271,33 @@ adminRouter.put('/templates/:id', verifyAdminToken, async (req: AuthenticatedAdm
   }
 });
 
-// ✅ NEW: Delete template endpoint
+// ✅ Delete template endpoint
 adminRouter.delete('/templates/:id', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
   try {
     const templateId = parseInt(req.params.id);
     
-    // FIXED: Changed to template literal for console.log
     console.log(`DEBUG: Attempting to delete template ID: ${templateId}`);
     
     if (isNaN(templateId)) {
-      // FIXED: Changed to template literal for console.log
       console.log(`DEBUG: Invalid template ID provided: ${req.params.id}`);
       return res.status(400).json({ message: 'Invalid template ID' });
     }
 
     // First check if template exists
     const existingTemplate = await db.select().from(templates).where(eq(templates.id, templateId));
-    // FIXED: Changed to template literal for console.log
     console.log(`DEBUG: Found existing template:`, existingTemplate);
 
     const deletedTemplate = await db.delete(templates)
       .where(eq(templates.id, templateId))
       .returning();
 
-    // FIXED: Changed to template literal for console.log
     console.log(`DEBUG: Delete operation result:`, deletedTemplate);
 
     if (deletedTemplate.length === 0) {
-      // FIXED: Changed to template literal for console.log
       console.log(`DEBUG: Template ${templateId} not found in database`);
       return res.status(404).json({ message: 'Template not found' });
     }
 
-    // FIXED: Changed to template literal for console.log
     console.log(`✅ Template ${templateId} deleted successfully by admin`);
     res.json({ message: 'Template deleted successfully', templateId });
   } catch (error) {
@@ -409,15 +330,15 @@ adminRouter.post('/upload', verifyAdminToken, async (req: AuthenticatedAdminRequ
     }
 
     const newTemplate = await db.insert(templates).values({
-  name,
-  description,
-  price: Math.round(Number(price) * 100),
-  workflowJson,
-  imageUrl,
-  creatorId: adminId,
-  status: 'published',  // Add this line
-  isPublic: true,       // Add this line
-}).returning();
+      name,
+      description,
+      price: Math.round(Number(price) * 100),
+      workflowJson,
+      imageUrl,
+      creatorId: adminId,
+      status: 'published',
+      isPublic: true,
+    }).returning();
 
     res.status(201).json({ message: 'Workflow uploaded successfully!', template: newTemplate[0] });
 
@@ -444,8 +365,6 @@ adminRouter.post('/generate-template-details', verifyAdminToken, async (req: Aut
 
     const workflowJsonString = JSON.stringify(workflowJson, null, 2);
 
-    // ✅ IMPROVED PROMPT: Generate 3-paragraph setup description
-    // FIXED: Changed to template literal for the prompt string
     const promptText = `You are a JSON generator. You must respond with ONLY a valid JSON object, no explanation, no markdown, no additional text.
 Analyze this n8n workflow and generate template details.
 
@@ -479,11 +398,8 @@ JSON response:`;
     const uniqueServices = [...new Set(nodeTypes)].slice(0, 8);
 
     for (let i = 0; i < MAX_RETRIES; i++) {
-      // FIXED: Changed to template literal for console.log
       console.log(`DEBUG: Attempting AI generation (Retry ${i + 1}/${MAX_RETRIES})`);
       try {
-        // ✅ REFINED PROMPT: Professional setup instruction generator with specific details
-        // FIXED: Changed to template literal for the prompt string
         const detailedPrompt = `You are a technical writer specializing in creating professional setup instructions for n8n workflow templates. Analyze the provided n8n workflow JSON and generate detailed setup instructions tailored to its nodes and services.
 
 WORKFLOW TO ANALYZE:
@@ -529,9 +445,7 @@ Respond with ONLY this JSON structure:
 
         if (!ollamaResponse.ok) {
           const errorText = await ollamaResponse.text();
-          // FIXED: Changed to template literal for error message
           console.error(`Ollama API error: Status ${ollamaResponse.status}, Response: ${errorText}`);
-          // FIXED: Changed to template literal for error message
           lastError = new Error(`AI service error: Status ${ollamaResponse.status} - ${errorText}`);
           
           // If it's a 404, the model might not be available
@@ -585,7 +499,6 @@ Respond with ONLY this JSON structure:
         break;
 
       } catch (parseError) {
-        // FIXED: Changed to template literal for error message
         lastError = new Error(`Failed to extract/parse JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
         console.error('Error during AI response processing:', parseError);
       }
