@@ -1128,11 +1128,19 @@ app.get('/admin/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-/// ✅ FIXED: Analytics for ALL users and ALL data
+// ✅ FIXED: Analytics with better purchase counting
 app.get('/api/admin/analytics-data', async (req, res) => {
   try {
     console.log('📊 Fetching analytics for ALL users...');
     
+    // Debug: Check all purchases regardless of status
+    const allPurchases = await pool.query(`
+      SELECT status, COUNT(*) as count, SUM(amount_paid) as revenue
+      FROM purchases 
+      GROUP BY status
+    `);
+    console.log('📊 All purchases by status:', allPurchases.rows);
+
     // Get popular templates by downloads (ALL templates)
     const popularByDownloads = await pool.query(`
       SELECT 
@@ -1145,14 +1153,14 @@ app.get('/api/admin/analytics-data', async (req, res) => {
       LIMIT 10
     `);
 
-    // Get revenue data (ALL purchases from ALL users)
+    // ✅ FIXED: Count ALL purchases (completed AND pending)
     const revenueStats = await pool.query(`
       SELECT 
         COALESCE(SUM(amount_paid), 0) as total_revenue,
         COUNT(*) as total_sales,
         CASE WHEN COUNT(*) > 0 THEN AVG(amount_paid) ELSE 0 END as avg_order_value
       FROM purchases 
-      WHERE status = 'completed'
+      WHERE status IN ('completed', 'pending')
     `);
 
     // Get user stats (ALL users)
@@ -1163,7 +1171,7 @@ app.get('/api/admin/analytics-data', async (req, res) => {
       FROM users
     `);
 
-    // Get top revenue templates (ALL purchases from ALL users)
+    // ✅ FIXED: Revenue templates with ALL purchase statuses
     const popularByPurchases = await pool.query(`
       SELECT 
         t.id as "templateId",
@@ -1173,19 +1181,18 @@ app.get('/api/admin/analytics-data', async (req, res) => {
         SUM(p.amount_paid) as "totalRevenue"
       FROM purchases p
       JOIN templates t ON p.template_id = t.id
-      WHERE p.status = 'completed'
+      WHERE p.status IN ('completed', 'pending')
       GROUP BY t.id, t.name
       ORDER BY COUNT(p.id) DESC, SUM(p.amount_paid) DESC
       LIMIT 10
     `);
 
     // Debug: Let's see what we actually have
-    console.log('📊 Analytics Debug:');
+    console.log('📊 Analytics Results:');
     console.log('   Templates:', popularByDownloads.rows.length);
     console.log('   Total Sales:', revenueStats.rows[0]?.total_sales);
     console.log('   Total Revenue:', revenueStats.rows[0]?.total_revenue);
     console.log('   Total Users:', userStats.rows[0]?.total_users);
-    console.log('   Revenue Templates:', popularByPurchases.rows.length);
 
     const realData = {
       success: true,
