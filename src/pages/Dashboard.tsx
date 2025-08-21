@@ -84,15 +84,20 @@ export const Dashboard = () => {
            setPurchasedTemplates(data.purchases.map(purchase => {
              console.log('🐛 DEBUG: Processing purchase:', purchase);
              
+             // ✅ DIRECT FIX: Ensure amountPaid is properly set
+             const actualAmountPaid = purchase.purchaseInfo?.amountPaid || purchase.template?.price || 0;
+             
              return {
                // ✅ Use template data directly from the structure
                ...purchase.template,
                // ✅ CRITICAL: Add the purchased flag that TemplateCard expects
                purchased: true,
+               // ✅ CRITICAL: Set amountPaid at the root level
+               amountPaid: actualAmountPaid,
+               price: purchase.template?.price || 0,
                // ✅ Add purchase metadata
                purchaseInfo: purchase.purchaseInfo,
                purchasedAt: purchase.purchaseInfo?.purchasedAt,
-               amountPaid: purchase.purchaseInfo?.amountPaid || purchase.template?.price || 0,
                status: purchase.purchaseInfo?.status || 'completed'
              };
            }));
@@ -171,24 +176,9 @@ export const Dashboard = () => {
    console.log('🔍 DEBUG: First template:', purchasedTemplates[0]);
  }
 
- // ✅ FIXED: Safe calculation with fallback values and debugging
+ // ✅ SIMPLE FIX: Direct calculation
  const totalSpent = purchasedTemplates.reduce((sum, template) => {
-   console.log('💰 Processing template:', template.name || 'No name', 'ID:', template.id);
-   
-   // Check all possible sources for the amount
-   const amount = template.amountPaid ||           
-                 template.purchaseInfo?.amountPaid || 
-                 template.price ||                    
-                 0;
-                 
-   console.log('💰 Amount check for', template.name, ':', {
-     amountPaid: template.amountPaid,
-     purchaseInfoAmount: template.purchaseInfo?.amountPaid,
-     templatePrice: template.price,
-     usedAmount: amount
-   });
-   
-   return sum + amount;
+   return sum + (template.amountPaid || 0);
  }, 0);
 
  console.log('🔍 FINAL totalSpent:', totalSpent);
