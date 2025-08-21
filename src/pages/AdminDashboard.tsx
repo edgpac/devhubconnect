@@ -33,7 +33,7 @@ export function AdminDashboard() {
   const navigate = useNavigate();
 
   // ✅ FIXED: Check if user is admin using AuthProvider
-  const isAuthenticated = currentUser && currentUser.isAdmin;
+  const isAuthenticated = currentUser && (currentUser.role === 'admin' || currentUser.isAdmin);
 
   // ✅ FIXED: Use AuthProvider logout
   const handleSignOut = () => {
