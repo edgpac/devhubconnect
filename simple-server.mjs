@@ -77,7 +77,7 @@ function checkAIRateLimit(userId) {
 // Middleware Setup
 app.use(cookieParser());
 
-// ✅ SECURE STRIPE WEBHOOK - WORKING VERSION FROM OLD FILE
+// ✅ CRITICAL FIX: STRIPE WEBHOOK MUST BE BEFORE express.json() AND FIXED METADATA ISSUE
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
  const sig = req.headers['stripe-signature'];
  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -103,15 +103,17 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
      console.log('🎉 Payment successful for session:', session.id);
    
      try {
-       const templateId = session.metadata.templateId;
-       const customerEmail = session.customer_details.email;
+       // ✅ CRITICAL FIX: Get metadata from session, not session.metadata directly
+       const templateId = session.metadata?.templateId;
+       const userId = session.metadata?.userId;
+       const customerEmail = session.customer_details?.email;
        const amountPaid = session.amount_total;
        
-       console.log('💰 Recording purchase:', { templateId, customerEmail, amountPaid });
+       console.log('💰 Recording purchase:', { templateId, userId, customerEmail, amountPaid });
 
        // ✅ SECURITY: Validate and sanitize inputs
-       if (!templateId || !customerEmail || !amountPaid) {
-         console.error('❌ Missing required session data');
+       if (!templateId || !userId || !customerEmail || !amountPaid) {
+         console.error('❌ Missing required session data:', { templateId, userId, customerEmail, amountPaid });
          break;
        }
 
@@ -136,35 +138,11 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
          break;
        }
 
-       // Find existing user by email
-       let userId;
-       const existingUserResult = await pool.query(
-         'SELECT id FROM users WHERE email = $1 LIMIT 1',
-         [customerEmail.toLowerCase().trim()]
-       );
-
-       if (existingUserResult.rows.length > 0) {
-         userId = existingUserResult.rows[0].id;
-         console.log('✅ Found existing user for email:', customerEmail, 'ID:', userId);
-       } else {
-         // ✅ SECURITY: Create new user with secure defaults
-         const sanitizedEmail = customerEmail.toLowerCase().trim();
-         const username = sanitizedEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').substring(0, 50);
-         
-         const newUserResult = await pool.query(`
-           INSERT INTO users (id, email, username, role, is_email_verified, is_active, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-           RETURNING id
-         `, [
-           `stripe_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`,
-           sanitizedEmail,
-           username || 'user',
-           'user',
-           true,
-           true
-         ]);
-         userId = newUserResult.rows[0].id;
-         console.log('👤 Created new user for purchase:', customerEmail, 'ID:', userId);
+       // ✅ SECURITY: Validate user exists
+       const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
+       if (userCheck.rows.length === 0) {
+         console.error('❌ User not found for purchase:', userId);
+         break;
        }
 
        // ✅ SECURITY: Check for duplicate purchases
@@ -178,24 +156,43 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
          break;
        }
 
-       // ✅ SECURITY: Record purchase with parameterized query
-       const purchaseResult = await pool.query(`
-         INSERT INTO purchases (
-           user_id, template_id, stripe_session_id, 
-           amount_paid, currency, status, purchased_at
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, NOW()
-         ) RETURNING *
-       `, [
-         userId,
-         dbTemplateId,
-         session.id,
-         amountPaid,
-         session.currency || 'usd',
-         'completed'
-       ]);
+       // ✅ CRITICAL FIX: Update existing pending purchase instead of creating new one
+       const updateResult = await pool.query(`
+         UPDATE purchases 
+         SET status = 'completed', 
+             completed_at = NOW(),
+             stripe_payment_intent_id = $1
+         WHERE user_id = $2 
+         AND template_id = $3 
+         AND stripe_session_id = $4 
+         AND status = 'pending'
+         RETURNING id
+       `, [session.payment_intent, userId, dbTemplateId, session.id]);
 
-       console.log('✅ Purchase recorded:', purchaseResult.rows[0].id);
+       if (updateResult.rows.length > 0) {
+         console.log('✅ Purchase completed via webhook:', updateResult.rows[0].id);
+       } else {
+         console.warn('⚠️ No pending purchase found to update for session:', session.id);
+         
+         // ✅ FALLBACK: Create new completed purchase if none exists
+         const insertResult = await pool.query(`
+           INSERT INTO purchases (
+             user_id, template_id, stripe_session_id, 
+             amount_paid, currency, status, purchased_at, completed_at
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, NOW(), NOW()
+           ) RETURNING id
+         `, [
+           userId,
+           dbTemplateId,
+           session.id,
+           amountPaid,
+           session.currency || 'usd',
+           'completed'
+         ]);
+         
+         console.log('✅ New purchase created via webhook:', insertResult.rows[0].id);
+       }
 
      } catch (error) {
        console.error('❌ Error recording purchase:', error);
