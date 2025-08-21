@@ -1137,15 +1137,60 @@ app.get('/admin/analytics', authenticateJWT, async (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// ✅ FIXED: Admin analytics data endpoint - returns data in format frontend expects
-app.get('/api/admin/analytics-data', authenticateJWT, async (req, res) => {
-  // Check if user is admin
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-  
+// ✅ FIXED: Admin analytics data endpoint - works with both JWT and session auth
+app.get('/api/admin/analytics-data', async (req, res) => {
   try {
-    console.log('📊 Fetching analytics data for admin:', req.user.id);
+    let user = null;
+    
+    // Try JWT authentication first
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const result = await pool.query(
+          'SELECT id, email, name, role FROM users WHERE id = $1 AND is_active = true',
+          [decoded.id]
+        );
+        if (result.rows.length > 0) {
+          user = result.rows[0];
+        }
+      } catch (jwtError) {
+        // JWT failed, try session
+      }
+    }
+    
+    // Try session authentication if JWT failed
+    if (!user) {
+      const sessionId = req.cookies?.devhub_session;
+      
+      if (sessionId && typeof sessionId === 'string' && sessionId.length <= 100) {
+        const sessionResult = await pool.query(
+          'SELECT user_id, expires_at FROM sessions WHERE id = $1 AND is_active = true',
+          [sessionId]
+        );
+
+        if (sessionResult.rows.length > 0 && new Date() <= sessionResult.rows[0].expires_at) {
+          const userResult = await pool.query(
+            'SELECT id, email, name, role FROM users WHERE id = $1 AND is_active = true',
+            [sessionResult.rows[0].user_id]
+          );
+
+          if (userResult.rows.length > 0) {
+            user = userResult.rows[0];
+          }
+        }
+      }
+    }
+    
+    // Check if user is admin
+    if (!user || user.role !== 'admin') {
+      console.log('❌ Analytics access denied - not admin:', user?.email || 'no user');
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    console.log('📊 Fetching analytics data for admin:', user.email);
     
     // Get popular templates by downloads
     const popularByDownloads = await pool.query(`
@@ -1229,7 +1274,7 @@ app.get('/api/admin/analytics-data', authenticateJWT, async (req, res) => {
       WHERE u.is_active = true
     `);
     
-    console.log('✅ Analytics data fetched successfully');
+    console.log('✅ Analytics data fetched successfully for:', user.email);
     
     // Return data in the exact format the frontend expects
     res.json({
