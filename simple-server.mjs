@@ -2531,6 +2531,12 @@ app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res
     });
   } catch (error) {
     console.error('Error creating checkout session:', error);
+    
+    // ✅ FIXED: Don't override intentional error responses
+    if (res.headersSent) {
+      return;
+    }
+    
     res.status(500).json({ error: 'Failed to create checkout session' });
   }
 });
