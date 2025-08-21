@@ -1128,6 +1128,15 @@ app.get('/admin/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
+// ✅ SECURE: Admin analytics route with authentication
+app.get('/admin/analytics', authenticateJWT, async (req, res) => {
+  // Check if user is admin
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 // ✅ PART 5: TEMPLATE & API ENDPOINTS 
 
 // ==================== TEMPLATE ENDPOINTS ====================

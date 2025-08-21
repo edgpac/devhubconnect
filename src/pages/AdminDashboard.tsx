@@ -340,7 +340,7 @@ export function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <Button 
-              onClick={() => navigate('/admin/analytics')}
+              onClick={() => navigate('/admin/dashboard')}
               className="w-full bg-green-600 hover:bg-green-700 mb-4"
             >
               <BarChart3 className="w-4 h-4 mr-2" />
