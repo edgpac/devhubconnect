@@ -1128,20 +1128,12 @@ app.get('/admin/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// ✅ FIXED: Analytics with better purchase counting
+// ✅ FIXED: Analytics consolidates users by email (like Stripe)
 app.get('/api/admin/analytics-data', async (req, res) => {
   try {
-    console.log('📊 Fetching analytics for ALL users...');
+    console.log('📊 Fetching analytics for ALL users (consolidated by email)...');
     
-    // Debug: Check all purchases regardless of status
-    const allPurchases = await pool.query(`
-      SELECT status, COUNT(*) as count, SUM(amount_paid) as revenue
-      FROM purchases 
-      GROUP BY status
-    `);
-    console.log('📊 All purchases by status:', allPurchases.rows);
-
-    // Get popular templates by downloads (ALL templates)
+    // Get popular templates by downloads
     const popularByDownloads = await pool.query(`
       SELECT 
         id, name, price,
@@ -1153,7 +1145,19 @@ app.get('/api/admin/analytics-data', async (req, res) => {
       LIMIT 10
     `);
 
-    // ✅ FIXED: Count ALL purchases (completed AND pending)
+    // ✅ FIXED: Count unique users by email (like Stripe)
+    const userStats = await pool.query(`
+      SELECT 
+        COUNT(DISTINCT LOWER(TRIM(email))) as total_users,
+        COUNT(DISTINCT CASE 
+          WHEN created_at >= NOW() - INTERVAL '30 days' 
+          THEN LOWER(TRIM(email)) 
+        END) as active_users
+      FROM users
+      WHERE email IS NOT NULL AND email != ''
+    `);
+
+    // Revenue stats (same as before)
     const revenueStats = await pool.query(`
       SELECT 
         COALESCE(SUM(amount_paid), 0) as total_revenue,
@@ -1163,15 +1167,7 @@ app.get('/api/admin/analytics-data', async (req, res) => {
       WHERE status IN ('completed', 'pending')
     `);
 
-    // Get user stats (ALL users)
-    const userStats = await pool.query(`
-      SELECT 
-        COUNT(*) as total_users,
-        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '30 days' THEN 1 END) as active_users
-      FROM users
-    `);
-
-    // ✅ FIXED: Revenue templates with ALL purchase statuses
+    // Revenue templates (same as before)
     const popularByPurchases = await pool.query(`
       SELECT 
         t.id as "templateId",
@@ -1187,12 +1183,9 @@ app.get('/api/admin/analytics-data', async (req, res) => {
       LIMIT 10
     `);
 
-    // Debug: Let's see what we actually have
     console.log('📊 Analytics Results:');
-    console.log('   Templates:', popularByDownloads.rows.length);
+    console.log('   Unique Users (by email):', userStats.rows[0]?.total_users);
     console.log('   Total Sales:', revenueStats.rows[0]?.total_sales);
-    console.log('   Total Revenue:', revenueStats.rows[0]?.total_revenue);
-    console.log('   Total Users:', userStats.rows[0]?.total_users);
 
     const realData = {
       success: true,
@@ -1217,7 +1210,7 @@ app.get('/api/admin/analytics-data', async (req, res) => {
           avgOrderValue: parseFloat(revenueStats.rows[0]?.avg_order_value || 0)
         },
         userStats: {
-          totalUsers: parseInt(userStats.rows[0]?.total_users || 0),
+          totalUsers: parseInt(userStats.rows[0]?.total_users || 0), // Now counts unique emails
           activeUsers: parseInt(userStats.rows[0]?.active_users || 0)
         }
       }
