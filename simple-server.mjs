@@ -1457,7 +1457,7 @@ app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
         t.rating
       FROM purchases p
       JOIN templates t ON p.template_id = t.id
-      WHERE p.user_id = $1 AND p.status = 'completed'
+      WHERE p.user_id = $1 
       ORDER BY p.purchased_at DESC
     `, [req.user.id]);
 
