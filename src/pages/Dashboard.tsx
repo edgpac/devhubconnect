@@ -64,8 +64,8 @@ export const Dashboard = () => {
   useEffect(() => {
     const fetchPurchases = async () => {
       try {
-        // ✅ FIXED: Use correct API endpoint
-        const response = await fetch('/api/purchases/', {
+        // ✅ FIXED: Use correct API endpoint that matches server endpoint list
+        const response = await fetch('/api/user/purchases', {
           method: 'GET',
           credentials: 'include',
           headers: {
