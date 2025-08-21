@@ -79,111 +79,150 @@ app.use(cookieParser());
 
 // ✅ CRITICAL FIX: STRIPE WEBHOOK MUST BE BEFORE express.json() AND FIXED PURCHASE LOGIC
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
- const sig = req.headers['stripe-signature'];
- const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const sig = req.headers['stripe-signature'];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
- let event;
+  let event;
 
- try {
-   if (!stripe || !endpointSecret) {
-     console.error('Stripe or webhook secret not configured');
-     return res.status(400).send('Webhook configuration missing');
-   }
+  try {
+    if (!stripe || !endpointSecret) {
+      console.error('❌ Stripe or webhook secret not configured');
+      return res.status(400).send('Webhook configuration missing');
+    }
 
-   event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-   console.log('✅ Webhook signature verified:', event.type);
- } catch (err) {
-   console.error('❌ Webhook signature verification failed:', err.message);
-   return res.status(400).send(`Webhook Error: ${err.message}`);
- }
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    console.log('✅ Webhook signature verified:', event.type, 'at', new Date().toISOString());
+  } catch (err) {
+    console.error('❌ Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
 
- switch (event.type) {
-   case 'checkout.session.completed':
-     const session = event.data.object;
-     console.log('🎉 Payment successful for session:', session.id);
-   
-     try {
-       const templateId = session.metadata?.templateId;
-       const userId = session.metadata?.userId;
-       const customerEmail = session.customer_details?.email;
-       const amountPaid = session.amount_total;
-       
-       console.log('💰 Recording purchase:', { templateId, userId, customerEmail, amountPaid });
+  // ✅ CRITICAL: Always respond with 200 first, then process
+  res.status(200).json({received: true, eventType: event.type, eventId: event.id});
 
-       // ✅ SECURITY: Validate and sanitize inputs
-       if (!templateId || !userId || !customerEmail || !amountPaid) {
-         console.error('❌ Missing required session data:', { templateId, userId, customerEmail, amountPaid });
-         break;
-       }
+  // Process the webhook asynchronously after responding
+  if (event.type === 'checkout.session.completed') {
+    try {
+      const session = event.data.object;
+      console.log('🎉 Processing payment completion for session:', session.id);
+      
+      const templateId = session.metadata?.templateId;
+      const userId = session.metadata?.userId;
+      const customerEmail = session.customer_details?.email;
+      const amountPaid = session.amount_total;
+      
+      console.log('💰 Session data:', { 
+        templateId, 
+        userId, 
+        customerEmail, 
+        amountPaid,
+        sessionId: session.id 
+      });
 
-       // ✅ SECURITY: Validate email format
-       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-       if (!emailRegex.test(customerEmail) || customerEmail.length > 320) {
-         console.error('❌ Invalid email format in webhook');
-         break;
-       }
+      // ✅ CRITICAL: Validate all required data
+      if (!templateId || !userId || !customerEmail || !amountPaid) {
+        console.error('❌ Missing required session data:', { templateId, userId, customerEmail, amountPaid });
+        return;
+      }
 
-       // Parse templateId as integer for database
-       let dbTemplateId = templateId;
-       const parsedId = parseInt(templateId, 10);
-       if (!isNaN(parsedId)) {
-         dbTemplateId = parsedId;
-       }
+      // ✅ SECURITY: Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(customerEmail) || customerEmail.length > 320) {
+        console.error('❌ Invalid email format in webhook:', customerEmail);
+        return;
+      }
 
-       // ✅ SECURITY: Validate template exists
-       const templateCheck = await pool.query('SELECT id FROM templates WHERE id = $1', [dbTemplateId]);
-       if (templateCheck.rows.length === 0) {
-         console.error('❌ Template not found for purchase:', templateId);
-         break;
-       }
+      // Parse templateId as integer for database
+      let dbTemplateId = templateId;
+      const parsedId = parseInt(templateId, 10);
+      if (!isNaN(parsedId)) {
+        dbTemplateId = parsedId;
+      }
 
-       // ✅ SECURITY: Validate user exists
-       const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
-       if (userCheck.rows.length === 0) {
-         console.error('❌ User not found for purchase:', userId);
-         break;
-       }
+      // ✅ CRITICAL: Check for existing purchase first
+      const existingPurchase = await pool.query(
+        'SELECT id, status FROM purchases WHERE stripe_session_id = $1',
+        [session.id]
+      );
 
-       // ✅ SECURITY: Check for duplicate purchases
-       const duplicateCheck = await pool.query(
-         'SELECT id FROM purchases WHERE stripe_session_id = $1',
-         [session.id]
-       );
+      if (existingPurchase.rows.length > 0) {
+        const purchase = existingPurchase.rows[0];
+        if (purchase.status === 'completed') {
+          console.log('⚠️ Purchase already completed for session:', session.id);
+          return;
+        }
+        
+        // Update existing pending purchase to completed
+        const updateResult = await pool.query(`
+          UPDATE purchases 
+          SET 
+            status = 'completed', 
+            completed_at = NOW(),
+            amount_paid = $1,
+            currency = $2
+          WHERE stripe_session_id = $3 AND status = 'pending'
+          RETURNING id, user_id, template_id, amount_paid
+        `, [amountPaid, session.currency || 'usd', session.id]);
 
-       if (duplicateCheck.rows.length > 0) {
-         console.log('⚠️ Purchase already recorded for session:', session.id);
-         break;
-       }
+        if (updateResult.rows.length > 0) {
+          console.log('✅ EXISTING PURCHASE COMPLETED via webhook:', updateResult.rows[0].id);
+        } else {
+          console.error('❌ Failed to update existing purchase for session:', session.id);
+        }
+        return;
+      }
 
-       // ✅ FIXED: Simple approach - create purchase as completed immediately (like old version)
-       const purchaseResult = await pool.query(`
-         INSERT INTO purchases (
-           user_id, template_id, stripe_session_id, 
-           amount_paid, currency, status, purchased_at, completed_at
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, NOW(), NOW()
-         ) RETURNING *
-       `, [
-         userId,
-         dbTemplateId,
-         session.id,
-         amountPaid,
-         session.currency || 'usd',
-         'completed'
-       ]);
+      // ✅ SECURITY: Validate template exists
+      const templateCheck = await pool.query('SELECT id, name FROM templates WHERE id = $1', [dbTemplateId]);
+      if (templateCheck.rows.length === 0) {
+        console.error('❌ Template not found for purchase:', templateId);
+        return;
+      }
 
-       console.log('✅ Purchase completed via webhook:', purchaseResult.rows[0].id);
+      // ✅ SECURITY: Validate user exists
+      const userCheck = await pool.query('SELECT id, email FROM users WHERE id = $1', [userId]);
+      if (userCheck.rows.length === 0) {
+        console.error('❌ User not found for purchase:', userId);
+        return;
+      }
 
-     } catch (error) {
-       console.error('❌ Error recording purchase:', error);
-     }
-     break;
-   
-   default:
-     console.log(`Unhandled event type: ${event.type}`);
- }
+      // ✅ CREATE NEW PURCHASE: If no existing purchase found, create as completed
+      const purchaseResult = await pool.query(`
+        INSERT INTO purchases (
+          user_id, template_id, stripe_session_id, 
+          amount_paid, currency, status, purchased_at, completed_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, NOW(), NOW()
+        ) RETURNING *
+      `, [
+        userId,
+        dbTemplateId,
+        session.id,
+        amountPaid,
+        session.currency || 'usd',
+        'completed'
+      ]);
 
- res.json({received: true});
+      console.log('✅ NEW PURCHASE COMPLETED via webhook:', {
+        purchaseId: purchaseResult.rows[0].id,
+        templateName: templateCheck.rows[0].name,
+        userEmail: userCheck.rows[0].email,
+        amount: `$${(amountPaid / 100).toFixed(2)}`,
+        sessionId: session.id
+      });
+
+    } catch (error) {
+      console.error('❌ CRITICAL ERROR processing webhook:', {
+        error: error.message,
+        stack: error.stack,
+        sessionId: event.data.object?.id,
+        eventId: event.id,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } else {
+    console.log(`ℹ️ Unhandled event type: ${event.type}`);
+  }
 });
 
 app.use(express.json({ limit: '10mb' }));
