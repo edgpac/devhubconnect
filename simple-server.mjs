@@ -77,58 +77,136 @@ function checkAIRateLimit(userId) {
 // Middleware Setup
 app.use(cookieParser());
 
-// ✅ STRIPE WEBHOOK - MUST BE BEFORE express.json()
+// ✅ SECURE STRIPE WEBHOOK - WORKING VERSION FROM OLD FILE
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
  const sig = req.headers['stripe-signature'];
  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
- if (!endpointSecret) {
-   console.error('❌ STRIPE_WEBHOOK_SECRET not configured');
-   return res.status(500).send('Webhook secret not configured');
- }
-
  let event;
+
  try {
+   if (!stripe || !endpointSecret) {
+     console.error('Stripe or webhook secret not configured');
+     return res.status(400).send('Webhook configuration missing');
+   }
+
    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+   console.log('✅ Webhook signature verified:', event.type);
  } catch (err) {
    console.error('❌ Webhook signature verification failed:', err.message);
    return res.status(400).send(`Webhook Error: ${err.message}`);
  }
 
- try {
-   if (event.type === 'checkout.session.completed') {
+ switch (event.type) {
+   case 'checkout.session.completed':
      const session = event.data.object;
-     const { userId, templateId } = session.metadata;
+     console.log('🎉 Payment successful for session:', session.id);
+   
+     try {
+       const templateId = session.metadata.templateId;
+       const customerEmail = session.customer_details.email;
+       const amountPaid = session.amount_total;
+       
+       console.log('💰 Recording purchase:', { templateId, customerEmail, amountPaid });
 
-     if (!userId || !templateId) {
-       console.error('❌ Missing metadata in webhook:', session.id);
-       return res.status(400).send('Missing required metadata');
+       // ✅ SECURITY: Validate and sanitize inputs
+       if (!templateId || !customerEmail || !amountPaid) {
+         console.error('❌ Missing required session data');
+         break;
+       }
+
+       // ✅ SECURITY: Validate email format
+       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+       if (!emailRegex.test(customerEmail) || customerEmail.length > 320) {
+         console.error('❌ Invalid email format in webhook');
+         break;
+       }
+
+       // Parse templateId as integer for database
+       let dbTemplateId = templateId;
+       const parsedId = parseInt(templateId, 10);
+       if (!isNaN(parsedId)) {
+         dbTemplateId = parsedId;
+       }
+
+       // ✅ SECURITY: Validate template exists
+       const templateCheck = await pool.query('SELECT id FROM templates WHERE id = $1', [dbTemplateId]);
+       if (templateCheck.rows.length === 0) {
+         console.error('❌ Template not found for purchase:', templateId);
+         break;
+       }
+
+       // Find existing user by email
+       let userId;
+       const existingUserResult = await pool.query(
+         'SELECT id FROM users WHERE email = $1 LIMIT 1',
+         [customerEmail.toLowerCase().trim()]
+       );
+
+       if (existingUserResult.rows.length > 0) {
+         userId = existingUserResult.rows[0].id;
+         console.log('✅ Found existing user for email:', customerEmail, 'ID:', userId);
+       } else {
+         // ✅ SECURITY: Create new user with secure defaults
+         const sanitizedEmail = customerEmail.toLowerCase().trim();
+         const username = sanitizedEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').substring(0, 50);
+         
+         const newUserResult = await pool.query(`
+           INSERT INTO users (id, email, username, role, is_email_verified, is_active, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+           RETURNING id
+         `, [
+           `stripe_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`,
+           sanitizedEmail,
+           username || 'user',
+           'user',
+           true,
+           true
+         ]);
+         userId = newUserResult.rows[0].id;
+         console.log('👤 Created new user for purchase:', customerEmail, 'ID:', userId);
+       }
+
+       // ✅ SECURITY: Check for duplicate purchases
+       const duplicateCheck = await pool.query(
+         'SELECT id FROM purchases WHERE stripe_session_id = $1',
+         [session.id]
+       );
+
+       if (duplicateCheck.rows.length > 0) {
+         console.log('⚠️ Purchase already recorded for session:', session.id);
+         break;
+       }
+
+       // ✅ SECURITY: Record purchase with parameterized query
+       const purchaseResult = await pool.query(`
+         INSERT INTO purchases (
+           user_id, template_id, stripe_session_id, 
+           amount_paid, currency, status, purchased_at
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, NOW()
+         ) RETURNING *
+       `, [
+         userId,
+         dbTemplateId,
+         session.id,
+         amountPaid,
+         session.currency || 'usd',
+         'completed'
+       ]);
+
+       console.log('✅ Purchase recorded:', purchaseResult.rows[0].id);
+
+     } catch (error) {
+       console.error('❌ Error recording purchase:', error);
      }
-
-     const result = await pool.query(`
-       UPDATE purchases 
-       SET status = 'completed', 
-           completed_at = NOW(),
-           stripe_payment_intent_id = $1
-       WHERE user_id = $2 
-       AND template_id = $3 
-       AND stripe_session_id = $4 
-       AND status = 'pending'
-       RETURNING id
-     `, [session.payment_intent, userId, templateId, session.id]);
-
-     if (result.rows.length > 0) {
-       console.log('✅ Purchase completed via webhook:', result.rows[0].id);
-     } else {
-       console.warn('⚠️ No pending purchase found for webhook:', session.id);
-     }
-   }
-
-   res.json({received: true});
- } catch (error) {
-   console.error('❌ Webhook processing error:', error);
-   res.status(500).send('Webhook processing failed');
+     break;
+   
+   default:
+     console.log(`Unhandled event type: ${event.type}`);
  }
+
+ res.json({received: true});
 });
 
 app.use(express.json({ limit: '10mb' }));
