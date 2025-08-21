@@ -87,6 +87,8 @@ export const Dashboard = () => {
               return {
                 // ✅ Use template data directly from the structure
                 ...purchase.template,
+                // ✅ CRITICAL: Add the purchased flag that TemplateCard expects
+                purchased: true,
                 // ✅ Add purchase metadata
                 purchaseInfo: purchase.purchaseInfo,
                 purchasedAt: purchase.purchaseInfo?.purchasedAt,
@@ -110,7 +112,7 @@ export const Dashboard = () => {
 
     fetchPurchases();
   }, []);
-
+  
   // Calculate pagination for My Templates
   const totalPages = Math.ceil(purchasedTemplates.length / TEMPLATES_PER_PAGE);
   const paginatedTemplates = purchasedTemplates.slice(
