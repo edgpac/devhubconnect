@@ -112,7 +112,7 @@ export const Dashboard = () => {
 
     fetchPurchases();
   }, []);
-  
+
   // Calculate pagination for My Templates
   const totalPages = Math.ceil(purchasedTemplates.length / TEMPLATES_PER_PAGE);
   const paginatedTemplates = purchasedTemplates.slice(
@@ -163,11 +163,24 @@ export const Dashboard = () => {
     }
   };
 
-  // ✅ FIXED: Safe calculation with fallback values
-  const totalSpent = purchasedTemplates.reduce((sum, template) => {
-    const amount = template.amountPaid || template.price || 0;
-    return sum + amount;
-  }, 0);
+  // ✅ FIXED: Safe calculation with fallback values and debugging
+const totalSpent = purchasedTemplates.reduce((sum, template) => {
+  // Check all possible sources for the amount
+  const amount = template.amountPaid ||           // From purchase record
+                template.purchaseInfo?.amountPaid || // From nested purchase info
+                template.price ||                    // From template price (fallback)
+                0;
+                
+  console.log('💰 Template amount check:', {
+    name: template.name,
+    amountPaid: template.amountPaid,
+    purchaseInfoAmount: template.purchaseInfo?.amountPaid,
+    templatePrice: template.price,
+    usedAmount: amount
+  });
+  
+  return sum + amount;
+}, 0);
 
   const handlePreferencesUpdate = (newPreferences: any) => {
     updatePreferences(newPreferences);
