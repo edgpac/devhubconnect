@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart3, TrendingUp, Users, DollarSign, Eye, Search, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/components/context/AuthProvider';
 
 interface AnalyticsData {
   popularByDownloads: any[];
@@ -24,58 +25,28 @@ export default function Analytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
+  
+  // ✅ USE YOUR EXISTING AUTH SYSTEM (same as AdminDashboard)
+  const { currentUser } = useAuth();
+  const isAuthenticated = currentUser && (currentUser.role === 'admin' || currentUser.isAdmin);
 
   useEffect(() => {
-    // Check if user is admin before loading analytics
-    checkAdminStatus();
-  }, []);
-
-  const checkAdminStatus = async () => {
-    try {
-      // Check if user is authenticated via GitHub OAuth and has admin role
-      const response = await fetch('/api/auth/user', {
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        setError('Please log in with GitHub first');
-        setLoading(false);
-        return;
-      }
-
-      const data = await response.json();
-      const user = data.user;
-
-      // Check if user has admin role (auto-granted to 'edgpac')
-      if (!user || user.role !== 'admin') {
-        setError('Admin access required - only edgpac can view analytics');
-        setLoading(false);
-        return;
-      }
-
-      console.log('✅ Admin user verified:', user.username, user.email);
-      setIsAdmin(true);
+    if (isAuthenticated) {
       fetchAnalytics();
-    } catch (err) {
-      setError('Failed to verify admin access');
+    } else {
+      setError('Admin privileges required to view analytics');
       setLoading(false);
     }
-  };
+  }, [isAuthenticated]);
 
   const fetchAnalytics = async () => {
     try {
-      // Use session-based auth to fetch analytics data
       const response = await fetch('/api/admin/analytics-data', {
         credentials: 'include'
       });
 
       if (!response.ok) {
-        if (response.status === 403) {
-          setError('Admin access required');
-          return;
-        }
         throw new Error('Failed to fetch analytics data');
       }
 
@@ -99,7 +70,7 @@ export default function Analytics() {
     );
   }
 
-  if (error || !isAdmin) {
+  if (error || !isAuthenticated) {
     return (
       <div className="container mx-auto py-8">
         <Card className="max-w-md mx-auto">
@@ -109,10 +80,10 @@ export default function Analytics() {
               <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
               <p className="text-sm mb-4">{error || 'Admin privileges required'}</p>
               <button 
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/admin/dashboard')}
                 className="text-blue-600 hover:text-blue-800 underline"
               >
-                Return to Home (Login with GitHub)
+                Return to Admin Dashboard
               </button>
             </div>
           </CardContent>
