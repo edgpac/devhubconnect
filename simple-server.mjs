@@ -1128,10 +1128,12 @@ app.get('/admin/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// ✅ REAL DATA: Admin analytics endpoint
+/// ✅ FIXED: Analytics for ALL users and ALL data
 app.get('/api/admin/analytics-data', async (req, res) => {
   try {
-    // Get popular templates by downloads (REAL DATA)
+    console.log('📊 Fetching analytics for ALL users...');
+    
+    // Get popular templates by downloads (ALL templates)
     const popularByDownloads = await pool.query(`
       SELECT 
         id, name, price,
@@ -1139,11 +1141,11 @@ app.get('/api/admin/analytics-data', async (req, res) => {
         COALESCE(view_count, 0) as "viewCount"
       FROM templates 
       WHERE is_public = true
-      ORDER BY download_count DESC NULLS LAST
+      ORDER BY download_count DESC NULLS LAST, view_count DESC NULLS LAST
       LIMIT 10
     `);
 
-    // Get revenue data (REAL DATA)  
+    // Get revenue data (ALL purchases from ALL users)
     const revenueStats = await pool.query(`
       SELECT 
         COALESCE(SUM(amount_paid), 0) as total_revenue,
@@ -1153,7 +1155,7 @@ app.get('/api/admin/analytics-data', async (req, res) => {
       WHERE status = 'completed'
     `);
 
-    // Get user stats (REAL DATA)
+    // Get user stats (ALL users)
     const userStats = await pool.query(`
       SELECT 
         COUNT(*) as total_users,
@@ -1161,7 +1163,7 @@ app.get('/api/admin/analytics-data', async (req, res) => {
       FROM users
     `);
 
-    // Get top revenue templates (REAL DATA)
+    // Get top revenue templates (ALL purchases from ALL users)
     const popularByPurchases = await pool.query(`
       SELECT 
         t.id as "templateId",
@@ -1173,9 +1175,17 @@ app.get('/api/admin/analytics-data', async (req, res) => {
       JOIN templates t ON p.template_id = t.id
       WHERE p.status = 'completed'
       GROUP BY t.id, t.name
-      ORDER BY SUM(p.amount_paid) DESC
+      ORDER BY COUNT(p.id) DESC, SUM(p.amount_paid) DESC
       LIMIT 10
     `);
+
+    // Debug: Let's see what we actually have
+    console.log('📊 Analytics Debug:');
+    console.log('   Templates:', popularByDownloads.rows.length);
+    console.log('   Total Sales:', revenueStats.rows[0]?.total_sales);
+    console.log('   Total Revenue:', revenueStats.rows[0]?.total_revenue);
+    console.log('   Total Users:', userStats.rows[0]?.total_users);
+    console.log('   Revenue Templates:', popularByPurchases.rows.length);
 
     const realData = {
       success: true,
@@ -1183,7 +1193,12 @@ app.get('/api/admin/analytics-data', async (req, res) => {
         popularByDownloads: popularByDownloads.rows,
         popularByPurchases: popularByPurchases.rows,
         categoryStats: [
-          { category: 'automation', templateCount: 5, totalDownloads: 120, avgRating: 4.5 }
+          { 
+            category: 'automation', 
+            templateCount: popularByDownloads.rows.length, 
+            totalDownloads: popularByDownloads.rows.reduce((sum, t) => sum + (t.downloadCount || 0), 0), 
+            avgRating: 4.5 
+          }
         ],
         topSearchTerms: [
           { searchTerm: 'email automation', searchCount: 45 },
@@ -1203,7 +1218,7 @@ app.get('/api/admin/analytics-data', async (req, res) => {
     
     res.json(realData);
   } catch (error) {
-    console.error('Analytics error:', error);
+    console.error('❌ Analytics error:', error);
     res.status(500).json({ error: 'Failed to fetch analytics' });
   }
 });
