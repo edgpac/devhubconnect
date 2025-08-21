@@ -1443,29 +1443,43 @@ app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
         p.id as purchase_id,
         p.purchased_at,
         p.amount_paid,
+        p.currency,
         p.status,
-        t.id as template_id,
-        t.name as template_name,
-        t.description as template_description,
-        t.image_url,
-        t.workflow_json
+        t.id,
+        t.name,
+        t.description,
+        t.price,
+        t.image_url as "imageUrl",
+        t.workflow_json as "workflowJson",
+        t.created_at as "createdAt",
+        t.download_count as "downloadCount",
+        t.view_count as "viewCount",
+        t.rating
       FROM purchases p
       JOIN templates t ON p.template_id = t.id
-      WHERE p.user_id = $1
+      WHERE p.user_id = $1 AND p.status = 'completed'
       ORDER BY p.purchased_at DESC
     `, [req.user.id]);
 
     const formattedPurchases = result.rows.map(row => ({
-      purchaseId: row.purchase_id,
-      purchasedAt: row.purchased_at,
-      amountPaid: row.amount_paid,
-      status: row.status,
+      purchaseInfo: {
+        purchaseId: row.purchase_id,
+        amountPaid: row.amount_paid,
+        currency: row.currency,
+        status: row.status,
+        purchasedAt: row.purchased_at
+      },
       template: {
-        id: row.template_id,
-        name: row.template_name,
-        description: row.template_description,
-        imageUrl: row.image_url,
-        workflowJson: row.workflow_json,
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        price: row.price,
+        imageUrl: row.imageUrl,
+        workflowJson: row.workflowJson,
+        createdAt: row.createdAt,
+        downloadCount: row.downloadCount,
+        viewCount: row.viewCount,
+        rating: row.rating,
         purchased: true
       }
     }));
