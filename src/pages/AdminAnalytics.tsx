@@ -34,21 +34,28 @@ export default function Analytics() {
 
   const checkAdminStatus = async () => {
     try {
-      // Verify admin status by trying to fetch analytics
-      const response = await fetch('/api/admin/analytics-data', {
+      // Check if user is authenticated via GitHub OAuth and has admin role
+      const response = await fetch('/api/auth/user', {
         credentials: 'include'
       });
 
-      if (response.status === 403) {
-        setError('Admin privileges required to view analytics');
+      if (!response.ok) {
+        setError('Please log in with GitHub first');
         setLoading(false);
         return;
       }
 
-      if (!response.ok) {
-        throw new Error('Failed to verify admin status');
+      const data = await response.json();
+      const user = data.user;
+
+      // Check if user has admin role (auto-granted to 'edgpac')
+      if (!user || user.role !== 'admin') {
+        setError('Admin access required - only edgpac can view analytics');
+        setLoading(false);
+        return;
       }
 
+      console.log('✅ Admin user verified:', user.username, user.email);
       setIsAdmin(true);
       fetchAnalytics();
     } catch (err) {
@@ -59,11 +66,16 @@ export default function Analytics() {
 
   const fetchAnalytics = async () => {
     try {
+      // Use session-based auth to fetch analytics data
       const response = await fetch('/api/admin/analytics-data', {
         credentials: 'include'
       });
 
       if (!response.ok) {
+        if (response.status === 403) {
+          setError('Admin access required');
+          return;
+        }
         throw new Error('Failed to fetch analytics data');
       }
 
@@ -97,10 +109,10 @@ export default function Analytics() {
               <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
               <p className="text-sm mb-4">{error || 'Admin privileges required'}</p>
               <button 
-                onClick={() => navigate('/admin')}
+                onClick={() => navigate('/')}
                 className="text-blue-600 hover:text-blue-800 underline"
               >
-                Return to Admin Login
+                Return to Home (Login with GitHub)
               </button>
             </div>
           </CardContent>
