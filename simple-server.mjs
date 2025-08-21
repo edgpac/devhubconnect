@@ -1493,6 +1493,82 @@ app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
   }
 });
 
+// ✅ SECURE: Individual template removal endpoint
+app.delete('/api/user/purchases/template/:templateId', authenticateJWT, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    const userId = req.user.id;
+    
+    console.log(`🗑️ Individual template removal request: User ${userId}, Template ${templateId}`);
+    
+    // Validate template ID
+    if (!templateId || isNaN(templateId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid template ID' 
+      });
+    }
+
+    // Get template name for logging
+    const templateInfo = await pool.query(
+      'SELECT name FROM templates WHERE id = $1',
+      [templateId]
+    );
+
+    const templateName = templateInfo.rows[0]?.name || `Template ${templateId}`;
+
+    // 🔒 OWNERSHIP CHECK - Ensure user can only remove their own templates
+    const ownershipCheck = await pool.query(
+      'SELECT id, purchased_at, amount_paid FROM purchases WHERE user_id = $1 AND template_id = $2',
+      [userId, templateId]
+    );
+
+    if (ownershipCheck.rows.length === 0) {
+      console.log(`❌ Unauthorized removal attempt: User ${userId} doesn't own template ${templateId}`);
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Template not found in your collection' 
+      });
+    }
+
+    const purchaseRecord = ownershipCheck.rows[0];
+
+    // Remove this specific template purchase
+    const deleteResult = await pool.query(
+      'DELETE FROM purchases WHERE user_id = $1 AND template_id = $2 RETURNING id',
+      [userId, templateId]
+    );
+
+    if (deleteResult.rows.length === 0) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to remove template from collection' 
+      });
+    }
+
+    console.log(`✅ Template removed from collection: "${templateName}" (ID: ${templateId}) by user ${userId}`);
+    console.log(`💰 Amount was: $${(purchaseRecord.amount_paid / 100).toFixed(2)}`);
+    
+    res.json({ 
+      success: true, 
+      message: `"${templateName}" removed from your collection`,
+      removedTemplate: {
+        id: templateId,
+        name: templateName,
+        purchaseDate: purchaseRecord.purchased_at,
+        amountPaid: purchaseRecord.amount_paid
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Individual template removal error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to remove template from collection' 
+    });
+  }
+});
+
 // ✅ FIXED: Add missing endpoint without trailing slash
 app.get('/api/purchases', authenticateJWT, async (req, res) => {
   if (!req.user) {
