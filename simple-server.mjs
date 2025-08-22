@@ -2518,6 +2518,11 @@ app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res
     return res.status(400).json({ error: 'Template ID is required' });
   }
 
+  // ✅ FIXED: Define correct frontend URL based on environment
+  const frontendUrl = process.env.NODE_ENV === 'production' 
+    ? 'https://devhubconnect.com' 
+    : process.env.FRONTEND_URL || 'http://localhost:5173';
+
   try {
     console.log('💳 Creating checkout session for:', templateId, 'by user:', req.user.email || req.user.username);
     
