@@ -21,7 +21,7 @@ const pgSession = require('connect-pg-simple');
 
 // Environment Variables and Configuration
 const port = process.env.PORT || 3000;
-const frontendUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://devhubconnect-production.up.railway.app' : 'http://localhost:3000');
+const frontendUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://devhubconnect.com' : 'http://localhost:3000');
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // ✅ FIXED: Safe Stripe initialization with validation
