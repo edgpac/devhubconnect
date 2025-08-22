@@ -25,7 +25,21 @@ import Footer from "./components/Footer";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthProvider } from "./components/context/AuthProvider";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+// 🔒 SECURITY: Admin-only route protection component
+const AdminRoute = ({ children }: { children: React.ReactNode }) => (
+  <ProtectedRoute requireAdmin>
+    {children}
+  </ProtectedRoute>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -36,12 +50,22 @@ const App = () => (
         <BrowserRouter>
           <>
             <Routes>
-              {/* Main Application Routes */}
+              {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/template/:id" element={<TemplateDetail />} />
+              <Route path="/guidance" element={<GuidancePage />} />
+              <Route path="/success" element={<SuccessPage />} />
+              
+              {/* Legal Pages */}
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+
+              {/* Authentication Routes */}
               <Route path="/login" element={<AuthPage />} />
               <Route path="/register" element={<AuthPage />} />
               <Route path="/auth/success" element={<AuthSuccess />} />
+
+              {/* 🔒 SECURITY: Protected User Routes */}
               <Route
                 path="/dashboard"
                 element={
@@ -50,48 +74,61 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              <Route path="/guidance" element={<GuidancePage />} />
-              <Route path="/success" element={<SuccessPage />} />
-              <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-              <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-
-              {/* Legal Pages */}
-              <Route path="/terms" element={<TermsOfService />} />
-              <Route path="/privacy" element={<PrivacyPolicy />} />
-
-              {/* Admin Routes */}
-              <Route path="/admin" element={<AdminLogin />} />
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route
-                path="/admin/analytics"
+              <Route 
+                path="/profile" 
                 element={
                   <ProtectedRoute>
-                    <Analytics />
+                    <ProfilePage />
                   </ProtectedRoute>
-                }
+                } 
               />
-              
-              {/* ✅ ADDED: Admin template edit route */}
-              <Route
-                path="/admin/templates/:id/edit"
+              <Route 
+                path="/settings" 
                 element={
                   <ProtectedRoute>
-                    <TemplateEdit />
+                    <SettingsPage />
                   </ProtectedRoute>
-                }
+                } 
               />
-              
-              {/* Keep the old route for backward compatibility */}
+
+              {/* 🔒 SECURITY: Template Edit Routes (Creator/Admin Only) */}
               <Route
                 path="/template/:id/edit"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requireCreatorOrAdmin>
                     <TemplateEdit />
                   </ProtectedRoute>
                 }
               />
 
-              {/* Catch-all route */}
+              {/* 🔒 SECURITY: Admin-Only Routes */}
+              <Route path="/admin" element={<AdminLogin />} />
+              <Route 
+                path="/admin/dashboard" 
+                element={
+                  <AdminRoute>
+                    <AdminDashboard />
+                  </AdminRoute>
+                } 
+              />
+              <Route
+                path="/admin/analytics"
+                element={
+                  <AdminRoute>
+                    <Analytics />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/admin/templates/:id/edit"
+                element={
+                  <AdminRoute>
+                    <TemplateEdit />
+                  </AdminRoute>
+                }
+              />
+
+              {/* 404 Catch-all route */}
               <Route path="*" element={<NotFound />} />
             </Routes>
 
