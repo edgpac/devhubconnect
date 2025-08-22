@@ -29,12 +29,20 @@ let stripe = null;
 if (process.env.STRIPE_SECRET_KEY) {
  try {
    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-   console.log('✅ Stripe initialized successfully');
+   if (process.env.NODE_ENV !== 'production') {
+     console.log('✅ Stripe initialized successfully');
+   }
  } catch (error) {
    console.error('❌ Stripe initialization failed:', error.message);
+   if (process.env.NODE_ENV === 'production') {
+     process.exit(1); // Exit in production if Stripe fails
+   }
  }
 } else {
- console.warn('⚠️ STRIPE_SECRET_KEY not configured - payment features disabled');
+ console.error('❌ STRIPE_SECRET_KEY not configured');
+ if (process.env.NODE_ENV === 'production') {
+   process.exit(1); // Require Stripe in production
+ }
 }
 
 const app = express();
@@ -55,7 +63,7 @@ if (process.env.GROQ_API_KEY) {
 
 // ✅ SECURE: Rate limiting for AI requests
 const AI_REQUEST_LIMITS = new Map();
-const MAX_AI_REQUESTS_PER_MINUTE = 10;
+const MAX_AI_REQUESTS_PER_MINUTE = process.env.NODE_ENV === 'production' ? 5 : 10;
 
 function checkAIRateLimit(userId) {
  const now = Date.now();
@@ -262,13 +270,14 @@ const callbackLimiter = rateLimit({
 // Security: State storage for CSRF protection
 const stateStore = new Map();
 
-console.log('🔍 Environment Variables Check:');
-console.log('  - FRONTEND_URL:', process.env.FRONTEND_URL ? 'SET' : 'NOT SET');
-console.log('  - GITHUB_CLIENT_ID:', process.env.GITHUB_CLIENT_ID ? 'SET' : 'NOT SET');
-console.log('  - GITHUB_CLIENT_SECRET:', process.env.GITHUB_CLIENT_SECRET ? 'SET' : 'NOT SET');
-console.log('  - JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
-console.log('  - DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
-console.log('  - GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'SET' : 'NOT SET');
+if (process.env.NODE_ENV !== 'production') {
+  console.log('🔍 Environment Variables Check (DEV ONLY):');
+  console.log('  - FRONTEND_URL:', process.env.FRONTEND_URL ? 'SET' : 'NOT SET');
+  console.log('  - GITHUB_CLIENT_ID:', process.env.GITHUB_CLIENT_ID ? 'SET' : 'NOT SET');
+  console.log('  - GITHUB_CLIENT_SECRET:', process.env.GITHUB_CLIENT_SECRET ? 'SET' : 'NOT SET');
+  console.log('  - JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
+  console.log('  - DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
+  console.log('  - GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'SET' : 'NOT SET');
 
 // ✅ PART 2: AI FUNCTIONS & SECURITY - ALL FIXES APPLIED WITH CORRECT MODEL
 
@@ -775,53 +784,54 @@ app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
       await client.query('BEGIN');
       
       // Security: Invalidate existing sessions for this user
-      await client.query(
-        'UPDATE sessions SET is_active = false WHERE user_id IN (SELECT id FROM users WHERE email = $1)',
-        [sanitizedUser.email]
-      );
-      
-      let user;
-      const existingUser = await client.query(
-        'SELECT * FROM users WHERE email = $1',
-        [sanitizedUser.email]
-      );
-      
-      if (existingUser.rows.length > 0) {
-        // Update existing user
-        const updatedUser = await client.query(
-          'UPDATE users SET name = $1, avatar_url = $2, github_login = $3, last_login_at = NOW(), updated_at = NOW() WHERE email = $4 RETURNING *',
-          [sanitizedUser.name, sanitizedUser.avatarUrl, sanitizedUser.githubLogin, sanitizedUser.email]
-        );
-        user = updatedUser.rows[0];
-      } else {
-        // Create new user
-        const newUser = await client.query(
-          'INSERT INTO users (id, email, name, avatar_url, github_login, role, is_email_verified, is_active, last_login_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) RETURNING *',
-          [`github_${sanitizedUser.githubId}`, sanitizedUser.email, sanitizedUser.name, sanitizedUser.avatarUrl, sanitizedUser.githubLogin, 'user', true, true]
-        );
-        user = newUser.rows[0];
-      }
-      
-      // Security: Auto-promote admin (controlled list)
-      if (sanitizedUser.githubLogin === 'edgpac' && user.role !== 'admin') {
-        await client.query(
-          'UPDATE users SET role = $1 WHERE id = $2',
-          ['admin', user.id]
-        );
-        user.role = 'admin';
-        console.log('✅ Auto-promoted user to admin:', sanitizedUser.githubLogin);
-      }
-      
-      // Security: Create session with proper validation
-      const sessionId = crypto.randomUUID();
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      
-      await client.query(
-        'INSERT INTO sessions (id, user_id, expires_at, ip_address, user_agent, is_active) VALUES ($1, $2, $3, $4, $5, $6)',
-        [sessionId, user.id, expiresAt, req.ip || 'unknown', (req.get('User-Agent') || 'unknown').substring(0, 500), true]
-      );
-      
-      await client.query('COMMIT');
+     await client.query(
+       'UPDATE sessions SET is_active = false WHERE user_id IN (SELECT id FROM users WHERE email = $1)',
+       [sanitizedUser.email]
+     );
+     
+     let user;
+     const existingUser = await client.query(
+       'SELECT * FROM users WHERE email = $1',
+       [sanitizedUser.email]
+     );
+     
+     if (existingUser.rows.length > 0) {
+       // Update existing user
+       const updatedUser = await client.query(
+         'UPDATE users SET name = $1, avatar_url = $2, github_login = $3, last_login_at = NOW(), updated_at = NOW() WHERE email = $4 RETURNING *',
+         [sanitizedUser.name, sanitizedUser.avatarUrl, sanitizedUser.githubLogin, sanitizedUser.email]
+       );
+       user = updatedUser.rows[0];
+     } else {
+       // Create new user
+       const newUser = await client.query(
+         'INSERT INTO users (id, email, name, avatar_url, github_login, role, is_email_verified, is_active, last_login_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) RETURNING *',
+         [`github_${sanitizedUser.githubId}`, sanitizedUser.email, sanitizedUser.name, sanitizedUser.avatarUrl, sanitizedUser.githubLogin, 'user', true, true]
+       );
+       user = newUser.rows[0];
+     }
+     
+     // Security: Auto-promote admin (from environment variable)
+     const ADMIN_GITHUB_USERS = process.env.ADMIN_GITHUB_USERS?.split(',') || ['edgpac'];
+     if (ADMIN_GITHUB_USERS.includes(sanitizedUser.githubLogin) && user.role !== 'admin') {
+       await client.query(
+         'UPDATE users SET role = $1 WHERE id = $2',
+         ['admin', user.id]
+       );
+       user.role = 'admin';
+       console.log('✅ Auto-promoted user to admin:', sanitizedUser.githubLogin);
+     }
+     
+     // Security: Create session with proper validation
+     const sessionId = crypto.randomUUID();
+     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+     
+     await client.query(
+       'INSERT INTO sessions (id, user_id, expires_at, ip_address, user_agent, is_active) VALUES ($1, $2, $3, $4, $5, $6)',
+       [sessionId, user.id, expiresAt, req.ip || 'unknown', (req.get('User-Agent') || 'unknown').substring(0, 500), true]
+     );
+     
+     await client.query('COMMIT');
       
       // Security: Set secure HTTP-only cookie
       res.cookie('devhub_session', sessionId, {
@@ -1422,26 +1432,35 @@ app.get('/api/recommendations', authenticateJWT, async (req, res) => {
       const converted = convertFieldNames(template);
       const workflowDetails = parseWorkflowDetails(template.workflow_json);
       
+      const formattedTemplates = availableTemplates.rows.slice(0, 12).map(template => {
+      const converted = convertFieldNames(template);
+      const workflowDetails = parseWorkflowDetails(template.workflow_json);
+      
       // 🔒 DOUBLE-CHECK: Ensure this template is NOT owned (extra safety)
       if (ownedTemplateIds.includes(template.id)) {
         console.log(`⚠️ WARNING: Template ${template.id} should have been excluded but wasn't!`);
         return null;
       }
       
-      return {
+      const baseTemplate = {
         ...converted,
         workflowDetails,
         steps: workflowDetails.steps,
         integratedApps: workflowDetails.apps,
         _recommendationScore: Math.random() * 0.3 + 0.7,
-        recommended: true,
-        // 🔒 DEBUG: Add ownership info for verification
-        _debug: {
+        recommended: true
+      };
+
+      // Only add debug info in development
+      if (process.env.NODE_ENV !== 'production') {
+        baseTemplate._debug = {
           templateId: template.id,
           userOwnsThis: false,
           excludedIds: ownedTemplateIds
-        }
-      };
+        };
+      }
+
+      return baseTemplate;
     }).filter(Boolean); // Remove any null entries
 
     console.log(`✅ Returning ${formattedTemplates.length} recommendations (excluded ${ownedTemplateIds.length} owned templates)`);
@@ -2591,50 +2610,57 @@ app.get('*', (req, res) => {
 
 // ✅ ENHANCED: Server Startup with Consolidated Logging
 const server = app.listen(port, '0.0.0.0', async () => {
-  console.log('\n🚀 ========================================');
-  console.log('   DEVHUBCONNECT AI SYSTEM STARTING');
-  console.log('========================================');
-  console.log(`✅ Server running on 0.0.0.0:${port}`);
-  console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
-  console.log(`🔑 Groq API Key configured: ${!!process.env.GROQ_API_KEY}`);
-  console.log(`💳 Stripe configured: ${!!process.env.STRIPE_SECRET_KEY}`);
-  console.log(`🗄️ Database URL configured: ${!!process.env.DATABASE_URL}`);
-  console.log(`🔐 GitHub OAuth configured: ${!!process.env.GITHUB_CLIENT_ID && !!process.env.GITHUB_CLIENT_SECRET}`);
-  console.log('');
-  console.log('🔐 AUTHENTICATION:');
-  console.log('   ✅ GitHub OAuth - /auth/github');
-  console.log('   ✅ Admin routes require GitHub login and admin role');
-  console.log('   ✅ Admin password login - /api/admin/login');
-  console.log('');
-  console.log('🌐 ENDPOINTS AVAILABLE:');
-  console.log('   POST /api/ask-ai - AI chat system (NOW WITH GROQ!)');
-  console.log('   POST /api/generate-setup-instructions - Generate template instructions (NOW WITH GROQ!)');
-  console.log('   GET  /api/templates - Template list');
-  console.log('   GET  /api/recommendations - Recommended templates');
-  console.log('   GET  /api/user/purchases - User purchases');
-  console.log('   POST /api/admin/login - Admin password login');
-  console.log('   GET  /api/admin/templates - Admin template list');
-  console.log('   POST /api/stripe/create-checkout-session - Create Stripe checkout');
-  console.log('   POST /api/admin/set-admin-role - Grant admin role');
-  console.log('   GET  /dashboard - User dashboard');
-  console.log('   GET  /admin/dashboard - Admin dashboard');
-  console.log('   GET  /admin/login - Admin login page');
-  console.log('');
-  console.log('🤖 AI FEATURES:');
-  console.log('   ✅ Groq Integration: ' + (groq ? 'ACTIVE' : 'FALLBACK MODE'));
-  console.log('   ✅ Rate Limiting: 10 requests/minute per user');
-  console.log('   ✅ Secure Fallbacks: Always functional');
-  console.log('');
-  console.log('🔒 SECURITY FEATURES:');
-  console.log('   ✅ JWT Authentication with session validation');
-  console.log('   ✅ CSRF protection for OAuth');
-  console.log('   ✅ Input validation and sanitization');
-  console.log('   ✅ Rate limiting on auth and AI endpoints');
-  console.log('   ✅ Secure cookie handling');
-  console.log('');
-  console.log('✅ System fully initialized and ready for requests!');
-  console.log('========================================\n');
+  if (process.env.NODE_ENV === 'production') {
+    console.log('🚀 DevHubConnect Production Server Started');
+    console.log(`✅ Server: ${port} | Environment: production`);
+    console.log(`🔒 Security: OAuth, JWT, Rate Limiting Active`);
+    console.log(`💳 Payments: ${stripe ? 'Active' : 'Disabled'}`);
+  } else {
+    console.log('\n🚀 ========================================');
+    console.log('   DEVHUBCONNECT AI SYSTEM STARTING');
+    console.log('========================================');
+    console.log(`✅ Server running on 0.0.0.0:${port}`);
+    console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+    console.log(`🔑 Groq API Key configured: ${!!process.env.GROQ_API_KEY}`);
+    console.log(`💳 Stripe configured: ${!!process.env.STRIPE_SECRET_KEY}`);
+    console.log(`🗄️ Database URL configured: ${!!process.env.DATABASE_URL}`);
+    console.log(`🔐 GitHub OAuth configured: ${!!process.env.GITHUB_CLIENT_ID && !!process.env.GITHUB_CLIENT_SECRET}`);
+    console.log('');
+    console.log('🔐 AUTHENTICATION:');
+    console.log('   ✅ GitHub OAuth - /auth/github');
+    console.log('   ✅ Admin routes require GitHub login and admin role');
+    console.log('   ✅ Admin password login - /api/admin/login');
+    console.log('');
+    console.log('🌐 ENDPOINTS AVAILABLE:');
+    console.log('   POST /api/ask-ai - AI chat system (NOW WITH GROQ!)');
+    console.log('   POST /api/generate-setup-instructions - Generate template instructions (NOW WITH GROQ!)');
+    console.log('   GET  /api/templates - Template list');
+    console.log('   GET  /api/recommendations - Recommended templates');
+    console.log('   GET  /api/user/purchases - User purchases');
+    console.log('   POST /api/admin/login - Admin password login');
+    console.log('   GET  /api/admin/templates - Admin template list');
+    console.log('   POST /api/stripe/create-checkout-session - Create Stripe checkout');
+    console.log('   POST /api/admin/set-admin-role - Grant admin role');
+    console.log('   GET  /dashboard - User dashboard');
+    console.log('   GET  /admin/dashboard - Admin dashboard');
+    console.log('   GET  /admin/login - Admin login page');
+    console.log('');
+    console.log('🤖 AI FEATURES:');
+    console.log('   ✅ Groq Integration: ' + (groq ? 'ACTIVE' : 'FALLBACK MODE'));
+    console.log('   ✅ Rate Limiting: 10 requests/minute per user');
+    console.log('   ✅ Secure Fallbacks: Always functional');
+    console.log('');
+    console.log('🔒 SECURITY FEATURES:');
+    console.log('   ✅ JWT Authentication with session validation');
+    console.log('   ✅ CSRF protection for OAuth');
+    console.log('   ✅ Input validation and sanitization');
+    console.log('   ✅ Rate limiting on auth and AI endpoints');
+    console.log('   ✅ Secure cookie handling');
+    console.log('');
+    console.log('✅ System fully initialized and ready for requests!');
+    console.log('========================================\n');
+  }
 });
 
 // ✅ ENHANCED: Server Error Handling
@@ -2670,4 +2696,24 @@ process.on('SIGINT', async () => {
     process.exit(0);
   });
 });
+
+// ✅ PRODUCTION: Environment validation
+if (process.env.NODE_ENV === 'production') {
+  const requiredEnvVars = [
+    'JWT_SECRET',
+    'GITHUB_CLIENT_ID', 
+    'GITHUB_CLIENT_SECRET',
+    'DATABASE_URL',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET'
+  ];
+  
+  const missing = requiredEnvVars.filter(env => !process.env[env]);
+  if (missing.length > 0) {
+    console.error('❌ CRITICAL: Missing required environment variables:', missing);
+    process.exit(1);
+  }
+  
+  console.log('✅ All required environment variables configured');
+}
 
