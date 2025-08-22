@@ -1432,10 +1432,6 @@ app.get('/api/recommendations', authenticateJWT, async (req, res) => {
       const converted = convertFieldNames(template);
       const workflowDetails = parseWorkflowDetails(template.workflow_json);
       
-      const formattedTemplates = availableTemplates.rows.slice(0, 12).map(template => {
-      const converted = convertFieldNames(template);
-      const workflowDetails = parseWorkflowDetails(template.workflow_json);
-      
       // 🔒 DOUBLE-CHECK: Ensure this template is NOT owned (extra safety)
       if (ownedTemplateIds.includes(template.id)) {
         console.log(`⚠️ WARNING: Template ${template.id} should have been excluded but wasn't!`);
@@ -1465,7 +1461,7 @@ app.get('/api/recommendations', authenticateJWT, async (req, res) => {
 
     console.log(`✅ Returning ${formattedTemplates.length} recommendations (excluded ${ownedTemplateIds.length} owned templates)`);
 
-    // 🔒 FINAL SAFETY CHECK: Log first few recommended template IDs
+   // 🔒 FINAL SAFETY CHECK: Log first few recommended template IDs
     const recommendedIds = formattedTemplates.map(t => t.id).slice(0, 5);
     console.log(`🎯 First 5 recommended template IDs: [${recommendedIds.join(', ')}]`);
 
