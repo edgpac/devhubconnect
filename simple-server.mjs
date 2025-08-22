@@ -278,6 +278,7 @@ if (process.env.NODE_ENV !== 'production') {
   console.log('  - JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
   console.log('  - DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
   console.log('  - GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'SET' : 'NOT SET');
+} 
 
 // ✅ PART 2: AI FUNCTIONS & SECURITY - ALL FIXES APPLIED WITH CORRECT MODEL
 
@@ -2259,7 +2260,7 @@ app.post('/api/templates', requireAdminAuth, async (req, res) => {
         details: error.message
       });
     }
-    
+
     // ✅ FIXED: Insert template with correct schema (id auto-increments)
     const result = await pool.query(`
       INSERT INTO templates (
@@ -2713,3 +2714,20 @@ if (process.env.NODE_ENV === 'production') {
   console.log('✅ All required environment variables configured');
 }
 
+// ✅ ENHANCED: Unhandled promise rejection handling
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 Unhandled Promise Rejection at:', promise, 'reason:', reason);
+  // Don't exit the process in production unless critical
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(1);
+  }
+});
+
+// ✅ ENHANCED: Uncaught exception handling
+process.on('uncaughtException', (error) => {
+  console.error('🚨 Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+});
+
+export default app;
