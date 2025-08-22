@@ -55,38 +55,42 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
    navigate(`/template/${template.id}`);
  };
 
- // ✅ FIXED: Direct Stripe checkout instead of navigation
- const handlePurchase = async () => {
-   setPurchasing(true);
-   try {
-     console.log(`🛒 Initiating purchase for template ${template.id}`);
-     
-     const response = await fetch(`/api/stripe/${template.id}/purchase`, {
-       method: 'POST',
-       credentials: 'include'
-     });
+// ✅ FIXED: Direct Stripe checkout instead of navigation
+const handlePurchase = async () => {
+ setPurchasing(true);
+ try {
+   console.log(`🛒 Initiating purchase for template ${template.id}`);
+   
+   const response = await fetch(`/api/stripe/create-checkout-session`, {
+     method: 'POST',
+     credentials: 'include',
+     headers: {
+       'Content-Type': 'application/json',
+     },
+     body: JSON.stringify({ templateId: template.id }),
+   });
 
-     if (!response.ok) {
-       const errorText = await response.text();
-       console.error('Purchase failed:', errorText);
-       throw new Error(`Failed to create checkout session: ${response.status}`);
-     }
-
-     const session = await response.json();
-     
-     if (session.url) {
-       console.log(`✅ Redirecting to Stripe checkout: ${session.url}`);
-       window.location.href = session.url; // Redirect to Stripe
-     } else {
-       throw new Error('No checkout URL received from server');
-     }
-   } catch (error: any) {
-     console.error('Purchase error:', error);
-     toast.error(`Purchase failed: ${error.message}`);
-   } finally {
-     setPurchasing(false);
+   if (!response.ok) {
+     const errorText = await response.text();
+     console.error('Purchase failed:', errorText);
+     throw new Error(`Failed to create checkout session: ${response.status}`);
    }
- };
+
+   const session = await response.json();
+   
+   if (session.url) {
+     console.log(`✅ Redirecting to Stripe checkout: ${session.url}`);
+     window.location.href = session.url; // Redirect to Stripe
+   } else {
+     throw new Error('No checkout URL received from server');
+   }
+ } catch (error: any) {
+   console.error('Purchase error:', error);
+   toast.error(`Purchase failed: ${error.message}`);
+ } finally {
+   setPurchasing(false);
+ }
+};
 
  // ✅ Real download functionality with DEBUG logging
  const handleDownload = async () => {
