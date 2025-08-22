@@ -2,12 +2,17 @@
 // This centralizes all API URLs and handles environment switching
 
 const isDevelopment = import.meta.env.DEV;
-const productionBaseUrl = 'https://devhubconnect-production.up.railway.app';
+const productionBaseUrl = 'https://devhubconnect.com';
 const developmentBaseUrl = 'http://localhost:3000';
 
 // Use environment variable if available, otherwise fallback to environment detection
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 
   (isDevelopment ? developmentBaseUrl : productionBaseUrl);
+
+// ✅ SECURITY: Validate API configuration
+if (!API_BASE_URL) {
+  throw new Error('API_BASE_URL is not configured');
+}
 
 // API endpoints
 export const API_ENDPOINTS = {
@@ -43,4 +48,7 @@ export const apiCall = async (url: string, options: RequestInit = {}) => {
   return fetch(url, { ...defaultOptions, ...options });
 };
 
-console.log('🔗 API Base URL:', API_BASE_URL);
+// ✅ SECURITY: Only log in development
+if (isDevelopment) {
+  console.log('🔗 API Base URL:', API_BASE_URL);
+}
