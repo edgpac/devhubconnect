@@ -4,43 +4,14 @@ import { templates } from '../shared/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import rateLimit from 'express-rate-limit';
 
 const adminRouter = Router();
 
-// Environment variables with secure defaults
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_for_devhubconnect';
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:11434';
-const AI_SERVICE_TOKEN = process.env.AI_SERVICE_TOKEN;
-const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// 🔒 SECURITY: Only log configuration status in development (no secrets)
-if (NODE_ENV === 'development') {
-  console.log('🔧 Admin configuration loaded');
-  console.log('🔒 Password hash:', ADMIN_PASSWORD_HASH ? 'configured' : 'missing');
-  console.log('🤖 AI Service:', AI_SERVICE_URL !== 'http://localhost:11434' ? 'configured' : 'using default');
-}
-
-// 🛡️ SECURITY: Rate limiting for admin endpoints
-const adminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // Limit to 50 requests per windowMs per IP
-  message: { error: 'Too many admin requests, please try again later' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const strictAdminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // More restrictive for sensitive operations
-  message: { error: 'Too many sensitive admin operations, please try again later' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Apply rate limiting to all admin routes
-adminRouter.use(adminLimiter);
+console.log('🔑 JWT SECRET IN USE (DEVELOPMENT ONLY):', JWT_SECRET);
+console.log('🔒 ADMIN_PASSWORD_HASH IN USE (DEVELOPMENT ONLY):', ADMIN_PASSWORD_HASH ? 'Loaded (length: ' + ADMIN_PASSWORD_HASH.length + ')' : 'NOT LOADED - LOGIN WILL FAIL');
 
 interface AuthenticatedAdminRequest extends Request {
   user?: {
@@ -54,9 +25,7 @@ const verifyAdminToken = (req: AuthenticatedAdminRequest, res: Response, next: N
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    if (NODE_ENV === 'development') {
-      console.log('DEBUG: No token provided in Authorization header.');
-    }
+    console.log('DEBUG: No token provided in Authorization header.');
     return res.status(401).json({ success: false, message: 'Authentication token required.' });
   }
 
@@ -66,50 +35,19 @@ const verifyAdminToken = (req: AuthenticatedAdminRequest, res: Response, next: N
       req.user = decoded;
       next();
     } else {
-      if (NODE_ENV === 'development') {
-        console.log('DEBUG: Token provided but not admin.');
-      }
+      console.log('DEBUG: Token provided but not admin.');
       res.status(403).json({ success: false, message: 'Forbidden: Not an admin.' });
     }
   } catch (error) {
-    if (NODE_ENV === 'development') {
-      console.error('JWT verification failed:', error);
-    }
+    console.error('JWT verification failed:', error);
     res.status(403).json({ success: false, message: 'Forbidden: Invalid or expired token.' });
-  }
-};
-
-// 🔒 SECURITY: Input validation middleware
-const validateJsonInput = (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (req.body && typeof req.body === 'object') {
-      // Basic validation - ensure no dangerous properties
-      const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
-      const checkObject = (obj: any): boolean => {
-        if (typeof obj !== 'object' || obj === null) return true;
-        
-        for (const key of Object.keys(obj)) {
-          if (dangerousKeys.includes(key)) return false;
-          if (typeof obj[key] === 'object' && !checkObject(obj[key])) return false;
-        }
-        return true;
-      };
-      
-      if (!checkObject(req.body)) {
-        return res.status(400).json({ error: 'Invalid input data structure' });
-      }
-    }
-    next();
-  } catch (error) {
-    res.status(400).json({ error: 'Invalid JSON input' });
   }
 };
 
 // Robust JSON extraction function with better debugging
 function extractJsonFromResponse(response: string): any {
-  if (NODE_ENV === 'development') {
-    console.log('DEBUG: Response length:', response.length);
-  }
+  console.log('DEBUG: Full AI response content:', JSON.stringify(response));
+  console.log('DEBUG: Response length:', response.length);
   
   if (!response || response.trim().length === 0) {
     throw new Error('Empty response from AI model');
@@ -135,20 +73,18 @@ function extractJsonFromResponse(response: string): any {
       cleaned = cleaned.substring(prefix.length).trim();
     }
   }
+  
+  console.log('DEBUG: Cleaned response:', JSON.stringify(cleaned));
 
   // Method 1: Try to find JSON between braces (most common)
   const braceMatch = cleaned.match(/\{[\s\S]*\}/);
   if (braceMatch) {
     try {
       const parsed = JSON.parse(braceMatch[0]);
-      if (NODE_ENV === 'development') {
-        console.log('DEBUG: Successfully extracted JSON using brace matching');
-      }
+      console.log('DEBUG: Successfully extracted JSON using brace matching');
       return parsed;
     } catch (e) {
-      if (NODE_ENV === 'development') {
-        console.log('DEBUG: Brace matching found JSON-like text but parsing failed:', e);
-      }
+      console.log('DEBUG: Brace matching found JSON-like text but parsing failed:', e);
     }
   }
 
@@ -157,28 +93,20 @@ function extractJsonFromResponse(response: string): any {
   if (codeBlockMatch && codeBlockMatch[1]) {
     try {
       const parsed = JSON.parse(codeBlockMatch[1]);
-      if (NODE_ENV === 'development') {
-        console.log('DEBUG: Successfully extracted JSON from code block');
-      }
+      console.log('DEBUG: Successfully extracted JSON from code block');
       return parsed;
     } catch (e) {
-      if (NODE_ENV === 'development') {
-        console.log('DEBUG: Code block extraction found JSON-like text but parsing failed:', e);
-      }
+      console.log('DEBUG: Code block extraction found JSON-like text but parsing failed:', e);
     }
   }
 
   // Method 3: Try to parse the entire response as JSON (in case it's clean)
   try {
     const parsed = JSON.parse(cleaned);
-    if (NODE_ENV === 'development') {
-      console.log('DEBUG: Successfully parsed entire response as JSON');
-    }
+    console.log('DEBUG: Successfully parsed entire response as JSON');
     return parsed;
   } catch (e) {
-    if (NODE_ENV === 'development') {
-      console.log('DEBUG: Could not parse entire response as JSON:', e);
-    }
+    console.log('DEBUG: Could not parse entire response as JSON:', e);
   }
 
   // Method 4: Look for JSON-like content more aggressively
@@ -209,25 +137,19 @@ function extractJsonFromResponse(response: string): any {
     const jsonString = jsonLines.join('\n');
     try {
       const parsed = JSON.parse(jsonString);
-      if (NODE_ENV === 'development') {
-        console.log('DEBUG: Successfully extracted JSON using line-by-line parsing');
-      }
+      console.log('DEBUG: Successfully extracted JSON using line-by-line parsing');
       return parsed;
     } catch (e) {
-      if (NODE_ENV === 'development') {
-        console.log('DEBUG: Line-by-line extraction failed:', e);
-      }
+      console.log('DEBUG: Line-by-line extraction failed:', e);
     }
   }
 
-  throw new Error('No valid JSON object found in response');
+  throw new Error(`No valid JSON object found in response. Response was: "${cleaned}"`);
 }
 
 // Generate fallback template details
 function generateFallbackDetails(workflowJson: any): any {
-  if (NODE_ENV === 'development') {
-    console.log('DEBUG: Generating fallback template details');
-  }
+  console.log('DEBUG: Generating fallback template details');
   
   // Try to extract some info from the workflow
   let name = 'n8n Workflow Template';
@@ -244,9 +166,7 @@ function generateFallbackDetails(workflowJson: any): any {
       }
     }
   } catch (e) {
-    if (NODE_ENV === 'development') {
-      console.log('DEBUG: Could not extract workflow details for fallback');
-    }
+    console.log('DEBUG: Could not extract workflow details for fallback');
   }
 
   return {
@@ -256,49 +176,38 @@ function generateFallbackDetails(workflowJson: any): any {
   };
 }
 
-// 🔒 SECURITY: Enhanced login endpoint with strict rate limiting
-adminRouter.post('/login', strictAdminLimiter, validateJsonInput, async (req: Request, res: Response) => {
+adminRouter.post('/login', async (req: Request, res: Response) => {
   const { password } = req.body;
-  
-  if (NODE_ENV === 'development') {
-    console.log('DEBUG: Login attempt received.');
-  }
-
-  // 🔒 SECURITY: Validate input
-  if (!password || typeof password !== 'string') {
-    return res.status(400).json({ success: false, message: 'Password is required' });
-  }
+  console.log('DEBUG: Login attempt received.');
+  console.log('DEBUG: Password received (first 5 chars):', password ? password.substring(0, 5) + '...' : 'No password');
 
   if (!ADMIN_PASSWORD_HASH) {
-    console.error('ADMIN_PASSWORD_HASH is not set in environment variables.');
-    return res.status(500).json({ success: false, message: 'Server configuration error.' });
+    console.error('ADMIN_PASSWORD_HASH is not set in .env. Admin login cannot proceed.');
+    return res.status(500).json({ success: false, message: 'Server configuration error: Admin password hash not set.' });
   }
+  console.log('DEBUG: ADMIN_PASSWORD_HASH is loaded. Attempting bcrypt.compare...');
 
   try {
     const isPasswordValid = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
+    console.log('DEBUG: bcrypt.compare result:', isPasswordValid);
 
     if (isPasswordValid) {
       const adminPayload = { id: 'admin_user_id', isAdmin: true };
       const token = jwt.sign(adminPayload, JWT_SECRET, { expiresIn: '1h' });
-      
-      if (NODE_ENV === 'development') {
-        console.log('DEBUG: Admin login successful');
-      }
-      
+      console.log('DEBUG: Password valid. Token issued.');
       res.json({ success: true, message: 'Admin login successful', token });
     } else {
-      if (NODE_ENV === 'development') {
-        console.log('DEBUG: Invalid password provided.');
-      }
-      // 🔒 SECURITY: Consistent response time to prevent timing attacks
-      await new Promise(resolve => setTimeout(resolve, 100));
-      res.status(401).json({ success: false, message: 'Invalid credentials' });
+      console.log('DEBUG: Invalid password provided.');
+      res.status(401).json({ success: false, message: 'Invalid password' });
     }
   } catch (error) {
     console.error('Error during password comparison:', error);
     res.status(500).json({ success: false, message: 'Internal server error during login.' });
   }
 });
+
+// ❌ REMOVED: Analytics data endpoint - this was competing with simple-server.mjs
+// The analytics endpoint in simple-server.mjs should handle this instead
 
 // ✅ Get all templates for admin management
 adminRouter.get('/templates', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
@@ -315,43 +224,30 @@ adminRouter.get('/templates', verifyAdminToken, async (req: AuthenticatedAdminRe
     res.json({ templates: allTemplates });
   } catch (error) {
     console.error('❌ Error fetching templates:', error);
+    console.error('❌ Schema error details:', error.message);
     res.status(500).json({ message: 'Failed to fetch templates.' });
   }
 });
 
 // ✅ Update template endpoint
-adminRouter.put('/templates/:id', verifyAdminToken, validateJsonInput, async (req: AuthenticatedAdminRequest, res: Response) => {
+adminRouter.put('/templates/:id', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
     
-    // 🔒 SECURITY: Enhanced validation
-    if (!id || !updateData || typeof updateData !== 'object') {
-      return res.status(400).json({ error: 'Missing template ID or invalid update data' });
+    // Add proper validation
+    if (!id || !updateData) {
+      return res.status(400).json({ error: 'Missing template ID or update data' });
     }
     
     const templateId = parseInt(id);
-    if (isNaN(templateId) || templateId <= 0) {
+    if (isNaN(templateId)) {
       return res.status(400).json({ error: 'Invalid template ID' });
-    }
-
-    // 🔒 SECURITY: Whitelist allowed update fields
-    const allowedFields = ['name', 'description', 'price', 'status', 'isPublic', 'imageUrl'];
-    const filteredUpdateData: any = {};
-    
-    for (const [key, value] of Object.entries(updateData)) {
-      if (allowedFields.includes(key)) {
-        filteredUpdateData[key] = value;
-      }
-    }
-
-    if (Object.keys(filteredUpdateData).length === 0) {
-      return res.status(400).json({ error: 'No valid fields to update' });
     }
     
     // Update the template
     const updatedTemplate = await db.update(templates)
-      .set(filteredUpdateData)
+      .set(updateData)
       .where(eq(templates.id, templateId))
       .returning();
     
@@ -359,10 +255,7 @@ adminRouter.put('/templates/:id', verifyAdminToken, validateJsonInput, async (re
       return res.status(404).json({ error: 'Template not found' });
     }
     
-    if (NODE_ENV === 'development') {
-      console.log(`✅ Template ${templateId} updated successfully by admin`);
-    }
-    
+    console.log(`✅ Template ${templateId} updated successfully by admin`);
     res.json({ 
       success: true, 
       message: 'Template updated successfully',
@@ -372,72 +265,61 @@ adminRouter.put('/templates/:id', verifyAdminToken, validateJsonInput, async (re
   } catch (error) {
     console.error('Template update error:', error);
     res.status(500).json({ 
-      error: 'Failed to update template'
+      error: 'Failed to update template',
+      details: error.message 
     });
   }
 });
 
 // ✅ Delete template endpoint
-adminRouter.delete('/templates/:id', verifyAdminToken, strictAdminLimiter, async (req: AuthenticatedAdminRequest, res: Response) => {
+adminRouter.delete('/templates/:id', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
   try {
     const templateId = parseInt(req.params.id);
     
-    if (NODE_ENV === 'development') {
-      console.log(`DEBUG: Attempting to delete template ID: ${templateId}`);
-    }
+    console.log(`DEBUG: Attempting to delete template ID: ${templateId}`);
     
-    if (isNaN(templateId) || templateId <= 0) {
+    if (isNaN(templateId)) {
+      console.log(`DEBUG: Invalid template ID provided: ${req.params.id}`);
       return res.status(400).json({ message: 'Invalid template ID' });
     }
 
     // First check if template exists
     const existingTemplate = await db.select().from(templates).where(eq(templates.id, templateId));
+    console.log(`DEBUG: Found existing template:`, existingTemplate);
 
     const deletedTemplate = await db.delete(templates)
       .where(eq(templates.id, templateId))
       .returning();
 
+    console.log(`DEBUG: Delete operation result:`, deletedTemplate);
+
     if (deletedTemplate.length === 0) {
-      if (NODE_ENV === 'development') {
-        console.log(`DEBUG: Template ${templateId} not found in database`);
-      }
+      console.log(`DEBUG: Template ${templateId} not found in database`);
       return res.status(404).json({ message: 'Template not found' });
     }
 
-    if (NODE_ENV === 'development') {
-      console.log(`✅ Template ${templateId} deleted successfully by admin`);
-    }
-    
+    console.log(`✅ Template ${templateId} deleted successfully by admin`);
     res.json({ message: 'Template deleted successfully', templateId });
   } catch (error) {
-    console.error('❌ DELETE ERROR:', error);
+    console.error('❌ DETAILED DELETE ERROR:', error);
+    console.error('❌ Error name:', error?.name);
+    console.error('❌ Error message:', error?.message);
+    console.error('❌ Error stack:', error?.stack);
     res.status(500).json({ 
-      message: 'Failed to delete template'
+      message: 'Failed to delete template', 
+      error: error?.message,
+      details: process.env.NODE_ENV === 'development' ? error?.stack : undefined
     });
   }
 });
 
-adminRouter.post('/upload', verifyAdminToken, validateJsonInput, async (req: AuthenticatedAdminRequest, res: Response) => {
+adminRouter.post('/upload', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
   try {
     const { name, description, price, workflowJson, imageUrl } = req.body;
     const adminId = req.user?.id;
 
-    // 🔒 SECURITY: Enhanced input validation
     if (!name || !description || price === undefined || !workflowJson) {
       return res.status(400).json({ message: 'Missing required fields.' });
-    }
-
-    if (typeof name !== 'string' || typeof description !== 'string') {
-      return res.status(400).json({ message: 'Name and description must be strings.' });
-    }
-
-    if (name.length > 100 || description.length > 10000) {
-      return res.status(400).json({ message: 'Name or description too long.' });
-    }
-
-    const numericPrice = Number(price);
-    if (isNaN(numericPrice) || numericPrice < 0) {
-      return res.status(400).json({ message: 'Price must be a valid positive number.' });
     }
 
     const [existingTemplate] = await db.select().from(templates)
@@ -448,11 +330,11 @@ adminRouter.post('/upload', verifyAdminToken, validateJsonInput, async (req: Aut
     }
 
     const newTemplate = await db.insert(templates).values({
-      name: name.trim(),
-      description: description.trim(),
-      price: Math.round(numericPrice * 100),
+      name,
+      description,
+      price: Math.round(Number(price) * 100),
       workflowJson,
-      imageUrl: imageUrl || null,
+      imageUrl,
       creatorId: adminId,
       status: 'published',
       isPublic: true,
@@ -466,8 +348,7 @@ adminRouter.post('/upload', verifyAdminToken, validateJsonInput, async (req: Aut
   }
 });
 
-// 🔒 SECURITY: Enhanced AI service interaction with timeout and error handling
-adminRouter.post('/generate-template-details', verifyAdminToken, validateJsonInput, async (req: AuthenticatedAdminRequest, res: Response) => {
+adminRouter.post('/generate-template-details', verifyAdminToken, async (req: AuthenticatedAdminRequest, res: Response) => {
   const { workflowJson } = req.body;
 
   if (!workflowJson) {
@@ -483,10 +364,30 @@ adminRouter.post('/generate-template-details', verifyAdminToken, validateJsonInp
     }
 
     const workflowJsonString = JSON.stringify(workflowJson, null, 2);
+
+    const promptText = `You are a JSON generator. You must respond with ONLY a valid JSON object, no explanation, no markdown, no additional text.
+Analyze this n8n workflow and generate template details.
+
+The description should be exactly 3 paragraphs:
+1. What the workflow does and its main purpose
+2. Setup requirements (credentials, external services, configuration needed)  
+3. Testing and deployment steps
+
+Required JSON format (respond with this exact structure):
+{
+  "name": "Template title (max 60 chars)",
+  "description": "Paragraph 1 explaining what this workflow does and its main purpose.\\n\\nParagraph 2 covering setup requirements including credentials, external services, and key configuration steps.\\n\\nParagraph 3 about testing, deployment, and final configuration notes.",
+  "price": 349
+}
+
+Price must be exactly one of: 349, 549, or 699 (representing $3.49, $5.49, $6.99)
+
+Workflow JSON:
+${workflowJsonString}
+
+JSON response:`;    
     const MAX_RETRIES = 3;
     const VALID_PRICES_CENTS = [349, 549, 699];
-    const REQUEST_TIMEOUT = 30000; // 30 seconds
-    
     let generatedDetails: any = null;
     let lastError: any = null;
 
@@ -497,10 +398,7 @@ adminRouter.post('/generate-template-details', verifyAdminToken, validateJsonInp
     const uniqueServices = [...new Set(nodeTypes)].slice(0, 8);
 
     for (let i = 0; i < MAX_RETRIES; i++) {
-      if (NODE_ENV === 'development') {
-        console.log(`DEBUG: Attempting AI generation (Retry ${i + 1}/${MAX_RETRIES})`);
-      }
-      
+      console.log(`DEBUG: Attempting AI generation (Retry ${i + 1}/${MAX_RETRIES})`);
       try {
         const detailedPrompt = `You are a technical writer specializing in creating professional setup instructions for n8n workflow templates. Analyze the provided n8n workflow JSON and generate detailed setup instructions tailored to its nodes and services.
 
@@ -510,7 +408,13 @@ Node Count: ${workflowJson.nodes?.length || 0}
 Key Nodes: ${nodeNames.slice(0, 8).join(', ')}
 Services Used: ${uniqueServices.map(s => s.replace('n8n-nodes-base.', '')).join(', ')}
 
-Write exactly 3 complete paragraphs in a professional, instructional tone using action words like "configure," "set up," "ensure," "import," "activate," and "deploy." Avoid numbered lists or bullet points. Be specific about node names and services.
+Write exactly 3 complete paragraphs in a professional, instructional tone using action words like "configure," "set up," "ensure," "import," "activate," and "deploy." Avoid numbered lists or bullet points. Be specific about node names (e.g., Chat Trigger, OpenAI Request, Documentation Search, Web Search) and services (e.g., OpenAI, DuckDuckGo).
+
+Paragraph 1: Describe the workflow's purpose, focusing on its main functionality, such as processing user queries via a chat interface, generating AI-driven responses, and retrieving results from documentation and web searches. Highlight key nodes like Chat Trigger for initiating queries, OpenAI Request for AI responses, Documentation Search for n8n documentation, and Web Search for external data.
+
+Paragraph 2: Detail the setup process, including importing the JSON workflow into an n8n instance via Workflow > Import from Clipboard. Specify configuring the Chat Trigger node's webhook URL to accept incoming queries, setting up OpenAI API credentials for the OpenAI Request node, and customizing parameters like query inputs for the Documentation Search and Web Search nodes (e.g., DuckDuckGo API settings). Emphasize establishing and testing API connections for reliable operation.
+
+Paragraph 3: Explain testing the workflow by sending sample queries through the Chat Trigger node and verifying outputs in the Combine Results node, which aggregates aiResponse, documentation, and webResults. Describe troubleshooting using error logs from nodes like OpenAI Error Handler and Docs Error Handler. Cover activating the workflow for production use and monitoring performance via timestamps and status outputs in the Combine Results and Final Error Response nodes.
 
 Respond with ONLY this JSON structure:
 {
@@ -518,23 +422,15 @@ Respond with ONLY this JSON structure:
   "description": "Paragraph 1 describing the workflow's purpose and key nodes.\\n\\nParagraph 2 detailing import, webhook, and configuration steps.\\n\\nParagraph 3 explaining testing, deployment, and monitoring procedures.",
   "price": 549
 }`;
+        console.log('DEBUG: Using improved setup instruction prompt');
+        console.log('DEBUG: Workflow name being analyzed:', workflowName);
+        console.log('DEBUG: Key nodes:', nodeNames.slice(0, 5));
 
-        // 🔒 SECURITY: Enhanced AI service request with timeout and headers
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        };
-
-        // Add authentication if token is available
-        if (AI_SERVICE_TOKEN) {
-          headers['Authorization'] = `Bearer ${AI_SERVICE_TOKEN}`;
-        }
-
-        const ollamaResponse = await fetch(`${AI_SERVICE_URL}/api/generate`, {
+        const ollamaResponse = await fetch('http://localhost:11434/api/generate', {
           method: 'POST',
-          headers,
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
             model: 'mistral',
             prompt: detailedPrompt,
@@ -545,26 +441,25 @@ Respond with ONLY this JSON structure:
               num_predict: 4000
             }
           }),
-          signal: controller.signal
         });
-
-        clearTimeout(timeoutId);
 
         if (!ollamaResponse.ok) {
           const errorText = await ollamaResponse.text();
-          console.error(`AI service error: Status ${ollamaResponse.status}`);
-          lastError = new Error(`AI service error: Status ${ollamaResponse.status}`);
+          console.error(`Ollama API error: Status ${ollamaResponse.status}, Response: ${errorText}`);
+          lastError = new Error(`AI service error: Status ${ollamaResponse.status} - ${errorText}`);
           
           // If it's a 404, the model might not be available
           if (ollamaResponse.status === 404) {
-            console.error('Model "mistral" not found. Please ensure the AI service is running and the model is installed.');
-            lastError = new Error('AI model not available. Please try again later.');
+            console.error('Model "mistral" not found. Available models can be checked with: ollama list');
+            lastError = new Error('Model "mistral" not found. Please ensure Ollama is running and the model is installed.');
           }
           continue;
         }
 
         const data = await ollamaResponse.json() as { response?: string };
         const aiResponseContent = data.response;
+
+        console.log('DEBUG: Raw AI response:', aiResponseContent?.substring(0, 200) + '...');
 
         if (!aiResponseContent) {
           lastError = new Error('No content received from AI model.');
@@ -577,41 +472,35 @@ Respond with ONLY this JSON structure:
         // ✅ VALIDATE EXTRACTED DETAILS
         if (typeof tempGeneratedDetails.name !== 'string' || tempGeneratedDetails.name.trim() === '') {
           lastError = new Error('AI generated details missing or invalid "name" field.');
+          console.error(lastError.message, tempGeneratedDetails);
           continue;
         }
         
         if (typeof tempGeneratedDetails.description !== 'string' || tempGeneratedDetails.description.trim() === '') {
           lastError = new Error('AI generated details missing or invalid "description" field.');
+          console.error(lastError.message, tempGeneratedDetails);
           continue;
         }
         
         if (typeof tempGeneratedDetails.price !== 'number' || !VALID_PRICES_CENTS.includes(tempGeneratedDetails.price)) {
           lastError = new Error('AI generated details missing or invalid "price" field. Must be 349, 549, or 699.');
+          console.error(lastError.message, tempGeneratedDetails);
           continue;
         }
 
         // Ensure name is within length limit
-        if (tempGeneratedDetails.name.length > 60) {
+        if (tempGeneratedDetails.name.length > 90) {
           tempGeneratedDetails.name = tempGeneratedDetails.name.substring(0, 57) + '...';
         }
 
         // Success!
         generatedDetails = tempGeneratedDetails;
-        if (NODE_ENV === 'development') {
-          console.log('DEBUG: Successfully generated and validated details');
-        }
+        console.log('DEBUG: Successfully generated and validated details');
         break;
 
       } catch (parseError) {
-        if (parseError.name === 'AbortError') {
-          lastError = new Error('AI service request timed out');
-        } else {
-          lastError = new Error(`Failed to process AI response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        }
-        
-        if (NODE_ENV === 'development') {
-          console.error('Error during AI response processing:', parseError);
-        }
+        lastError = new Error(`Failed to extract/parse JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        console.error('Error during AI response processing:', parseError);
       }
     }
 
@@ -619,15 +508,13 @@ Respond with ONLY this JSON structure:
       res.json(generatedDetails);
     } else {
       // ✅ FALLBACK: Generate basic details if AI fails completely
-      if (NODE_ENV === 'development') {
-        console.log('DEBUG: AI generation failed, using fallback details');
-      }
+      console.log('DEBUG: AI generation failed, using fallback details');
       const fallbackDetails = generateFallbackDetails(workflowJson);
       res.json(fallbackDetails);
     }
 
   } catch (error) {
-    console.error('Error generating template details:', error);
+    console.error('Error generating template details with AI:', error);
     
     // ✅ ULTIMATE FALLBACK: Even if everything fails, provide basic details
     try {
@@ -640,64 +527,46 @@ Respond with ONLY this JSON structure:
 });
 
 // Template verification endpoint for DevHubConnect validation
-adminRouter.post('/verify-dhc-template', validateJsonInput, async (req: Request, res: Response) => {
+adminRouter.post('/verify-dhc-template', async (req: Request, res: Response) => {
   const { verification, workflowHash } = req.body;
   
-  if (NODE_ENV === 'development') {
-    console.log('DEBUG: Template verification request received');
-  }
+  console.log('DEBUG: Template verification request received');
+  console.log('DEBUG: Verification data:', verification);
+  console.log('DEBUG: Workflow hash:', workflowHash);
   
   try {
-    // 🔒 SECURITY: Enhanced validation
-    if (!verification || typeof verification !== 'object') {
+    // Validate request structure
+    if (!verification || !verification.source || !verification.purchaseId) {
       return res.status(400).json({
         valid: false,
         error: "Invalid verification data structure"
       });
     }
-
-    const { source, purchaseId, signature, templateId } = verification;
-    
-    if (!source || !purchaseId || !signature || !templateId) {
-      return res.status(400).json({
-        valid: false,
-        error: "Missing required verification fields"
-      });
-    }
     
     // Check source
-    if (source !== "DevHubConnect.com") {
+    if (verification.source !== "DevHubConnect.com") {
       return res.status(400).json({
         valid: false,
         error: "Template source is not DevHubConnect.com"
       });
     }
     
-    // 🔒 SECURITY: Validate input types and lengths
-    if (typeof purchaseId !== 'string' || purchaseId.length > 100) {
+    // Check required fields
+    if (!verification.signature || !verification.templateId) {
       return res.status(400).json({
         valid: false,
-        error: "Invalid purchaseId format"
-      });
-    }
-
-    if (typeof templateId !== 'string' || templateId.length > 100) {
-      return res.status(400).json({
-        valid: false,
-        error: "Invalid templateId format"
+        error: "Missing required verification fields"
       });
     }
     
     // For testing purposes: Accept any properly structured DevHubConnect template
     // In production, you would verify the signature against your secret key
-    if (NODE_ENV === 'development') {
-      console.log('DEBUG: Template verification successful for purchase:', purchaseId);
-    }
+    console.log('DEBUG: Template verification successful for purchase:', verification.purchaseId);
     
     res.json({
       valid: true,
-      purchaseId: purchaseId,
-      templateId: templateId,
+      purchaseId: verification.purchaseId,
+      templateId: verification.templateId,
       message: "Template verified successfully"
     });
     
