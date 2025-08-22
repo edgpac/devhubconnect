@@ -36,6 +36,7 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
  const navigate = useNavigate();
  const [isDownloading, setIsDownloading] = useState(false);
  const [isRemoving, setIsRemoving] = useState(false);
+ const [isPurchasing, setPurchasing] = useState(false);
  
  // ✅ MAIN FIX: Handle both field name formats for image
  const imageUrl = template.imageUrl || template.image_url || null;
@@ -54,9 +55,37 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
    navigate(`/template/${template.id}`);
  };
 
- const handlePurchase = () => {
-   // Navigate to template detail page where they can purchase
-   navigate(`/template/${template.id}`);
+ // ✅ FIXED: Direct Stripe checkout instead of navigation
+ const handlePurchase = async () => {
+   setPurchasing(true);
+   try {
+     console.log(`🛒 Initiating purchase for template ${template.id}`);
+     
+     const response = await fetch(`/api/stripe/${template.id}/purchase`, {
+       method: 'POST',
+       credentials: 'include'
+     });
+
+     if (!response.ok) {
+       const errorText = await response.text();
+       console.error('Purchase failed:', errorText);
+       throw new Error(`Failed to create checkout session: ${response.status}`);
+     }
+
+     const session = await response.json();
+     
+     if (session.url) {
+       console.log(`✅ Redirecting to Stripe checkout: ${session.url}`);
+       window.location.href = session.url; // Redirect to Stripe
+     } else {
+       throw new Error('No checkout URL received from server');
+     }
+   } catch (error: any) {
+     console.error('Purchase error:', error);
+     toast.error(`Purchase failed: ${error.message}`);
+   } finally {
+     setPurchasing(false);
+   }
  };
 
  // ✅ Real download functionality with DEBUG logging
@@ -241,12 +270,17 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
            }`}
            variant={template.purchased ? "outline" : "default"}
            onClick={handleDownload}
-           disabled={isDownloading}
+           disabled={isDownloading || isPurchasing}
          >
            {isDownloading ? (
              <>
                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
                Downloading...
+             </>
+           ) : isPurchasing ? (
+             <>
+               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+               Redirecting to Checkout...
              </>
            ) : template.purchased ? (
              <>
