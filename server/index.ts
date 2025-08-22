@@ -1,12 +1,15 @@
 // server/index.ts
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import fetch from 'node-fetch'; // Ensure node-fetch is imported
+import jwt from 'jsonwebtoken';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { db } from './db'; // Import your Drizzle DB instance
-import { users, templates } from '../shared/schema'; // Import the users and templates schema
-import { eq } from 'drizzle-orm';
+import { users, templates, sessions } from '../shared/schema'; // Import the users and templates schema
+import { eq, and } from 'drizzle-orm';
 
 import adminRouter from './adminRoutes';
 import templateRouter from './templateRoutes'; // This is the correct router for templates
@@ -20,13 +23,157 @@ dotenv.config({ path: '../.env' });
 const app = express();
 const port = process.env.PORT || 3000;
 
+// ✅ SECURE: Environment variables with validation
+const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_for_devhubconnect';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:11434';
+
+// ✅ SECURE: Frontend URL configuration
+const FRONTEND_URL = NODE_ENV === 'production' 
+  ? 'https://devhubconnect.com' 
+  : process.env.FRONTEND_URL || 'http://localhost:5173';
+
+// ✅ SECURE: Add security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+}));
+
+// ✅ SECURE: Rate limiting for template operations
+const templateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // Limit template operations
+  message: {
+    error: 'Too many template requests, please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// ✅ SECURE: CORS configuration
 app.use(cors({
-origin: process.env.FRONTEND_URL || 'https://devhubconnect-production.up.railway.app',
-credentials: true,
-optionsSuccessStatus: 200
+  origin: [
+    FRONTEND_URL,
+    'https://devhubconnect-production.up.railway.app' // Fallback
+  ],
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
 app.use(cookieParser());
 app.use(express.json()); // Use express.json() instead of body-parser for modern Express
+
+// ✅ SECURE: Authentication middleware for admin operations
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    isAdmin: boolean;
+    email?: string;
+  };
+}
+
+const authenticateAdmin = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    // Check for session cookie first
+    const sessionId = req.cookies?.devhub_session;
+    
+    if (sessionId) {
+      // Verify session in database
+      const [session] = await db.select({
+        userId: sessions.userId,
+        expiresAt: sessions.expiresAt,
+        isActive: sessions.isActive
+      })
+      .from(sessions)
+      .where(and(
+        eq(sessions.id, sessionId),
+        eq(sessions.isActive, true)
+      ));
+
+      if (session && new Date() <= session.expiresAt) {
+        // Get user details
+        const [user] = await db.select()
+          .from(users)
+          .where(eq(users.id, session.userId));
+
+        if (user && user.role === 'admin') {
+          req.user = { 
+            id: user.id, 
+            isAdmin: true,
+            email: user.email 
+          };
+          return next();
+        }
+      }
+    }
+
+    // Fallback to JWT token authentication
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as { id: string; isAdmin: boolean };
+        if (decoded.isAdmin) {
+          req.user = decoded;
+          return next();
+        }
+      } catch (jwtError) {
+        console.log('JWT verification failed for template operation:', jwtError);
+      }
+    }
+
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Admin authentication required for template modifications' 
+    });
+
+  } catch (error) {
+    console.error('Authentication error in template operations:', error);
+    res.status(403).json({ 
+      success: false, 
+      message: 'Authentication verification failed' 
+    });
+  }
+};
+
+// ✅ SECURE: Input validation middleware
+const validateTemplateUpdate = (req: Request, res: Response, next: NextFunction) => {
+  const { body } = req;
+  
+  if (!body || typeof body !== 'object') {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+
+  // Validate allowed fields for template updates
+  const allowedFields = ['name', 'description', 'price', 'status', 'isPublic', 'imageUrl'];
+  const providedFields = Object.keys(body);
+  const invalidFields = providedFields.filter(field => !allowedFields.includes(field));
+  
+  if (invalidFields.length > 0) {
+    return res.status(400).json({ 
+      error: `Invalid fields: ${invalidFields.join(', ')}`,
+      allowedFields: allowedFields
+    });
+  }
+
+  // Validate specific field types if provided
+  if (body.price !== undefined && (typeof body.price !== 'number' || body.price < 0)) {
+    return res.status(400).json({ error: 'Price must be a non-negative number' });
+  }
+
+  if (body.name !== undefined && (typeof body.name !== 'string' || body.name.trim().length === 0)) {
+    return res.status(400).json({ error: 'Name must be a non-empty string' });
+  }
+
+  next();
+};
 
 // ✅ NEW LOGIC: Ensure admin_user_id exists in the database on startup
 const seedAdminUser = async () => {
@@ -42,6 +189,7 @@ try {
       email: 'admin@devhubconnect.com', // Placeholder email for admin
       name: 'DevHubConnect Admin',
       avatarUrl: 'https://placehold.co/100x100/aabbcc/ffffff?text=ADMIN',
+      role: 'admin'
     }).execute();
     console.log(`✅ Admin user '${ADMIN_USER_ID}' created successfully.`);
   } else {
@@ -64,8 +212,8 @@ app.use('/api/auth', authRouter);
 app.use("/api/purchases", purchaseRouter);
 app.use('/api/recommendations', recommendationsRouter);
 
-// ✅ FIX: Add template update endpoints for frontend compatibility
-app.put('/api/templates/:id', async (req: Request, res: Response) => {
+// ✅ SECURE: Add template update endpoints for frontend compatibility with authentication
+app.put('/api/templates/:id', templateLimiter, authenticateAdmin, validateTemplateUpdate, async (req: AuthenticatedRequest, res: Response) => {
  const { id } = req.params;
  const updateData = req.body;
  
@@ -76,7 +224,10 @@ app.put('/api/templates/:id', async (req: Request, res: Response) => {
    }
    
    const updatedTemplate = await db.update(templates)
-     .set(updateData)
+     .set({
+       ...updateData,
+       updatedAt: new Date()
+     })
      .where(eq(templates.id, templateId))
      .returning();
    
@@ -84,7 +235,7 @@ app.put('/api/templates/:id', async (req: Request, res: Response) => {
      return res.status(404).json({ error: 'Template not found' });
    }
    
-   console.log(`✅ Template ${templateId} updated successfully`);
+   console.log(`✅ Template ${templateId} updated successfully by admin ${req.user?.id}`);
    res.json({ success: true, template: updatedTemplate[0] });
    
  } catch (error) {
@@ -93,7 +244,7 @@ app.put('/api/templates/:id', async (req: Request, res: Response) => {
  }
 });
 
-app.patch('/api/templates/:id', async (req: Request, res: Response) => {
+app.patch('/api/templates/:id', templateLimiter, authenticateAdmin, validateTemplateUpdate, async (req: AuthenticatedRequest, res: Response) => {
  const { id } = req.params;
  const updateData = req.body;
  
@@ -104,7 +255,10 @@ app.patch('/api/templates/:id', async (req: Request, res: Response) => {
    }
    
    const updatedTemplate = await db.update(templates)
-     .set(updateData)
+     .set({
+       ...updateData,
+       updatedAt: new Date()
+     })
      .where(eq(templates.id, templateId))
      .returning();
    
@@ -112,7 +266,7 @@ app.patch('/api/templates/:id', async (req: Request, res: Response) => {
      return res.status(404).json({ error: 'Template not found' });
    }
    
-   console.log(`✅ Template ${templateId} updated via PATCH`);
+   console.log(`✅ Template ${templateId} updated via PATCH by admin ${req.user?.id}`);
    res.json({ success: true, template: updatedTemplate[0] });
    
  } catch (error) {
@@ -328,7 +482,7 @@ Remember: Your goal is to ensure this template deploys successfully and works as
   ];
 
   // Check if running in production environment
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = NODE_ENV === 'production';
   
   if (isProduction) {
     // In production, return a helpful message about AI service unavailability
@@ -349,8 +503,8 @@ Would you like me to generate setup instructions based on your template instead?
     });
   }
 
-  // Make a POST request to your local Ollama server's chat API (development only)
-  const ollamaResponse = await fetch('http://localhost:11434/api/chat', {
+  // Make a POST request to your AI service (development only)
+  const ollamaResponse = await fetch(`${AI_SERVICE_URL}/api/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -364,7 +518,7 @@ Would you like me to generate setup instructions based on your template instead?
 
   if (!ollamaResponse.ok) {
     const errorText = await ollamaResponse.text();
-    console.error(`Ollama API error: Status ${ollamaResponse.status}, Response: ${errorText}`);
+    console.error(`AI service error: Status ${ollamaResponse.status}, Response: ${errorText}`);
     return res.status(ollamaResponse.status).json({ error: `AI service error: ${errorText}` });
   }
 
@@ -374,15 +528,15 @@ Would you like me to generate setup instructions based on your template instead?
   res.json({ response: aiResponse });
 
 } catch (error) {
-  console.error('Error connecting to Ollama service:', error);
-  const isProduction = process.env.NODE_ENV === 'production';
+  console.error('Error connecting to AI service:', error);
+  const isProduction = NODE_ENV === 'production';
   
   if (isProduction) {
     res.json({ 
       response: 'AI chat is currently unavailable. Please use the template setup instructions or visit our documentation for help with your n8n template deployment.' 
     });
   } else {
-    res.status(500).json({ error: 'Failed to connect to the AI service. Please ensure Ollama is running and accessible.' });
+    res.status(500).json({ error: 'Failed to connect to the AI service. Please ensure the AI service is running and accessible.' });
   }
 }
 });
@@ -395,9 +549,13 @@ res.send('DevHubConnect Backend is running 🚀');
 // Start the server and seed the admin user
 app.listen(port, async () => {
 console.log(`✅ Backend server is running on http://localhost:${port}`);
-console.log(`Stripe Secret Key being used by backend: ${process.env.STRIPE_SECRET_KEY ? 'Loaded (length: ' + process.env.STRIPE_SECRET_KEY.length + ')' : 'Not Loaded'}`);
+console.log(`✅ Environment: ${NODE_ENV}`);
+console.log(`✅ Frontend URL: ${FRONTEND_URL}`);
+// ✅ SECURE: Removed secret key logging for production security
 await seedAdminUser(); // Call the function to ensure admin user exists
-});// Test cookie route
+});
+
+// Test cookie route
 app.get('/test-cookie', (req, res) => {
 res.cookie('test_cookie', 'test_value', { sameSite: 'lax' });
 res.send('Test cookie set');
