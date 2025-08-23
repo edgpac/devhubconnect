@@ -86,8 +86,36 @@ function checkAIRateLimit(userId) {
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ CRITICAL FIX: Static file serving MUST come BEFORE API routes
-app.use(express.static(path.join(__dirname, 'dist')));
+// ✅ CRITICAL FIX: Static file serving with proper MIME types
+app.use(express.static(path.join(__dirname, 'dist'), {
+  index: false, // Don't auto-serve index.html
+  setHeaders: (res, filePath, stat) => {
+    console.log('📄 Serving static file:', filePath);
+    
+    // ✅ CRITICAL: Fix JavaScript MIME type
+    if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      console.log('🔧 Set JavaScript MIME type for:', path.basename(filePath));
+    }
+    
+    // Handle other JavaScript variations
+    if (filePath.endsWith('.mjs')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    }
+    
+    // CSS is working but let's be explicit
+    if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    }
+    
+    // Add caching for assets in production
+    if (process.env.NODE_ENV === 'production' && filePath.includes('/assets/')) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=0');
+    }
+  }
+}));
 
 // ✅ CRITICAL FIX: STRIPE WEBHOOK MUST BE BEFORE express.json() AND FIXED PURCHASE LOGIC
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
