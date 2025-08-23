@@ -9,7 +9,8 @@
     "start": "node simple-server.mjs",
     "preview": "vite preview",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
-    "railway:build": "npm run build"
+    "railway:build": "npm run build",
+    "postinstall": "npm run build"
   },
   "engines": {
     "node": ">=18.0.0",
