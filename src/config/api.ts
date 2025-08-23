@@ -2,7 +2,7 @@
 // This centralizes all API URLs and handles environment switching
 
 const isDevelopment = import.meta.env.DEV;
-const productionBaseUrl = 'https://devhubconnect.com';
+const productionBaseUrl = 'https://devhubconnect-production.up.railway.app';
 const developmentBaseUrl = 'http://localhost:3000';
 
 // Use environment variable if available, otherwise fallback to environment detection
