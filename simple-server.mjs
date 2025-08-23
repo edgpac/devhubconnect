@@ -105,6 +105,33 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+// ✅ MIDDLEWARE SETUP - CORRECT ORDER
+app.use(cookieParser());
+app.use(express.urlencoded({ extended: true }));
+
+// ✅ CRITICAL FIX: Static file serving MUST come BEFORE API routes
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// ✅ CRITICAL FIX: STRIPE WEBHOOK MUST BE BEFORE express.json() AND FIXED PURCHASE LOGIC
+app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    if (!stripe || !endpointSecret) {
+      console.error('❌ Stripe or webhook secret not configured');
+      return res.status(400).send('Webhook configuration missing');
+    }
+
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    console.log('✅ Webhook signature verified:', event.type, 'at', new Date().toISOString());
+  } catch (err) {
+    console.error('❌ Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
   // ✅ CRITICAL: Always respond with 200 first, then process
   res.status(200).json({received: true, eventType: event.type, eventId: event.id});
 
@@ -244,13 +271,12 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
   }
 });
 
+// ✅ MIDDLEWARE SETUP - AFTER WEBHOOK BUT BEFORE OTHER ROUTES
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
 app.use(cors({
  origin: frontendUrl,
  credentials: true
 }));
-app.use(express.static(path.join(__dirname, 'dist')));
 
 // Security: Validate required environment variables
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
