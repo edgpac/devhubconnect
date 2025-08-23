@@ -30,7 +30,7 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:11434';
 
 // ✅ SECURE: Frontend URL configuration
 const FRONTEND_URL = NODE_ENV === 'production' 
-  ? 'https://devhubconnect.com' 
+  ? 'https://devhubconnect-production.up.railway.app' 
   : process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // ✅ SECURE: Add security headers

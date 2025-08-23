@@ -2531,7 +2531,7 @@ app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res
 
   // ✅ FIXED: Define correct frontend URL based on environment
   const frontendUrl = process.env.NODE_ENV === 'production' 
-    ? 'https://devhubconnect.com' 
+    ? 'https://devhubconnect-production.up.railway.app' 
     : process.env.FRONTEND_URL || 'http://localhost:5173';
 
   try {

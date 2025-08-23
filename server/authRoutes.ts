@@ -23,11 +23,11 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // ✅ SECURE: Environment-specific URLs
 const BASE_URL = NODE_ENV === 'production' 
- ? 'https://devhubconnect.com' 
+ ? 'https://devhubconnect-production.up.railway.app' 
  : 'http://localhost:3000';
 
 const FRONTEND_URL = NODE_ENV === 'production' 
- ? 'https://devhubconnect.com' 
+ ? 'https://devhubconnect-production.up.railway.app' 
  : process.env.FRONTEND_URL || 'http://localhost:5173';
 
 const GITHUB_REDIRECT_URI = `${BASE_URL}/api/auth/github/callback`;
