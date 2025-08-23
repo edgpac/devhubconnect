@@ -86,35 +86,63 @@ function checkAIRateLimit(userId) {
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ CRITICAL FIX: Static file serving with proper MIME types
-app.use(express.static(path.join(__dirname, 'dist'), {
-  index: false, // Don't auto-serve index.html
-  setHeaders: (res, filePath, stat) => {
-    console.log('📄 Serving static file:', filePath);
-    
-    // ✅ CRITICAL: Fix JavaScript MIME type
-    if (filePath.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-      console.log('🔧 Set JavaScript MIME type for:', path.basename(filePath));
-    }
-    
-    // Handle other JavaScript variations
-    if (filePath.endsWith('.mjs')) {
-      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    }
-    
-    // CSS is working but let's be explicit
-    if (filePath.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css; charset=utf-8');
-    }
-    
-    // Add caching for assets in production
-    if (process.env.NODE_ENV === 'production' && filePath.includes('/assets/')) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    } else {
-      res.setHeader('Cache-Control', 'public, max-age=0');
-    }
+// ✅ DEBUG: Add request logging
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.path}`);
+  
+  // Log asset requests specifically
+  if (req.path.startsWith('/assets/')) {
+    console.log('🎯 Asset request detected:', req.path);
+    console.log('📄 File extension:', path.extname(req.path));
   }
+  
+  next();
+});
+
+// ✅ CRITICAL FIX: Handle JavaScript files with explicit matching BEFORE other middleware
+app.get('/assets/*.js', (req, res) => {
+  console.log('🔧 JavaScript route handler triggered for:', req.path);
+  
+  const filePath = path.join(__dirname, 'dist', req.path);
+  console.log('📁 Looking for file at:', filePath);
+  console.log('📄 File exists:', require('fs').existsSync(filePath));
+  
+  // Set headers FIRST
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  
+  // Send file directly
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('❌ Error serving JS file:', req.path, err);
+      res.status(404).send('JavaScript file not found');
+    } else {
+      console.log('✅ Successfully served JS file:', req.path);
+    }
+  });
+});
+
+// ✅ Handle CSS files (this is working)
+app.get('/assets/*.css', (req, res) => {
+  console.log('🔧 CSS route handler triggered for:', req.path);
+  
+  const filePath = path.join(__dirname, 'dist', req.path);
+  res.setHeader('Content-Type', 'text/css; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('❌ Error serving CSS file:', req.path, err);
+      res.status(404).send('CSS file not found');
+    } else {
+      console.log('✅ Successfully served CSS file:', req.path);
+    }
+  });
+});
+
+// ✅ General static middleware for other files
+app.use(express.static(path.join(__dirname, 'dist'), {
+  index: false
 }));
 
 // ✅ CRITICAL FIX: STRIPE WEBHOOK MUST BE BEFORE express.json() AND FIXED PURCHASE LOGIC
