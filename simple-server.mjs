@@ -147,33 +147,44 @@ app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (
         dbTemplateId = parsedId;
       }
 
-      // ✅ CRITICAL: Check for existing purchase first
+      // ✅ FIXED: Check for existing purchase with BOTH session_id AND user/template combination
+      console.log('🔍 Checking for existing purchase:', { sessionId: session.id, userId, templateId: dbTemplateId });
+      
       const existingPurchase = await pool.query(
-        'SELECT id, status FROM purchases WHERE stripe_session_id = $1',
-        [session.id]
+        'SELECT id, status, user_id, template_id FROM purchases WHERE stripe_session_id = $1 OR (user_id = $2 AND template_id = $3)',
+        [session.id, userId, dbTemplateId]
       );
 
       if (existingPurchase.rows.length > 0) {
         const purchase = existingPurchase.rows[0];
+        console.log('📋 Found existing purchase:', { id: purchase.id, status: purchase.status });
+        
         if (purchase.status === 'completed') {
           console.log('⚠️ Purchase already completed for session:', session.id);
           return;
         }
         
-        // Update existing pending purchase to completed
+        // ✅ FIXED: Update existing pending purchase to completed using EITHER session_id OR user/template match
         const updateResult = await pool.query(`
           UPDATE purchases 
           SET 
             status = 'completed', 
             completed_at = NOW(),
             amount_paid = $1,
-            currency = $2
-          WHERE stripe_session_id = $3 AND status = 'pending'
-          RETURNING id, user_id, template_id, amount_paid
-        `, [amountPaid, session.currency || 'usd', session.id]);
+            currency = $2,
+            stripe_session_id = $3
+          WHERE (stripe_session_id = $3 OR (user_id = $4 AND template_id = $5)) AND status = 'pending'
+          RETURNING id, user_id, template_id, amount_paid, stripe_session_id
+        `, [amountPaid, session.currency || 'usd', session.id, userId, dbTemplateId]);
 
         if (updateResult.rows.length > 0) {
-          console.log('✅ EXISTING PURCHASE COMPLETED via webhook:', updateResult.rows[0].id);
+          console.log('✅ EXISTING PURCHASE COMPLETED via webhook:', {
+            purchaseId: updateResult.rows[0].id,
+            sessionId: updateResult.rows[0].stripe_session_id,
+            userId: updateResult.rows[0].user_id,
+            templateId: updateResult.rows[0].template_id,
+            amount: `$${(updateResult.rows[0].amount_paid / 100).toFixed(2)}`
+          });
         } else {
           console.error('❌ Failed to update existing purchase for session:', session.id);
         }
@@ -278,7 +289,7 @@ if (process.env.NODE_ENV !== 'production') {
   console.log('  - JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
   console.log('  - DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
   console.log('  - GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'SET' : 'NOT SET');
-} 
+}
 
 // ✅ PART 2: AI FUNCTIONS & SECURITY - ALL FIXES APPLIED WITH CORRECT MODEL
 
