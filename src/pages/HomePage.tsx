@@ -314,7 +314,7 @@ export const HomePage = () => {
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
              <h1 className="text-5xl font-bold mb-6">Premium Templates & Support</h1>
              <p className="text-xl mb-8 text-blue-100 max-w-3xl mx-auto">
-               We won't just hand you the solution, we'll build it for you.<br />
+               We won't just hand you a solution, we'll build it for you.<br />
                Upload your template and get step by step assistance from our AI.<br />
                Save hours of development time with instantly deployable n8n solutions.
             </p>
