@@ -33,7 +33,6 @@ export const useEnhancedRecommendations = (userId?: string) => {
   const buildQueryParams = useCallback(() => {
     const params = new URLSearchParams();
     
-    if (userId) params.append('userId', userId);
     if (filters.maxPrice) params.append('maxPrice', filters.maxPrice.toString());
     if (filters.minRating) params.append('minRating', filters.minRating.toString());
     if (filters.includePersonalized !== undefined) {
@@ -44,7 +43,7 @@ export const useEnhancedRecommendations = (userId?: string) => {
     }
 
     return params.toString();
-  }, [userId, filters]);
+  }, [filters]);
 
   // Fetch recommendations
   const {
