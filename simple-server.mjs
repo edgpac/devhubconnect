@@ -1444,7 +1444,6 @@ try {
 
 // Use the recommendations router
 app.use('/api/recommendations', recommendationsRouter);
-
 // Template download endpoint for purchased templates
 app.get('/api/templates/:id/download', authenticateJWT, async (req, res) => {
 if (!req.user) {

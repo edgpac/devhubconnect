@@ -1,7 +1,8 @@
-// server/recommendationsRoutes.js - CONVERTED FROM TYPESCRIPT
+// server/recommendationsRoutes.js - FIXED VERSION
 import express from 'express';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
+import jwt from 'jsonwebtoken';
 import pg from 'pg';
 const { Pool } = pg;
 
@@ -169,7 +170,7 @@ class SmartRecommendationEngine {
   }
 }
 
-// Your existing authenticateJWT middleware (import from main server logic)
+// FIXED: Simplified authenticateJWT middleware using imported jwt
 const authenticateJWT = async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -208,8 +209,7 @@ const authenticateJWT = async (req, res, next) => {
       return next();
     }
 
-    // Handle JWT tokens if provided
-    const jwt = require('jsonwebtoken');
+    // FIXED: Use the imported jwt directly instead of require()
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     const result = await pool.query(
