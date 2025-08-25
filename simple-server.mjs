@@ -1349,633 +1349,526 @@ app.get('/api/admin/analytics-data', async (req, res) => {
 // ==================== TEMPLATE ENDPOINTS ====================
 
 app.get('/api/templates/:id', async (req, res) => {
-  try {
-    console.log('📄 Fetching template details for:', req.params.id, 'by user:', req.user?.email || req.user?.username || 'unauthenticated');
-    const templateId = req.params.id;
-    if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
-      return res.status(400).json({ error: 'Invalid template ID' });
-    }
-    
-    await pool.query(
-      'UPDATE templates SET view_count = COALESCE(view_count, 0) + 1 WHERE id = $1',
-      [templateId]
-    );
-    
-    const result = await pool.query(
-      'SELECT * FROM templates WHERE id = $1',
-      [templateId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Template not found' });
-    }
-    
-    const template = result.rows[0];
-    res.json({ success: true, template: template });
-  } catch (error) {
-    console.error('Error fetching template details:', error);
-    res.status(500).json({ error: 'Failed to fetch template details' });
-  }
+ try {
+   console.log('📄 Fetching template details for:', req.params.id, 'by user:', req.user?.email || req.user?.username || 'unauthenticated');
+   const templateId = req.params.id;
+   if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
+     return res.status(400).json({ error: 'Invalid template ID' });
+   }
+   
+   await pool.query(
+     'UPDATE templates SET view_count = COALESCE(view_count, 0) + 1 WHERE id = $1',
+     [templateId]
+   );
+   
+   const result = await pool.query(
+     'SELECT * FROM templates WHERE id = $1',
+     [templateId]
+   );
+   
+   if (result.rows.length === 0) {
+     return res.status(404).json({ error: 'Template not found' });
+   }
+   
+   const template = result.rows[0];
+   res.json({ success: true, template: template });
+ } catch (error) {
+   console.error('Error fetching template details:', error);
+   res.status(500).json({ error: 'Failed to fetch template details' });
+ }
 });
 
 // ✅ SECURE: Template update endpoint
 app.patch('/api/templates/:id', requireAdminAuth, async (req, res) => {
-  try {
-    const templateId = req.params.id;
-    const { name, description, price, workflow_json, image_url } = req.body;
-    
-    console.log('🔧 Updating template:', templateId, 'by user:', req.user.email);
-    
-    if (!name || !description || price === undefined) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    const result = await pool.query(
-      'UPDATE templates SET name = $1, description = $2, price = $3, workflow_json = $4, image_url = $5, updated_at = NOW() WHERE id = $6 RETURNING *',
-      [name, description, price, workflow_json, image_url, templateId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Template not found' });
-    }
-    
-    console.log('✅ Template updated successfully');
-    res.json({ success: true, template: result.rows[0] });
-  } catch (error) {
-    console.error('Error updating template:', error);
-    res.status(500).json({ error: 'Failed to update template' });
-  }
+ try {
+   const templateId = req.params.id;
+   const { name, description, price, workflow_json, image_url } = req.body;
+   
+   console.log('🔧 Updating template:', templateId, 'by user:', req.user.email);
+   
+   if (!name || !description || price === undefined) {
+     return res.status(400).json({ error: 'Missing required fields' });
+   }
+   
+   const result = await pool.query(
+     'UPDATE templates SET name = $1, description = $2, price = $3, workflow_json = $4, image_url = $5, updated_at = NOW() WHERE id = $6 RETURNING *',
+     [name, description, price, workflow_json, image_url, templateId]
+   );
+   
+   if (result.rows.length === 0) {
+     return res.status(404).json({ error: 'Template not found' });
+   }
+   
+   console.log('✅ Template updated successfully');
+   res.json({ success: true, template: result.rows[0] });
+ } catch (error) {
+   console.error('Error updating template:', error);
+   res.status(500).json({ error: 'Failed to update template' });
+ }
 });
 
 // ✅ SECURE: Enhanced /api/templates endpoint with proper field conversion
 app.get('/api/templates', async (req, res) => {
-  try {
-    console.log('📋 Fetching templates for user:', req.user?.email || req.user?.username || 'unauthenticated');
-    
-    const result = await pool.query(`
-      SELECT * FROM templates 
-      WHERE is_public = true 
-      ORDER BY rating DESC, download_count DESC 
-      LIMIT 1000
-    `);
-    
-    const templatesWithDetails = result.rows.map(template => {
-      const converted = convertFieldNames(template);
-      const workflowDetails = parseWorkflowDetails(template.workflow_json);
-      
-      return {
-        ...converted,
-        workflowDetails,
-        steps: workflowDetails.steps,
-        integratedApps: workflowDetails.apps
-      };
-    });
-    
-    res.json({ 
-      success: true,
-      templates: templatesWithDetails,
-      count: result.rows.length
-    });
-  } catch (error) {
-    console.error('Error fetching templates:', error);
-    res.status(500).json({ error: 'Failed to fetch templates' });
-  }
+ try {
+   console.log('📋 Fetching templates for user:', req.user?.email || req.user?.username || 'unauthenticated');
+   
+   const result = await pool.query(`
+     SELECT * FROM templates 
+     WHERE is_public = true 
+     ORDER BY rating DESC, download_count DESC 
+     LIMIT 1000
+   `);
+   
+   const templatesWithDetails = result.rows.map(template => {
+     const converted = convertFieldNames(template);
+     const workflowDetails = parseWorkflowDetails(template.workflow_json);
+     
+     return {
+       ...converted,
+       workflowDetails,
+       steps: workflowDetails.steps,
+       integratedApps: workflowDetails.apps
+     };
+   });
+   
+   res.json({ 
+     success: true,
+     templates: templatesWithDetails,
+     count: result.rows.length
+   });
+ } catch (error) {
+   console.error('Error fetching templates:', error);
+   res.status(500).json({ error: 'Failed to fetch templates' });
+ }
 });
 
-// ✅ SECURE: /api/recommendations endpoint - USE SAME LOGIC AS STRIPE
+// Import the recommendations router
+import recommendationsRouter from './server/recommendationsRoutes.js';
+
+// Use the recommendations router
 app.use('/api/recommendations', recommendationsRouter);
-  try {
-    console.log('🔍 Fetching recommendations...');
-    
-    if (!req.user) {
-      console.log('❌ No user found in request - not authenticated');
-      return res.status(401).json({ error: 'Authentication required for personalized recommendations' });
-    }
-
-    const userId = req.user.id;
-    console.log(`🔍 Authenticated user: ${userId} (${req.user.email || req.user.username})`);
-    
-    // 🔒 USE EXACT SAME QUERY AS STRIPE PURCHASE VALIDATION
-    const userPurchases = await pool.query(
-      'SELECT template_id FROM purchases WHERE user_id = $1 AND status IN ($2, $3)',
-      [userId, 'completed', 'pending']
-    );
-    
-    const ownedTemplateIds = userPurchases.rows.map(row => row.template_id);
-    console.log(`🚫 User owns ${ownedTemplateIds.length} templates: [${ownedTemplateIds.join(', ')}]`);
-
-    if (ownedTemplateIds.length === 0) {
-      console.log('ℹ️ User has no purchases - showing all templates');
-    }
-
-    // Get templates EXCLUDING owned ones (same as Stripe validation)
-    let queryText = `
-      SELECT 
-        t.*,
-        COALESCE(t.download_count, 0) as downloads,
-        COALESCE(t.view_count, 0) as views,
-        COALESCE(t.rating, 4.5) as rating
-      FROM templates t
-      WHERE t.is_public = true`;
-    
-    let queryParams = [];
-    
-    // 🔒 EXCLUDE owned templates (SAME LOGIC AS STRIPE)
-    if (ownedTemplateIds.length > 0) {
-      const placeholders = ownedTemplateIds.map((_, index) => `$${index + 1}`).join(',');
-      queryText += ` AND t.id NOT IN (${placeholders})`;
-      queryParams = ownedTemplateIds;
-    }
-    
-    queryText += `
-      ORDER BY 
-        COALESCE(t.download_count, 0) DESC,
-        COALESCE(t.view_count, 0) DESC,
-        t.created_at DESC
-      LIMIT 50`;
-
-    console.log(`🔍 Query will exclude ${ownedTemplateIds.length} owned templates`);
-    console.log(`🔍 Looking for templates NOT IN: [${ownedTemplateIds.join(', ')}]`);
-
-    const availableTemplates = await pool.query(queryText, queryParams);
-    console.log(`📋 Found ${availableTemplates.rows.length} available templates after exclusions`);
-
-    const formattedTemplates = availableTemplates.rows.slice(0, 12).map(template => {
-      const converted = convertFieldNames(template);
-      const workflowDetails = parseWorkflowDetails(template.workflow_json);
-      
-      // 🔒 DOUBLE-CHECK: Ensure this template is NOT owned (extra safety)
-      if (ownedTemplateIds.includes(template.id)) {
-        console.log(`⚠️ WARNING: Template ${template.id} should have been excluded but wasn't!`);
-        return null;
-      }
-      
-      const baseTemplate = {
-        ...converted,
-        workflowDetails,
-        steps: workflowDetails.steps,
-        integratedApps: workflowDetails.apps,
-        _recommendationScore: Math.random() * 0.3 + 0.7,
-        recommended: true
-      };
-
-      // Only add debug info in development
-      if (process.env.NODE_ENV !== 'production') {
-        baseTemplate._debug = {
-          templateId: template.id,
-          userOwnsThis: false,
-          excludedIds: ownedTemplateIds
-        };
-      }
-
-      return baseTemplate;
-    }).filter(Boolean); // Remove any null entries
-
-    console.log(`✅ Returning ${formattedTemplates.length} recommendations (excluded ${ownedTemplateIds.length} owned templates)`);
-
-   // 🔒 FINAL SAFETY CHECK: Log first few recommended template IDs
-    const recommendedIds = formattedTemplates.map(t => t.id).slice(0, 5);
-    console.log(`🎯 First 5 recommended template IDs: [${recommendedIds.join(', ')}]`);
-
-    res.json({ 
-      recommendations: formattedTemplates,
-      metadata: {
-        total: formattedTemplates.length,
-        personalized: true,
-        trending_boost_applied: true,
-        filters_applied: {},
-        source: 'purchase_validated_recommendations',
-        excluded_count: ownedTemplateIds.length,
-        user_id: userId
-      }
-    });
-  } catch (error) {
-    console.error('❌ Recommendations error:', error);
-    res.status(500).json({ error: 'Failed to fetch recommendations' });
-  }
-});
 
 // ✅ SECURE: Template download endpoint for purchased templates
 app.get('/api/templates/:id/download', authenticateJWT, async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ 
-      error: 'Authentication required',
-      message: 'You must be logged in to download templates'
-    });
-  }
+ if (!req.user) {
+   return res.status(401).json({ 
+     error: 'Authentication required',
+     message: 'You must be logged in to download templates'
+   });
+ }
 
-  try {
-    const templateId = req.params.id;
-    console.log('📥 Download request for template:', templateId, 'by user:', req.user.email);
+ try {
+   const templateId = req.params.id;
+   console.log('📥 Download request for template:', templateId, 'by user:', req.user.email);
 
-    // Validate template ID
-    if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
-      return res.status(400).json({ error: 'Invalid template ID' });
-    }
+   // Validate template ID
+   if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
+     return res.status(400).json({ error: 'Invalid template ID' });
+   }
 
-    // Check if template exists
-    const templateResult = await pool.query(
-      'SELECT id, name, workflow_json, price FROM templates WHERE id = $1',
-      [templateId]
-    );
+   // Check if template exists
+   const templateResult = await pool.query(
+     'SELECT id, name, workflow_json, price FROM templates WHERE id = $1',
+     [templateId]
+   );
 
-    if (templateResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Template not found' });
-    }
+   if (templateResult.rows.length === 0) {
+     return res.status(404).json({ error: 'Template not found' });
+   }
 
-    const template = templateResult.rows[0];
+   const template = templateResult.rows[0];
 
-    // Check if user has purchased this template
-    const purchaseResult = await pool.query(`
-      SELECT p.id, p.status, p.purchased_at 
-      FROM purchases p 
-      WHERE p.user_id = $1 AND p.template_id = $2 AND p.status = 'completed'
-      ORDER BY p.purchased_at DESC 
-      LIMIT 1
-    `, [req.user.id, templateId]);
+   // Check if user has purchased this template
+   const purchaseResult = await pool.query(`
+     SELECT p.id, p.status, p.purchased_at 
+     FROM purchases p 
+     WHERE p.user_id = $1 AND p.template_id = $2 AND p.status = 'completed'
+     ORDER BY p.purchased_at DESC 
+     LIMIT 1
+   `, [req.user.id, templateId]);
 
-    if (purchaseResult.rows.length === 0) {
-      console.log('❌ Download denied - user has not purchased template:', req.user.email, templateId);
-      return res.status(403).json({ 
-        error: 'Access denied',
-        message: 'You must purchase this template before downloading',
-        needsPurchase: true
-      });
-    }
+   if (purchaseResult.rows.length === 0) {
+     console.log('❌ Download denied - user has not purchased template:', req.user.email, templateId);
+     return res.status(403).json({ 
+       error: 'Access denied',
+       message: 'You must purchase this template before downloading',
+       needsPurchase: true
+     });
+   }
 
-    // Validate workflow JSON exists
-    if (!template.workflow_json) {
-      return res.status(500).json({ 
-        error: 'Template data unavailable',
-        message: 'This template does not have workflow data available'
-      });
-    }
+   // Validate workflow JSON exists
+   if (!template.workflow_json) {
+     return res.status(500).json({ 
+       error: 'Template data unavailable',
+       message: 'This template does not have workflow data available'
+     });
+   }
 
-    // Update download count
-    await pool.query(
-      'UPDATE templates SET download_count = COALESCE(download_count, 0) + 1 WHERE id = $1',
-      [templateId]
-    );
+   // Update download count
+   await pool.query(
+     'UPDATE templates SET download_count = COALESCE(download_count, 0) + 1 WHERE id = $1',
+     [templateId]
+   );
 
-    // Prepare download filename
-    const sanitizedName = template.name
-      .replace(/[^a-zA-Z0-9\-_\s]/g, '') // Remove special chars
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .toLowerCase();
-    
-    const filename = `${sanitizedName}-${templateId}.json`;
+   // Prepare download filename
+   const sanitizedName = template.name
+     .replace(/[^a-zA-Z0-9\-_\s]/g, '') // Remove special chars
+     .replace(/\s+/g, '-') // Replace spaces with hyphens
+     .toLowerCase();
+   
+   const filename = `${sanitizedName}-${templateId}.json`;
 
-    // Set headers for file download
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Cache-Control', 'no-cache');
+   // Set headers for file download
+   res.setHeader('Content-Type', 'application/json');
+   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+   res.setHeader('Cache-Control', 'no-cache');
 
-    console.log('✅ Template download successful:', templateId, filename, 'by', req.user.email);
+   console.log('✅ Template download successful:', templateId, filename, 'by', req.user.email);
 
-    // Send the workflow JSON
-    res.send(JSON.stringify(template.workflow_json, null, 2));
+   // Send the workflow JSON
+   res.send(JSON.stringify(template.workflow_json, null, 2));
 
-  } catch (error) {
-    console.error('❌ Template download error:', error);
-    res.status(500).json({ 
-      error: 'Download failed',
-      message: 'Failed to download template. Please try again.'
-    });
-  }
+ } catch (error) {
+   console.error('❌ Template download error:', error);
+   res.status(500).json({ 
+     error: 'Download failed',
+     message: 'Failed to download template. Please try again.'
+   });
+ }
 });
 
 // ✅ ALTERNATIVE: Template preview endpoint (for View Preview buttons)
 app.get('/api/templates/:id/preview', async (req, res) => {
-  try {
-    const templateId = req.params.id;
-    console.log('👁️ Preview request for template:', templateId);
+ try {
+   const templateId = req.params.id;
+   console.log('👁️ Preview request for template:', templateId);
 
-    // Validate template ID
-    if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
-      return res.status(400).json({ error: 'Invalid template ID' });
-    }
+   // Validate template ID
+   if (!templateId || typeof templateId !== 'string' || templateId.length > 100) {
+     return res.status(400).json({ error: 'Invalid template ID' });
+   }
 
-    // Get template details (public info only)
-    const result = await pool.query(`
-      SELECT 
-        id, name, description, price, image_url, 
-        created_at, download_count, view_count, rating,
-        workflow_json
-      FROM templates 
-      WHERE id = $1 AND is_public = true
-    `, [templateId]);
+   // Get template details (public info only)
+   const result = await pool.query(`
+     SELECT 
+       id, name, description, price, image_url, 
+       created_at, download_count, view_count, rating,
+       workflow_json
+     FROM templates 
+     WHERE id = $1 AND is_public = true
+   `, [templateId]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Template not found or not public' });
-    }
+   if (result.rows.length === 0) {
+     return res.status(404).json({ error: 'Template not found or not public' });
+   }
 
-    const template = result.rows[0];
+   const template = result.rows[0];
 
-    // Update view count
-    await pool.query(
-      'UPDATE templates SET view_count = COALESCE(view_count, 0) + 1 WHERE id = $1',
-      [templateId]
-    );
+   // Update view count
+   await pool.query(
+     'UPDATE templates SET view_count = COALESCE(view_count, 0) + 1 WHERE id = $1',
+     [templateId]
+   );
 
-    // Return template info with workflow for preview
-    res.json({
-      success: true,
-      template: {
-        id: template.id,
-        name: template.name,
-        description: template.description,
-        price: template.price,
-        imageUrl: template.image_url,
-        workflowJson: template.workflow_json,
-        stats: {
-          downloads: template.download_count || 0,
-          views: template.view_count || 0,
-          rating: template.rating || 0
-        },
-        createdAt: template.created_at
-      }
-    });
+   // Return template info with workflow for preview
+   res.json({
+     success: true,
+     template: {
+       id: template.id,
+       name: template.name,
+       description: template.description,
+       price: template.price,
+       imageUrl: template.image_url,
+       workflowJson: template.workflow_json,
+       stats: {
+         downloads: template.download_count || 0,
+         views: template.view_count || 0,
+         rating: template.rating || 0
+       },
+       createdAt: template.created_at
+     }
+   });
 
-  } catch (error) {
-    console.error('❌ Template preview error:', error);
-    res.status(500).json({ 
-      error: 'Preview failed',
-      message: 'Failed to load template preview'
-    });
-  }
+ } catch (error) {
+   console.error('❌ Template preview error:', error);
+   res.status(500).json({ 
+     error: 'Preview failed',
+     message: 'Failed to load template preview'
+   });
+ }
 });
 
 // ✅ SECURE: /api/user/purchases endpoint  
 app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
+ if (!req.user) {
+   return res.status(401).json({ error: 'Not authenticated' });
+ }
 
-  try {
-    console.log('📦 Fetching purchases for user:', req.user.email || req.user.username);
-    
-    const result = await pool.query(`
-      SELECT 
-        p.id as purchase_id,
-        p.purchased_at,
-        p.amount_paid,
-        p.currency,
-        p.status,
-        t.id,
-        t.name,
-        t.description,
-        t.price,
-        t.image_url as "imageUrl",
-        t.workflow_json as "workflowJson",
-        t.created_at as "createdAt",
-        t.download_count as "downloadCount",
-        t.view_count as "viewCount",
-        t.rating
-      FROM purchases p
-      JOIN templates t ON p.template_id = t.id
-      WHERE p.user_id = $1 
-      ORDER BY p.purchased_at DESC
-    `, [req.user.id]);
+ try {
+   console.log('📦 Fetching purchases for user:', req.user.email || req.user.username);
+   
+   const result = await pool.query(`
+     SELECT 
+       p.id as purchase_id,
+       p.purchased_at,
+       p.amount_paid,
+       p.currency,
+       p.status,
+       t.id,
+       t.name,
+       t.description,
+       t.price,
+       t.image_url as "imageUrl",
+       t.workflow_json as "workflowJson",
+       t.created_at as "createdAt",
+       t.download_count as "downloadCount",
+       t.view_count as "viewCount",
+       t.rating
+     FROM purchases p
+     JOIN templates t ON p.template_id = t.id
+     WHERE p.user_id = $1 
+     ORDER BY p.purchased_at DESC
+   `, [req.user.id]);
 
-    const formattedPurchases = result.rows.map(row => ({
-      purchaseInfo: {
-        purchaseId: row.purchase_id,
-        amountPaid: row.amount_paid,
-        currency: row.currency,
-        status: row.status,
-        purchasedAt: row.purchased_at
-      },
-      template: {
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        price: row.price,
-        imageUrl: row.imageUrl,
-        workflowJson: row.workflowJson,
-        createdAt: row.createdAt,
-        downloadCount: row.downloadCount,
-        viewCount: row.viewCount,
-        rating: row.rating,
-        purchased: true
-      }
-    }));
+   const formattedPurchases = result.rows.map(row => ({
+     purchaseInfo: {
+       purchaseId: row.purchase_id,
+       amountPaid: row.amount_paid,
+       currency: row.currency,
+       status: row.status,
+       purchasedAt: row.purchased_at
+     },
+     template: {
+       id: row.id,
+       name: row.name,
+       description: row.description,
+       price: row.price,
+       imageUrl: row.imageUrl,
+       workflowJson: row.workflowJson,
+       createdAt: row.createdAt,
+       downloadCount: row.downloadCount,
+       viewCount: row.viewCount,
+       rating: row.rating,
+       purchased: true
+     }
+   }));
 
-    console.log('✅ Found', formattedPurchases.length, 'purchases for user');
-    res.json({ success: true, purchases: formattedPurchases });
+   console.log('✅ Found', formattedPurchases.length, 'purchases for user');
+   res.json({ success: true, purchases: formattedPurchases });
 
-  } catch (error) {
-    console.error('Error fetching user purchases:', error);
-    res.status(500).json({ error: 'Failed to fetch purchases' });
-  }
+ } catch (error) {
+   console.error('Error fetching user purchases:', error);
+   res.status(500).json({ error: 'Failed to fetch purchases' });
+ }
 });
 
 // ✅ SECURE: Individual template removal endpoint
 app.delete('/api/user/purchases/template/:templateId', authenticateJWT, async (req, res) => {
-  try {
-    const { templateId } = req.params;
-    const userId = req.user.id;
-    
-    console.log(`🗑️ Individual template removal request: User ${userId}, Template ${templateId}`);
-    
-    // Validate template ID
-    if (!templateId || isNaN(templateId)) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Invalid template ID' 
-      });
-    }
+ try {
+   const { templateId } = req.params;
+   const userId = req.user.id;
+   
+   console.log(`🗑️ Individual template removal request: User ${userId}, Template ${templateId}`);
+   
+   // Validate template ID
+   if (!templateId || isNaN(templateId)) {
+     return res.status(400).json({ 
+       success: false, 
+       error: 'Invalid template ID' 
+     });
+   }
 
-    // Get template name for logging
-    const templateInfo = await pool.query(
-      'SELECT name FROM templates WHERE id = $1',
-      [templateId]
-    );
+   // Get template name for logging
+   const templateInfo = await pool.query(
+     'SELECT name FROM templates WHERE id = $1',
+     [templateId]
+   );
 
-    const templateName = templateInfo.rows[0]?.name || `Template ${templateId}`;
+   const templateName = templateInfo.rows[0]?.name || `Template ${templateId}`;
 
-    // 🔒 OWNERSHIP CHECK - Ensure user can only remove their own templates
-    const ownershipCheck = await pool.query(
-      'SELECT id, purchased_at, amount_paid FROM purchases WHERE user_id = $1 AND template_id = $2',
-      [userId, templateId]
-    );
+   // 🔒 OWNERSHIP CHECK - Ensure user can only remove their own templates
+   const ownershipCheck = await pool.query(
+     'SELECT id, purchased_at, amount_paid FROM purchases WHERE user_id = $1 AND template_id = $2',
+     [userId, templateId]
+   );
 
-    if (ownershipCheck.rows.length === 0) {
-      console.log(`❌ Unauthorized removal attempt: User ${userId} doesn't own template ${templateId}`);
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Template not found in your collection' 
-      });
-    }
+   if (ownershipCheck.rows.length === 0) {
+     console.log(`❌ Unauthorized removal attempt: User ${userId} doesn't own template ${templateId}`);
+     return res.status(404).json({ 
+       success: false, 
+       error: 'Template not found in your collection' 
+     });
+   }
 
-    const purchaseRecord = ownershipCheck.rows[0];
+   const purchaseRecord = ownershipCheck.rows[0];
 
-    // Remove this specific template purchase
-    const deleteResult = await pool.query(
-      'DELETE FROM purchases WHERE user_id = $1 AND template_id = $2 RETURNING id',
-      [userId, templateId]
-    );
+   // Remove this specific template purchase
+   const deleteResult = await pool.query(
+     'DELETE FROM purchases WHERE user_id = $1 AND template_id = $2 RETURNING id',
+     [userId, templateId]
+   );
 
-    if (deleteResult.rows.length === 0) {
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Failed to remove template from collection' 
-      });
-    }
+   if (deleteResult.rows.length === 0) {
+     return res.status(500).json({ 
+       success: false, 
+       error: 'Failed to remove template from collection' 
+     });
+   }
 
-    console.log(`✅ Template removed from collection: "${templateName}" (ID: ${templateId}) by user ${userId}`);
-    console.log(`💰 Amount was: $${(purchaseRecord.amount_paid / 100).toFixed(2)}`);
-    
-    res.json({ 
-      success: true, 
-      message: `"${templateName}" removed from your collection`,
-      removedTemplate: {
-        id: templateId,
-        name: templateName,
-        purchaseDate: purchaseRecord.purchased_at,
-        amountPaid: purchaseRecord.amount_paid
-      }
-    });
+   console.log(`✅ Template removed from collection: "${templateName}" (ID: ${templateId}) by user ${userId}`);
+   console.log(`💰 Amount was: $${(purchaseRecord.amount_paid / 100).toFixed(2)}`);
+   
+   res.json({ 
+     success: true, 
+     message: `"${templateName}" removed from your collection`,
+     removedTemplate: {
+       id: templateId,
+       name: templateName,
+       purchaseDate: purchaseRecord.purchased_at,
+       amountPaid: purchaseRecord.amount_paid
+     }
+   });
 
-  } catch (error) {
-    console.error('❌ Individual template removal error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to remove template from collection' 
-    });
-  }
+ } catch (error) {
+   console.error('❌ Individual template removal error:', error);
+   res.status(500).json({ 
+     success: false, 
+     error: 'Failed to remove template from collection' 
+   });
+ }
 });
 
 // ✅ FIXED: Add missing endpoint without trailing slash
 app.get('/api/purchases', authenticateJWT, async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
+ if (!req.user) {
+   return res.status(401).json({ error: 'Not authenticated' });
+ }
 
-  try {
-    console.log('📦 Fetching purchases for user via /api/purchases:', req.user.email || req.user.username);
-    
-    const result = await pool.query(`
-      SELECT 
-        p.id as purchase_id,
-        p.amount_paid,
-        p.currency,
-        p.status,
-        p.purchased_at,
-        t.id,
-        t.name,
-        t.description,
-        t.price,
-        t.image_url as "imageUrl",
-        t.workflow_json as "workflowJson",
-        t.created_at as "createdAt",
-        t.download_count as "downloadCount",
-        t.view_count as "viewCount",
-        t.rating
-      FROM purchases p
-      LEFT JOIN templates t ON p.template_id = t.id
-      WHERE p.user_id = $1 AND p.status = 'completed'
-      ORDER BY p.purchased_at DESC
-    `, [req.user.id]);
+ try {
+   console.log('📦 Fetching purchases for user via /api/purchases:', req.user.email || req.user.username);
+   
+   const result = await pool.query(`
+     SELECT 
+       p.id as purchase_id,
+       p.amount_paid,
+       p.currency,
+       p.status,
+       p.purchased_at,
+       t.id,
+       t.name,
+       t.description,
+       t.price,
+       t.image_url as "imageUrl",
+       t.workflow_json as "workflowJson",
+       t.created_at as "createdAt",
+       t.download_count as "downloadCount",
+       t.view_count as "viewCount",
+       t.rating
+     FROM purchases p
+     LEFT JOIN templates t ON p.template_id = t.id
+     WHERE p.user_id = $1 AND p.status = 'completed'
+     ORDER BY p.purchased_at DESC
+   `, [req.user.id]);
 
-    const formattedPurchases = result.rows.map(row => ({
-      purchaseInfo: {
-        purchaseId: row.purchase_id,
-        amountPaid: row.amount_paid,
-        currency: row.currency,
-        status: row.status,
-        purchasedAt: row.purchased_at
-      },
-      template: {
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        price: row.price,
-        imageUrl: row.imageUrl,
-        workflowJson: row.workflowJson,
-        createdAt: row.createdAt,
-        downloadCount: row.downloadCount,
-        viewCount: row.viewCount,
-        rating: row.rating,
-        purchased: true
-      }
-    }));
+   const formattedPurchases = result.rows.map(row => ({
+     purchaseInfo: {
+       purchaseId: row.purchase_id,
+       amountPaid: row.amount_paid,
+       currency: row.currency,
+       status: row.status,
+       purchasedAt: row.purchased_at
+     },
+     template: {
+       id: row.id,
+       name: row.name,
+       description: row.description,
+       price: row.price,
+       imageUrl: row.imageUrl,
+       workflowJson: row.workflowJson,
+       createdAt: row.createdAt,
+       downloadCount: row.downloadCount,
+       viewCount: row.viewCount,
+       rating: row.rating,
+       purchased: true
+     }
+   }));
 
-    console.log('✅ Found', formattedPurchases.length, 'purchases for user via /api/purchases');
-    res.json({ success: true, purchases: formattedPurchases });
+   console.log('✅ Found', formattedPurchases.length, 'purchases for user via /api/purchases');
+   res.json({ success: true, purchases: formattedPurchases });
 
-  } catch (error) {
-    console.error('Error fetching user purchases via /api/purchases:', error);
-    res.status(500).json({ error: 'Failed to fetch purchases' });
-  }
+ } catch (error) {
+   console.error('Error fetching user purchases via /api/purchases:', error);
+   res.status(500).json({ error: 'Failed to fetch purchases' });
+ }
 });
 
 // ✅ FIX: Dashboard compatibility endpoint - alias for /api/user/purchases
 app.get('/api/purchases/', authenticateJWT, async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
+ if (!req.user) {
+   return res.status(401).json({ error: 'Not authenticated' });
+ }
 
-  try {
-    console.log('📦 Fetching purchases for user via /api/purchases/:', req.user.email || req.user.username);
-    
-    const result = await pool.query(`
-      SELECT 
-        p.id as purchase_id,
-        p.amount_paid,
-        p.currency,
-        p.status,
-        p.purchased_at,
-        t.id,
-        t.name,
-        t.description,
-        t.price,
-        t.image_url as "imageUrl",
-        t.workflow_json as "workflowJson",
-        t.created_at as "createdAt",
-        t.download_count as "downloadCount",
-        t.view_count as "viewCount",
-        t.rating
-      FROM purchases p
-      LEFT JOIN templates t ON p.template_id = t.id
-      WHERE p.user_id = $1 AND p.status = 'completed'
-      ORDER BY p.purchased_at DESC
-    `, [req.user.id]);
+ try {
+   console.log('📦 Fetching purchases for user via /api/purchases/:', req.user.email || req.user.username);
+   
+   const result = await pool.query(`
+     SELECT 
+       p.id as purchase_id,
+       p.amount_paid,
+       p.currency,
+       p.status,
+       p.purchased_at,
+       t.id,
+       t.name,
+       t.description,
+       t.price,
+       t.image_url as "imageUrl",
+       t.workflow_json as "workflowJson",
+       t.created_at as "createdAt",
+       t.download_count as "downloadCount",
+       t.view_count as "viewCount",
+       t.rating
+     FROM purchases p
+     LEFT JOIN templates t ON p.template_id = t.id
+     WHERE p.user_id = $1 AND p.status = 'completed'
+     ORDER BY p.purchased_at DESC
+   `, [req.user.id]);
 
-    const formattedPurchases = result.rows.map(row => ({
-      purchaseInfo: {
-        purchaseId: row.purchase_id,
-        amountPaid: row.amount_paid,
-        currency: row.currency,
-        status: row.status,
-        purchasedAt: row.purchased_at
-      },
-      template: {
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        price: row.price,
-        imageUrl: row.imageUrl,
-        workflowJson: row.workflowJson,
-        createdAt: row.createdAt,
-        downloadCount: row.downloadCount,
-        viewCount: row.viewCount,
-        rating: row.rating,
-        purchased: true
-      }
-    }));
+   const formattedPurchases = result.rows.map(row => ({
+     purchaseInfo: {
+       purchaseId: row.purchase_id,
+       amountPaid: row.amount_paid,
+       currency: row.currency,
+       status: row.status,
+       purchasedAt: row.purchased_at
+     },
+     template: {
+       id: row.id,
+       name: row.name,
+       description: row.description,
+       price: row.price,
+       imageUrl: row.imageUrl,
+       workflowJson: row.workflowJson,
+       createdAt: row.createdAt,
+       downloadCount: row.downloadCount,
+       viewCount: row.viewCount,
+       rating: row.rating,
+       purchased: true
+     }
+   }));
 
-    console.log('✅ Found', formattedPurchases.length, 'purchases for user via /api/purchases/');
-    res.json({ success: true, purchases: formattedPurchases });
+   console.log('✅ Found', formattedPurchases.length, 'purchases for user via /api/purchases/');
+   res.json({ success: true, purchases: formattedPurchases });
 
-  } catch (error) {
-    console.error('Error fetching user purchases via /api/purchases/:', error);
-    res.status(500).json({ error: 'Failed to fetch purchases' });
-  }
+ } catch (error) {
+   console.error('Error fetching user purchases via /api/purchases/:', error);
+   res.status(500).json({ error: 'Failed to fetch purchases' });
+ }
 });
 
 // Template List Endpoint (redirect to main templates endpoint)
 app.get('/api/templates/list', async (req, res) => {
-  res.redirect('/api/templates');
+ res.redirect('/api/templates');
 });
 
 // ==================== AI ENDPOINTS ====================
