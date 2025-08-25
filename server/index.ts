@@ -30,7 +30,7 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:11434';
 
 // ✅ SECURE: Frontend URL configuration
 const FRONTEND_URL = NODE_ENV === 'production' 
-  ? 'https://devhubconnect-production.up.railway.app' 
+  ? 'https://www.devhubconnect.com' 
   : process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // ✅ SECURE: Add security headers
@@ -61,7 +61,7 @@ const templateLimiter = rateLimit({
 app.use(cors({
   origin: [
     FRONTEND_URL,
-    'https://devhubconnect-production.up.railway.app' // Fallback
+    'https://www.devhubconnect.com' // Fallback
   ],
   credentials: true,
   optionsSuccessStatus: 200
