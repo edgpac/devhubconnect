@@ -34,12 +34,18 @@ const queryClient = new QueryClient({
   },
 });
 
-// 🔒 SECURITY: Admin-only route protection component
+// Admin-only route protection component
 const AdminRoute = ({ children }: { children: React.ReactNode }) => (
   <ProtectedRoute requireAdmin>
     {children}
   </ProtectedRoute>
 );
+
+// GitHub OAuth redirect component
+const GitHubAuthRedirect = () => {
+  window.location.href = '/auth/github';
+  return <div>Redirecting to GitHub authentication...</div>;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -60,12 +66,12 @@ const App = () => (
               <Route path="/terms" element={<TermsOfService />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
 
-              {/* Authentication Routes */}
-              <Route path="/login" element={<AuthPage />} />
-              <Route path="/register" element={<AuthPage />} />
+              {/* Authentication Routes - Redirect to GitHub OAuth */}
+              <Route path="/login" element={<GitHubAuthRedirect />} />
+              <Route path="/register" element={<GitHubAuthRedirect />} />
               <Route path="/auth/success" element={<AuthSuccess />} />
 
-              {/* 🔒 SECURITY: Protected User Routes */}
+              {/* Protected User Routes */}
               <Route
                 path="/dashboard"
                 element={
@@ -91,7 +97,7 @@ const App = () => (
                 } 
               />
 
-              {/* 🔒 SECURITY: Template Edit Routes (Creator/Admin Only) */}
+              {/* Template Edit Routes (Creator/Admin Only) */}
               <Route
                 path="/template/:id/edit"
                 element={
@@ -101,7 +107,7 @@ const App = () => (
                 }
               />
 
-              {/* 🔒 SECURITY: Admin-Only Routes */}
+              {/* Admin-Only Routes */}
               <Route path="/admin" element={<AdminLogin />} />
               <Route 
                 path="/admin/dashboard" 
