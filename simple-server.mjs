@@ -15,6 +15,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
+import recommendationsRouter from './server/recommendationsRoutes.js';
 import cookieParser from 'cookie-parser';
 import Groq from 'groq-sdk';  // ✅ FIXED: Added missing Groq import
 const pgSession = require('connect-pg-simple');
@@ -1442,7 +1443,7 @@ app.get('/api/templates', async (req, res) => {
 });
 
 // ✅ SECURE: /api/recommendations endpoint - USE SAME LOGIC AS STRIPE
-app.get('/api/recommendations', authenticateJWT, async (req, res) => {
+app.use('/api/recommendations', recommendationsRouter);
   try {
     console.log('🔍 Fetching recommendations...');
     
