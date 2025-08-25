@@ -6,7 +6,7 @@ import { eq, desc, sql, and, inArray, gt, avg, count } from 'drizzle-orm';
 import { authenticateUser, AuthenticatedRequest } from './middleware/auth';
 const recommendationsRouter = Router();
 
-// ✅ TYPES - Match your existing template structure
+// TYPES - Match your existing template structure
 interface EnhancedTemplate {
   id: number;
   name: string;
@@ -46,7 +46,7 @@ interface RecommendationContext {
   recentTrends: any[];
 }
 
-// ✅ ANALYTICS-POWERED RECOMMENDATION ENGINE
+// ANALYTICS-POWERED RECOMMENDATION ENGINE
 class SmartRecommendationEngine {
   
   // Calculate user's category preferences based on purchase history
@@ -209,7 +209,7 @@ class SmartRecommendationEngine {
   }
 }
 
-// ✅ ENHANCED RECOMMENDATIONS ENDPOINT
+// ENHANCED RECOMMENDATIONS ENDPOINT
 recommendationsRouter.get('/', authenticateUser, async (req: AuthenticatedRequest, res) => {
   try {
     const { 
@@ -220,11 +220,14 @@ recommendationsRouter.get('/', authenticateUser, async (req: AuthenticatedReques
       includePersonalized = true 
     } = req.query;
 
-    console.log('📊 Fetching recommendations with params:', { 
+    // Get userId from authenticated user
+    const userId = req.user?.id;
+
+    console.log('Fetching recommendations with params:', { 
       userId, limit, categories, maxPrice, minRating, includePersonalized 
     });
 
-    // ✅ STEP 1: Get all published templates with analytics
+    // STEP 1: Get all published templates with analytics
     let templatesQuery = db
       .select({
         id: templates.id,
@@ -271,15 +274,15 @@ recommendationsRouter.get('/', authenticateUser, async (req: AuthenticatedReques
 
     const allTemplates = await templatesQuery;
 
-    console.log(`📋 Found ${allTemplates.length} templates after filtering`);
+    console.log(`Found ${allTemplates.length} templates after filtering`);
 
-    // ✅ STEP 2: Build recommendation context
+    // STEP 2: Build recommendation context
     let context: RecommendationContext = {
-      userId: req.user?.id,
+      userId: userId,
       purchaseHistory: [],
       viewHistory: [],
       preferences: {
-        userId: userId as string,
+        userId: userId || '',
         maxPrice: maxPrice ? Number(maxPrice) : undefined,
         minRating: Number(minRating),
       },
@@ -288,19 +291,19 @@ recommendationsRouter.get('/', authenticateUser, async (req: AuthenticatedReques
 
     // Get user's purchase and preference history if logged in
     if (userId && includePersonalized === 'true') {
-      console.log('👤 Fetching personalized data for user:', userId);
+      console.log('Fetching personalized data for user:', userId);
       
       // Get purchase history
       const purchaseHistory = await db
         .select()
         .from(purchases)
-        .where(eq(purchases.userId, userId as string));
+        .where(eq(purchases.userId, userId));
       
       // Get user's preferred categories
-      const preferredCategories = await SmartRecommendationEngine.getUserCategoryPreferences(userId as string);
+      const preferredCategories = await SmartRecommendationEngine.getUserCategoryPreferences(userId);
       
       // Get user's price range
-      const priceRange = await SmartRecommendationEngine.getUserPriceRange(userId as string);
+      const priceRange = await SmartRecommendationEngine.getUserPriceRange(userId);
       
       context.purchaseHistory = purchaseHistory;
       context.preferences.preferredCategories = preferredCategories;
@@ -309,18 +312,18 @@ recommendationsRouter.get('/', authenticateUser, async (req: AuthenticatedReques
         context.preferences.maxPrice = priceRange.max;
       }
 
-      console.log('🎯 User preferences:', {
+      console.log('User preferences:', {
         preferredCategories,
         priceRange,
         purchaseCount: purchaseHistory.length
       });
     }
 
-    // ✅ STEP 3: Get trending templates
+    // STEP 3: Get trending templates
     const trendingTemplateIds = await SmartRecommendationEngine.getTrendingTemplates(20);
     context.recentTrends = trendingTemplateIds;
 
-    // ✅ STEP 4: Calculate recommendation scores
+    // STEP 4: Calculate recommendation scores
     const enhancedTemplates: EnhancedTemplate[] = allTemplates.map(template => ({
       ...template,
       rating: Number(template.rating) || 0,
@@ -343,17 +346,17 @@ recommendationsRouter.get('/', authenticateUser, async (req: AuthenticatedReques
       };
     });
 
-    // ✅ STEP 5: Sort by recommendation score and return top results
+    // STEP 5: Sort by recommendation score and return top results
     const recommendations = scoredTemplates
       .sort((a, b) => (b.recommendationScore || 0) - (a.recommendationScore || 0))
       .slice(0, Number(limit));
 
-    console.log('🏆 Top recommendations with scores:');
+    console.log('Top recommendations with scores:');
     recommendations.slice(0, 3).forEach((template, index) => {
       console.log(`${index + 1}. "${template.name}" - Score: ${template.recommendationScore?.toFixed(3)}`);
     });
 
-    // ✅ STEP 6: Return results in format matching your TemplateCard
+    // STEP 6: Return results in format matching your TemplateCard
     const result = recommendations.map(template => ({
       id: template.id,
       name: template.name,
@@ -382,7 +385,7 @@ recommendationsRouter.get('/', authenticateUser, async (req: AuthenticatedReques
     });
 
   } catch (error) {
-    console.error('❌ Error fetching recommendations:', error);
+    console.error('Error fetching recommendations:', error);
     res.status(500).json({ 
       message: 'Failed to fetch recommendations',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
@@ -390,7 +393,7 @@ recommendationsRouter.get('/', authenticateUser, async (req: AuthenticatedReques
   }
 });
 
-// ✅ NEW: Business Plan Preferences Endpoint
+// NEW: Business Plan Preferences Endpoint
 recommendationsRouter.post('/preferences', async (req, res) => {
   try {
     const { userId, preferences } = req.body;
@@ -402,7 +405,7 @@ recommendationsRouter.post('/preferences', async (req, res) => {
     // In a real app, you'd save these to a user_preferences table
     // For now, we'll return success and use them for recommendations
     
-    console.log('💾 Saving user preferences:', { userId, preferences });
+    console.log('Saving user preferences:', { userId, preferences });
     
     res.json({ 
       message: 'Preferences saved successfully',
@@ -414,7 +417,7 @@ recommendationsRouter.post('/preferences', async (req, res) => {
   }
 });
 
-// ✅ NEW: Get user's recommendation analytics
+// NEW: Get user's recommendation analytics
 recommendationsRouter.get('/analytics/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
