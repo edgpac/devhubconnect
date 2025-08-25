@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { db } from './db';
 import { templates, purchases, reviews, templateViews, users } from '../shared/schema';
 import { eq, desc, sql, and, inArray, gt, avg, count } from 'drizzle-orm';
-
+import { authenticateUser, AuthenticatedRequest } from './middleware/auth';
 const recommendationsRouter = Router();
 
 // ✅ TYPES - Match your existing template structure
@@ -210,10 +210,9 @@ class SmartRecommendationEngine {
 }
 
 // ✅ ENHANCED RECOMMENDATIONS ENDPOINT
-recommendationsRouter.get('/', async (req, res) => {
+recommendationsRouter.get('/', authenticateUser, async (req: AuthenticatedRequest, res) => {
   try {
     const { 
-      userId,
       limit = 9,
       categories,
       maxPrice,
@@ -276,7 +275,7 @@ recommendationsRouter.get('/', async (req, res) => {
 
     // ✅ STEP 2: Build recommendation context
     let context: RecommendationContext = {
-      userId: userId as string,
+      userId: req.user?.id,
       purchaseHistory: [],
       viewHistory: [],
       preferences: {

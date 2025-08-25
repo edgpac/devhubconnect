@@ -77,7 +77,7 @@ export const useEnhancedRecommendations = (userId?: string) => {
     // Save preferences to backend if user is logged in
     if (userId) {
       try {
-        await fetch('/api/recommendations/preferences', {
+        await apiCall(`${API_ENDPOINTS.RECOMMENDATIONS}/preferences`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId, preferences: newPreferences }),
