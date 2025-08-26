@@ -15,7 +15,6 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
-import purchaseRouter from './purchaseRouter.js';
 import cookieParser from 'cookie-parser';
 import Groq from 'groq-sdk';  // ✅ FIXED: Added missing Groq import
 const pgSession = require('connect-pg-simple');
