@@ -1,16 +1,9 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm ci && npm run build"
-nixpacksPlan = """
-[phases.setup]
-nixPkgs = ['nodejs-22_x', 'npm-10_x']
-"""
 
 [deploy]
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
-healthcheckPath = "/"
-healthcheckTimeout = 300
+restartPolicyMaxRetries = 1
 
 [environments.production]
 variables = { NODE_ENV = "production" }
