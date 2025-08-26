@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from "react";
-import { apiCall } from '../config/api';
+import { apiCall } from '../config/api.ts';
 
 type User = {
   id: string;
