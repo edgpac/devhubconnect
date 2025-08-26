@@ -154,8 +154,7 @@ const handleRefreshAuth = async () => {
 // ✅ Handle GitHub authentication
 const handleGitHubAuth = () => {
   console.log('🔐 Redirecting to GitHub OAuth...');
-  window.location.href = '/auth/github';
-};
+  window.location.href = "https://www.devhubconnect.com/auth/github";
 
 if (isLoading && !propUser) {
   // Show loading state only if no prop user provided
