@@ -941,7 +941,13 @@ app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
 app.get('/auth/profile/session', async (req, res) => {
   try {
     const sessionId = req.cookies?.devhub_session;
-    
+    console.log('🔍 DEBUG Profile Check:', {
+  sessionId: sessionId ? 'present' : 'missing',
+  sessionLength: sessionId?.length,
+  allCookies: Object.keys(req.cookies || {}),
+  userAgent: req.get('User-Agent')?.substring(0, 50),
+  referer: req.get('Referer')
+});
     if (!sessionId || typeof sessionId !== 'string' || sessionId.length > 100) {
       return res.status(401).json({ 
         error: 'No valid session found' 
