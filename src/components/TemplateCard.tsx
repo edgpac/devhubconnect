@@ -55,41 +55,41 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
    navigate(`/template/${template.id}`);
  };
 
-// ✅ FIXED: Direct Stripe checkout instead of navigation
+// HandlePurchase function:
+
 const handlePurchase = async () => {
- setPurchasing(true);
- try {
-   console.log(`🛒 Initiating purchase for template ${template.id}`);
-   
-   const response = await fetch(`/api/stripe/create-checkout-session`, {
-     method: 'POST',
-     credentials: 'include',
-     headers: {
-       'Content-Type': 'application/json',
-     },
-     body: JSON.stringify({ templateId: template.id }),
-   });
+  setPurchasing(true);
+  try {
+    console.log(`Initiating purchase for template ${template.id}`);
+    
+    // Use your existing server endpoint
+    const response = await fetch('/api/stripe/create-checkout-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ templateId: template.id }),
+      credentials: 'include'
+    });
 
-   if (!response.ok) {
-     const errorText = await response.text();
-     console.error('Purchase failed:', errorText);
-     throw new Error(`Failed to create checkout session: ${response.status}`);
-   }
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Purchase failed:', errorData);
+      throw new Error(errorData.message || `Failed to create checkout session: ${response.status}`);
+    }
 
-   const session = await response.json();
-   
-   if (session.url) {
-     console.log(`✅ Redirecting to Stripe checkout: ${session.url}`);
-     window.location.href = session.url; // Redirect to Stripe
-   } else {
-     throw new Error('No checkout URL received from server');
-   }
- } catch (error: any) {
-   console.error('Purchase error:', error);
-   toast.error(`Purchase failed: ${error.message}`);
- } finally {
-   setPurchasing(false);
- }
+    const session = await response.json();
+    
+    if (session.url) {
+      console.log(`Redirecting to Stripe checkout: ${session.url}`);
+      window.location.href = session.url; // This will redirect to Stripe, then back to dashboard
+    } else {
+      throw new Error('No checkout URL received from server');
+    }
+  } catch (error: any) {
+    console.error('Purchase error:', error);
+    toast.error(`Purchase failed: ${error.message}`);
+  } finally {
+    setPurchasing(false);
+  }
 };
 
  // ✅ Real download functionality with DEBUG logging

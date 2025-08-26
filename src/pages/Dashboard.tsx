@@ -1,6 +1,6 @@
 // src/pages/Dashboard.tsx - FIXED VERSION
 import { useState, useEffect } from "react";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Navbar } from "@/components/Navbar";
 import { TemplateCard } from "@/components/TemplateCard";
 import { BusinessPlanForm } from "@/components/BusinessPlanForm";
@@ -13,44 +13,133 @@ import { useEnhancedRecommendations } from "@/hooks/useEnhancedRecommendations";
 import { API_ENDPOINTS, apiCall } from '@/config/api';
 
 import { 
-ShoppingBag, 
-Download, 
-Star, 
-TrendingUp, 
-Brain,
-Filter,
-Settings,
-BarChart3,
-Sparkles,
-Target,
-Zap,
-ChevronLeft,
-ChevronRight
+  ShoppingBag, 
+  Download, 
+  Star, 
+  TrendingUp, 
+  Brain,
+  Filter,
+  Settings,
+  BarChart3,
+  Sparkles,
+  Target,
+  Zap,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 export const Dashboard = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  // Verify authentication on component mount
+  // Check if this is a post-Stripe redirect
+  const isStripeReturn = searchParams.get('stripe_success') || searchParams.get('purchase') === 'success';
+  const templateId = searchParams.get('template') || searchParams.get('template_id');
+  const sessionId = searchParams.get('session_id');
+
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Verify authentication with special handling for post-Stripe flow
   useEffect(() => {
     const verifyAuth = async () => {
       try {
+        // If coming from Stripe, first try to refresh the session
+        if (isStripeReturn) {
+          console.log('Post-Stripe redirect detected, refreshing session...');
+          
+          try {
+            // Use your new purchase router endpoint to refresh session
+            const refreshResponse = await fetch('/api/purchase-session/refresh-after-purchase', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                templateId: templateId, 
+                purchaseSuccess: true,
+                stripeSessionId: sessionId 
+              }),
+              credentials: 'include'
+            });
+
+            if (refreshResponse.ok) {
+              const refreshData = await refreshResponse.json();
+              console.log('Session refresh successful:', refreshData);
+              
+              // Show success message
+              toast.success('Purchase completed successfully! Welcome to your dashboard.');
+              
+              // Clean up URL parameters
+              const newUrl = new URL(window.location);
+              newUrl.searchParams.delete('stripe_success');
+              newUrl.searchParams.delete('purchase');
+              newUrl.searchParams.delete('template');
+              newUrl.searchParams.delete('template_id');
+              newUrl.searchParams.delete('session_id');
+              newUrl.searchParams.delete('refresh');
+              window.history.replaceState({}, '', newUrl.toString());
+              
+              setIsAuthenticated(true);
+              setAuthLoading(false);
+              return;
+            } else {
+              console.warn('Session refresh failed, trying regular auth check');
+            }
+          } catch (refreshError) {
+            console.warn('Session refresh error, trying regular auth check:', refreshError);
+          }
+        }
+
+        // Regular authentication check
         const response = await apiCall(API_ENDPOINTS.AUTH_SESSION);
-        if (!response.ok) {
-          // Session invalid/expired - redirect to GitHub auth
-          window.location.href = '/auth/github';
-          return;
+        if (response.ok) {
+          setIsAuthenticated(true);
+        } else {
+          // Only redirect to GitHub if this is NOT a Stripe return
+          // Give Stripe returns one more chance with session check endpoint
+          if (isStripeReturn) {
+            try {
+              const sessionCheckResponse = await fetch('/api/purchase-session/session-check', {
+                credentials: 'include'
+              });
+              
+              if (sessionCheckResponse.ok) {
+                setIsAuthenticated(true);
+                toast.success('Purchase completed! Welcome back to your dashboard.');
+              } else {
+                console.log('Post-Stripe session invalid, redirecting to auth');
+                toast.error('Session expired during checkout. Please sign in again.');
+                window.location.href = '/auth/github';
+                return;
+              }
+            } catch (sessionCheckError) {
+              console.error('Session check failed:', sessionCheckError);
+              window.location.href = '/auth/github';
+              return;
+            }
+          } else {
+            // Regular flow - redirect to GitHub auth
+            window.location.href = '/auth/github';
+            return;
+          }
         }
       } catch (error) {
         console.error('Authentication verification failed:', error);
+        
+        if (isStripeReturn) {
+          toast.error('Authentication failed after purchase. Please sign in again.');
+        }
+        
         window.location.href = '/auth/github';
+      } finally {
+        setAuthLoading(false);
       }
     };
     
     verifyAuth();
-  }, []);
+  }, [isStripeReturn, templateId, sessionId]);
 
   const [activeTab, setActiveTab] = useState("overview");
   const [showBusinessPlan, setShowBusinessPlan] = useState(false);
@@ -82,10 +171,17 @@ export const Dashboard = () => {
   const [isLoadingPurchases, setIsLoadingPurchases] = useState(true);
 
   useEffect(() => {
+    // Only fetch purchases if authenticated
+    if (!isAuthenticated || authLoading) return;
+
     const fetchPurchases = async () => {
       try {
-        // Use correct API endpoint that matches server endpoint list
-        const response = await fetch('/api/user/purchases', {
+        // Use the new dashboard-specific endpoint for better post-Stripe handling
+        const endpoint = isStripeReturn ? 
+          '/api/purchase-session/dashboard-purchases' : 
+          '/api/user/purchases';
+          
+        const response = await fetch(endpoint, {
           method: 'GET',
           credentials: 'include',
           headers: {
@@ -136,7 +232,26 @@ export const Dashboard = () => {
     };
 
     fetchPurchases();
-  }, []);
+  }, [isAuthenticated, authLoading, isStripeReturn]);
+
+  // Show loading screen while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">
+            {isStripeReturn ? 'Completing your purchase...' : 'Loading dashboard...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render the dashboard if not authenticated
+  if (!isAuthenticated) {
+    return null; // Will redirect to auth
+  }
 
   // Calculate pagination for My Templates
   const totalPages = Math.ceil(purchasedTemplates.length / TEMPLATES_PER_PAGE);
@@ -737,42 +852,42 @@ export const Dashboard = () => {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm">Active Filters</span>
-                      <Badge variant="outline">{recommendationInsights.filtersApplied}</Badge>
+                        <Badge variant="outline">{recommendationInsights.filtersApplied}</Badge>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              {/* Spending Insights */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Spending Insights</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-sm">Total Spent</span>
-                      <span className="font-medium">${(totalSpent / 100).toFixed(2)}</span>
+                {/* Spending Insights */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Spending Insights</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm">Total Spent</span>
+                        <span className="font-medium">${(totalSpent / 100).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Avg per Template</span>
+                        <span className="font-medium">
+                          ${purchasedTemplates.length > 0 ? (totalSpent / purchasedTemplates.length / 100).toFixed(2) : '0.00'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Budget Range</span>
+                        <span className="font-medium">
+                          ${(preferences.maxPrice || 5000) / 100}/template
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm">Avg per Template</span>
-                      <span className="font-medium">
-                        ${purchasedTemplates.length > 0 ? (totalSpent / purchasedTemplates.length / 100).toFixed(2) : '0.00'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm">Budget Range</span>
-                      <span className="font-medium">
-                        ${(preferences.maxPrice || 5000) / 100}/template
-                     </span>
-                   </div>
-                 </div>
-               </CardContent>
-             </Card>
-           </div>
-         </TabsContent>
-       </Tabs>
-     </div>
-   </div>
- );
-};
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+    );
+  };
