@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiCall } from '@/config/api';
+import { useAuth } from "@/components/AuthProvider"; // ADD: Import useAuth hook
 
 import { 
   ShoppingBag, 
@@ -26,14 +27,13 @@ import { toast } from "sonner";
 export const Dashboard = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { currentUser, isLoading: authLoading } = useAuth(); // FIXED: Use AuthProvider instead of custom auth
 
   // Check if this is a post-Stripe redirect
   const isStripeReturn = searchParams.get('purchase') === 'success';
   const templateId = searchParams.get('template');
 
-  // Authentication and data state
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
+  // Data state (removed custom authentication state)
   const [purchasedTemplates, setPurchasedTemplates] = useState([]);
   const [isLoadingPurchases, setIsLoadingPurchases] = useState(true);
   const [recommendations, setRecommendations] = useState([]);
@@ -46,77 +46,25 @@ export const Dashboard = () => {
   const [currentRecommendationPage, setCurrentRecommendationPage] = useState(1);
   const [activeTab, setActiveTab] = useState("overview");
 
-  // Simplified authentication check
+  // Handle Stripe purchase success
   useEffect(() => {
-    const verifyAuth = async () => {
-      try {
-        // If coming from Stripe, wait a moment for session to stabilize
-        if (isStripeReturn) {
-          console.log('Post-Stripe redirect detected, waiting for session...');
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-        }
-
-        // FIXED: Use apiCall instead of raw fetch and correct endpoint
-        const response = await apiCall('/api/auth/profile/session');
-
-        if (response.ok) {
-          setIsAuthenticated(true);
-          
-          // Show success message for Stripe returns
-          if (isStripeReturn) {
-            toast.success('Purchase completed successfully! Welcome to your dashboard.');
-            
-            // Clean up URL parameters
-           const newUrl = new URL(window.location);
-           newUrl.searchParams.delete('purchase');
-           newUrl.searchParams.delete('template');
-           window.history.replaceState({}, '', newUrl.toString());
-         }
-       } else {
-         // FIXED: Use absolute URL for GitHub OAuth redirect
-         if (!isStripeReturn) {
-           window.location.href = 'https://www.devhubconnect.com/auth/github';
-           return;
-         }
-          
-          // For Stripe returns, try one more time after another delay
-          console.log('First auth check failed for Stripe return, trying again...');
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 more seconds
-          
-          // FIXED: Use apiCall for retry attempt
-          const retryResponse = await apiCall('/api/auth/profile/session');
-          
-          if (retryResponse.ok) {
-            setIsAuthenticated(true);
-            toast.success('Purchase completed! Welcome to your dashboard.');
-          } else {
-            console.log('Auth failed after Stripe - redirecting to GitHub');
-            toast.error('Session expired during checkout. Please sign in again.');
-            // FIXED: Use absolute URL for GitHub OAuth redirect
-            window.location.href = 'https://www.devhubconnect.com/auth/github';
-            return;
-          }
-        }
-      } catch (error) {
-        console.error('Authentication verification failed:', error);
-        
-        if (isStripeReturn) {
-          toast.error('Authentication failed after purchase. Please sign in again.');
-        }
-        
-        // FIXED: Use absolute URL for GitHub OAuth redirect
-        window.location.href = 'https://www.devhubconnect.com/auth/github';
-      } finally {
-        setAuthLoading(false);
-      }
-    };
-    
-    verifyAuth();
-  }, [isStripeReturn]);
+    if (isStripeReturn && templateId && currentUser) {
+      console.log('Stripe purchase success detected for template:', templateId);
+      toast.success('Purchase completed successfully! Welcome to your dashboard.');
+      
+      // Clean up URL parameters after showing success message
+      setTimeout(() => {
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.delete('purchase');
+        newUrl.searchParams.delete('template');
+        window.history.replaceState({}, '', newUrl.toString());
+      }, 2000);
+    }
+  }, [isStripeReturn, templateId, currentUser]);
 
   // Fetch user's purchased templates
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!currentUser) return;
 
     const fetchPurchases = async () => {
       try {
@@ -149,11 +97,11 @@ export const Dashboard = () => {
     };
 
     fetchPurchases();
-  }, [isAuthenticated]);
+  }, [currentUser]);
 
   // Fetch recommendations using your existing endpoint
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!currentUser) return;
 
     const fetchRecommendations = async () => {
       try {
@@ -177,7 +125,7 @@ export const Dashboard = () => {
     };
 
     fetchRecommendations();
-  }, [isAuthenticated]);
+  }, [currentUser]);
 
   // Show loading screen while checking authentication
   if (authLoading) {
@@ -193,8 +141,10 @@ export const Dashboard = () => {
     );
   }
 
-  // Don't render if not authenticated
-  if (!isAuthenticated) {
+  // Redirect to auth if not authenticated
+  if (!currentUser) {
+    console.log('No user found, redirecting to GitHub OAuth...');
+    window.location.href = 'https://www.devhubconnect.com/auth/github';
     return null;
   }
 
