@@ -445,7 +445,7 @@ authRouter.get('/github/callback', callbackLimiter, async (req: Request, res: Re
       sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       path: '/',
-      domain: NODE_ENV === 'production' ? '.devhubconnect.com' : undefined
+      domain: NODE_ENV === 'production' ? '.railway.app' : undefined 
     });
      
      // 🔍 DEBUG: Log what we're setting
