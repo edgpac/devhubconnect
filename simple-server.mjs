@@ -12,6 +12,7 @@ const { Pool } = pg;
 import Stripe from 'stripe';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
+import recommendationsRouter from './server/recommendationsRoutes.js';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
@@ -1441,7 +1442,7 @@ try {
 }
 });
 
-// Use the recommendations router
+// Recommendations endpoint
 app.use('/api/recommendations', recommendationsRouter);
 // Template download endpoint for purchased templates
 app.get('/api/templates/:id/download', authenticateJWT, async (req, res) => {
