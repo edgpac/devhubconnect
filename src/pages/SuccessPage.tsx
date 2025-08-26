@@ -16,7 +16,7 @@ export const SuccessPage = () => {
     const verifyPayment = async (id: string) => {
       try {
         // ✅ Replace the simulated call with an actual fetch to your backend
-        const response = await fetch(`/api/stripe/verify-payment?session_id=${id}`);
+        const response = await fetch(`https://www.devhubconnect.com/api/stripe/verify-payment?session_id=${id}`);
         const data = await response.json();
 
         if (response.ok && data.status === 'paid') {
