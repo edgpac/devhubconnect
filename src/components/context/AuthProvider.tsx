@@ -73,6 +73,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handleOAuthCallback = async () => {
     const urlParams = new URLSearchParams(window.location.search);
     
+    // CRITICAL FIX: Only handle OAuth callbacks, not Stripe returns
+    const isStripeReturn = urlParams.get('purchase') === 'success';
+    
+    if (isStripeReturn) {
+      console.log('Stripe purchase return detected - skipping OAuth handler');
+      return; // Don't interfere with Stripe returns
+    }
+    
     if (urlParams.get('success') === 'true') {
       console.log('OAuth success detected! Checking session...');
       
