@@ -188,9 +188,10 @@ authRouter.post('/admin/login', adminLimiter, async (req: Request, res: Response
 
    // Create or get admin user
    let adminUser;
+   const ADMIN_USER_ID = process.env.ADMIN_USER_ID || 'admin_user_id';
    const [existingAdmin] = await db.select()
      .from(users)
-     .where(eq(users.id, 'admin_user_id'));
+     .where(eq(users.id, ADMIN_USER_ID));
 
    if (existingAdmin) {
      // Update last login
@@ -199,16 +200,18 @@ authRouter.post('/admin/login', adminLimiter, async (req: Request, res: Response
          lastLoginAt: new Date(),
          updatedAt: new Date() 
        })
-       .where(eq(users.id, 'admin_user_id'))
+       .where(eq(users.id, ADMIN_USER_ID))
        .returning();
      adminUser = updatedAdmin;
    } else {
      // Create admin user if doesn't exist
+     const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@devhubconnect.com';
      const [newAdmin] = await db.insert(users)
        .values({
-         id: 'admin_user_id',
-         email: 'admin@devhubconnect.com',
-         name: 'Admin',
+         id: ADMIN_USER_ID,
+         email: ADMIN_EMAIL,
+         name: 'DevHubConnect Admin',
+         avatarUrl: 'https://placehold.co/100x100/aabbcc/ffffff?text=ADMIN',
          role: 'admin',
          isEmailVerified: true,
          isActive: true,
@@ -440,39 +443,15 @@ authRouter.get('/github/callback', callbackLimiter, async (req: Request, res: Re
      
      // ✅ SECURE: Set secure HTTP-only cookie
      res.cookie('devhub_session', sessionId, {
-      httpOnly: true,
-      secure: NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      path: '/',
-      domain: NODE_ENV === 'production' ? '.railway.app' : undefined 
-    });
-     
-     // 🔍 DEBUG: Log what we're setting
-     console.log(`🔍 DEBUG: Setting cookie devhub_session = ${sessionId}`);
-     console.log(`🔍 DEBUG: SessionId type: ${typeof sessionId}, length: ${sessionId.length}`);
-     console.log(`🔍 DEBUG: Cookie options:`, {
        httpOnly: true,
        secure: NODE_ENV === 'production',
        sameSite: 'lax',
-       maxAge: 24 * 60 * 60 * 1000,
+       maxAge: 24 * 60 * 60 * 1000, // 24 hours
        path: '/',
        domain: NODE_ENV === 'production' ? '.devhubconnect.com' : undefined
      });
-
-     // 🔍 DEBUG: Verify session was created in database
-     const [verifySession] = await db.select()
-       .from(sessions)
-       .where(eq(sessions.id, sessionId));
-     console.log(`🔍 DEBUG: Session in database:`, verifySession ? 'Found' : 'NOT FOUND');
-     if (verifySession) {
-       console.log(`🔍 DEBUG: Session details:`, {
-         id: verifySession.id,
-         userId: verifySession.userId,
-         expiresAt: verifySession.expiresAt,
-         isActive: verifySession.isActive
-       });
-     }
+     
+     console.log(`DEBUG: Setting cookie devhub_session = ${sessionId}`);
      
      // ✅ SECURE: Redirect with minimal user data (no sensitive info in URL)
      const userParams = new URLSearchParams({
@@ -483,9 +462,9 @@ authRouter.get('/github/callback', callbackLimiter, async (req: Request, res: Re
      });
      
      const redirectUrl = `${FRONTEND_SUCCESS_URI}?${userParams.toString()}`;
-     console.log(`🔍 DEBUG: Attempting redirect to: ${redirectUrl}`);
+     console.log(`DEBUG: Attempting redirect to: ${redirectUrl}`);
      res.redirect(redirectUrl);
-     console.log(`🔍 DEBUG: Redirect sent successfully`);
+     console.log(`DEBUG: Redirect sent successfully`);
      
    } catch (dbError) {
      console.error('Database error during GitHub OAuth:', dbError);
@@ -537,7 +516,8 @@ authRouter.post('/logout', async (req: Request, res: Response) => {
      httpOnly: true,
      secure: NODE_ENV === 'production',
      sameSite: 'lax',
-     path: '/'
+     path: '/',
+     domain: NODE_ENV === 'production' ? '.devhubconnect.com' : undefined
    });
    
    res.json({ 
@@ -606,7 +586,7 @@ authRouter.get('/profile/session', async (req: Request, res: Response) => {
    // Check for session cookie
    const sessionId = req.cookies?.devhub_session;
    
-   console.log(`🔍 DEBUG: Profile check - Session ID: ${sessionId}`);
+   console.log(`DEBUG: Profile check - Session ID: ${sessionId}`);
    
    if (!sessionId) {
      return res.status(401).json({ 
@@ -627,7 +607,7 @@ authRouter.get('/profile/session', async (req: Request, res: Response) => {
      eq(sessions.isActive, true)
    ));
 
-   console.log(`🔍 DEBUG: Profile check - Session found: ${session ? 'YES' : 'NO'}`);
+   console.log(`DEBUG: Profile check - Session found: ${session ? 'YES' : 'NO'}`);
 
    if (!session || new Date() > session.expiresAt) {
      return res.status(401).json({ 
@@ -654,7 +634,7 @@ authRouter.get('/profile/session', async (req: Request, res: Response) => {
      });
    }
 
-   console.log(`🔍 DEBUG: Profile check - User found: ${user.email}`);
+   console.log(`DEBUG: Profile check - User found: ${user.email}`);
 
    res.json({ 
      success: true, 
