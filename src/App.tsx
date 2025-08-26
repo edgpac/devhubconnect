@@ -41,10 +41,21 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => (
   </ProtectedRoute>
 );
 
-// GitHub OAuth redirect component
+// GitHub OAuth redirect component with fix to handle post-checkout authentication
 const GitHubAuthRedirect = () => {
-  window.location.href = '/auth/github';
-  return <div>Redirecting to GitHub authentication...</div>;
+  // Fix: Check if the redirect is due to a successful checkout before forcing GitHub auth
+  const urlParams = new URLSearchParams(window.location.search);
+  const purchaseSuccess = urlParams.get('purchase') === 'success';
+  
+  if (purchaseSuccess) {
+    // If coming from a successful purchase, redirect to dashboard instead of GitHub
+    window.location.href = '/dashboard';
+  } else {
+    // Proceed with GitHub authentication for initial login/register
+    window.location.href = '/auth/github';
+  }
+  
+  return <div>Redirecting to {purchaseSuccess ? 'dashboard' : 'GitHub authentication'}...</div>;
 };
 
 const App = () => (
@@ -66,7 +77,7 @@ const App = () => (
               <Route path="/terms" element={<TermsOfService />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
 
-              {/* Authentication Routes - Redirect to GitHub OAuth */}
+              {/* Authentication Routes - Redirect to GitHub OAuth with fix */}
               <Route path="/login" element={<GitHubAuthRedirect />} />
               <Route path="/register" element={<GitHubAuthRedirect />} />
               <Route path="/auth/success" element={<AuthSuccess />} />
