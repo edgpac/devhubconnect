@@ -1,77 +1,133 @@
 // server/templateRoutes.ts
 import { Router, Request, Response, NextFunction } from 'express';
 import { db } from './db';
-import { templates, purchases, users, searchAnalytics, templateViews } from '../shared/schema';
+import { templates, purchases, users, searchAnalytics, templateViews, sessions } from '../shared/schema';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
-import jwt from 'jsonwebtoken';
 
 const templateRouter = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_for_devhubconnect';
-
-// ✅ SECURE: Enhanced interface with proper typing
+// Enhanced interface with proper typing
 interface AuthenticatedRequest extends Request {
   user?: {
-    id: string; // Using string to match your schema
+    id: string;
     isAdmin: boolean;
     email?: string;
+    role?: string;
   };
 }
 
-// ✅ SECURE: Real JWT authentication middleware
-const authenticateUser = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Authentication token required.',
-      action: 'Please log in to access this resource.' 
-    });
-  }
-
+// Session-based authentication middleware
+const authenticateSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; isAdmin?: boolean; email?: string };
-    req.user = { 
-      id: decoded.id, 
-      isAdmin: decoded.isAdmin || false,
-      email: decoded.email 
+    const sessionId = req.cookies?.devhub_session;
+    
+    if (!sessionId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Authentication required.',
+        action: 'Please log in to access this resource.' 
+      });
+    }
+
+    // Verify session in database
+    const [session] = await db.select({
+      userId: sessions.userId,
+      expiresAt: sessions.expiresAt,
+      isActive: sessions.isActive
+    })
+    .from(sessions)
+    .where(and(
+      eq(sessions.id, sessionId),
+      eq(sessions.isActive, true)
+    ));
+
+    if (!session || new Date() > session.expiresAt) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Session expired.',
+        action: 'Please log in again.' 
+      });
+    }
+
+    // Get user details
+    const [user] = await db.select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      role: users.role
+    }).from(users).where(eq(users.id, session.userId));
+
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found.' 
+      });
+    }
+
+    req.user = {
+      id: user.id,
+      isAdmin: user.role === 'admin',
+      email: user.email,
+      role: user.role
     };
-    console.log(`DEBUG: User authenticated - ID: ${decoded.id}, Admin: ${decoded.isAdmin || false}`);
+
+    console.log(`DEBUG: User authenticated via session - ID: ${user.id}, Admin: ${user.role === 'admin'}`);
     next();
   } catch (error) {
-    console.error('JWT verification failed:', error);
-    res.status(403).json({ 
+    console.error('Session authentication failed:', error);
+    res.status(500).json({ 
       success: false, 
-      message: 'Invalid or expired authentication token.',
-      action: 'Please log in again.' 
+      message: 'Authentication error.' 
     });
   }
 };
 
-// ✅ SECURE: Optional authentication (for public routes that benefit from user context)
-const optionalAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+// Optional session authentication (for public routes that benefit from user context)
+const optionalSessionAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const sessionId = req.cookies?.devhub_session;
+    
+    if (sessionId) {
+      // Verify session in database
+      const [session] = await db.select({
+        userId: sessions.userId,
+        expiresAt: sessions.expiresAt,
+        isActive: sessions.isActive
+      })
+      .from(sessions)
+      .where(and(
+        eq(sessions.id, sessionId),
+        eq(sessions.isActive, true)
+      ));
 
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { id: string; isAdmin?: boolean; email?: string };
-      req.user = { 
-        id: decoded.id, 
-        isAdmin: decoded.isAdmin || false,
-        email: decoded.email 
-      };
-    } catch (error) {
-      // Silent fail for optional auth
-      console.log('Optional auth failed, continuing without user context');
+      if (session && new Date() <= session.expiresAt) {
+        // Get user details
+        const [user] = await db.select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          role: users.role
+        }).from(users).where(eq(users.id, session.userId));
+
+        if (user) {
+          req.user = {
+            id: user.id,
+            isAdmin: user.role === 'admin',
+            email: user.email,
+            role: user.role
+          };
+        }
+      }
     }
+    next();
+  } catch (error) {
+    // Silent fail for optional auth
+    console.log('Optional session auth failed, continuing without user context');
+    next();
   }
-  next();
 };
 
-// ✅ SECURE: Admin verification middleware
+// Admin verification middleware
 const requireAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   if (!req.user) {
     return res.status(401).json({ 
@@ -90,7 +146,7 @@ const requireAdmin = (req: AuthenticatedRequest, res: Response, next: NextFuncti
   next();
 };
 
-// ✅ SECURE: Creator or admin verification middleware
+// Creator or admin verification middleware
 const requireCreatorOrAdmin = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const templateId = parseInt(req.params.id);
   const userId = req.user?.id;
@@ -132,7 +188,7 @@ const requireCreatorOrAdmin = async (req: AuthenticatedRequest, res: Response, n
   }
 };
 
-// ✅ SECURE: Purchase verification middleware
+// Purchase verification middleware
 const requirePurchase = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const templateId = parseInt(req.params.id);
   const userId = req.user?.id;
@@ -191,8 +247,8 @@ const requirePurchase = async (req: AuthenticatedRequest, res: Response, next: N
   }
 };
 
-// ✅ ANALYTICS: Analytics route - ADMIN ONLY
-templateRouter.get('/analytics/popular', authenticateUser, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+// Analytics route - ADMIN ONLY
+templateRouter.get('/analytics/popular', authenticateSession, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
     // Most downloaded templates
     const popularByDownloads = await db.select({
@@ -209,7 +265,7 @@ templateRouter.get('/analytics/popular', authenticateUser, requireAdmin, async (
     .orderBy(desc(templates.downloadCount))
     .limit(10);
 
-    // Most purchased templates (if you have purchases table)
+    // Most purchased templates
     const popularByPurchases = await db.select({
       templateId: purchases.templateId,
       templateName: templates.name,
@@ -251,7 +307,7 @@ templateRouter.get('/analytics/popular', authenticateUser, requireAdmin, async (
     })
     .from(users);
 
-    // Search analytics - most searched terms (ADMIN ONLY)
+    // Search analytics - most searched terms
     const topSearchTerms = await db.select({
       searchTerm: searchAnalytics.searchTerm,
       searchCount: count(searchAnalytics.id)
@@ -281,12 +337,11 @@ templateRouter.get('/analytics/popular', authenticateUser, requireAdmin, async (
   }
 });
 
-// ✅ ANALYTICS: Search analytics tracking route - PUBLIC INSERT ONLY
+// Search analytics tracking route - PUBLIC INSERT ONLY
 templateRouter.post('/analytics/search', async (req: Request, res: Response) => {
   try {
     const { searchTerm } = req.body;
     
-    // Store in searchAnalytics table
     await db.insert(searchAnalytics).values({
       searchTerm,
       timestamp: new Date(),
@@ -297,23 +352,21 @@ templateRouter.post('/analytics/search', async (req: Request, res: Response) => 
     res.json({ success: true });
   } catch (error) {
     console.error('Error tracking search:', error);
-    res.json({ success: false }); // Don't fail the search if analytics fail
+    res.json({ success: false });
   }
 });
 
-// ✅ ANALYTICS: Template view tracking - PUBLIC INSERT ONLY
+// Template view tracking - PUBLIC INSERT ONLY
 templateRouter.post('/analytics/view/:templateId', async (req: Request, res: Response) => {
   try {
     const { templateId } = req.params;
     
-    // Increment view count in templates table
     await db.update(templates)
       .set({ 
         viewCount: sql`${templates.viewCount} + 1` 
       })
       .where(eq(templates.id, parseInt(templateId)));
     
-    // Store in templateViews table
     await db.insert(templateViews).values({
       templateId: parseInt(templateId),
       viewedAt: new Date(),
@@ -328,10 +381,9 @@ templateRouter.post('/analytics/view/:templateId', async (req: Request, res: Res
   }
 });
 
-// ✅ SECURE: Get all templates (public with optional user context)
-templateRouter.get('/', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
+// Get all templates (public with optional user context)
+templateRouter.get('/', optionalSessionAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // Get only published and public templates
     const allTemplates = await db.select({
       id: templates.id,
       name: templates.name,
@@ -340,7 +392,6 @@ templateRouter.get('/', optionalAuth, async (req: AuthenticatedRequest, res: Res
       imageUrl: templates.imageUrl,
       createdAt: templates.createdAt,
       creatorId: templates.creatorId,
-      // Don't include workflowJson in public listing for security
     }).from(templates)
     .where(and(
       eq(templates.isPublic, true),
@@ -351,7 +402,6 @@ templateRouter.get('/', optionalAuth, async (req: AuthenticatedRequest, res: Res
     if (req.user) {
       const templatesWithPurchaseStatus = await Promise.all(
         allTemplates.map(async (template) => {
-          // Check if user purchased this template
           const [purchase] = await db.select()
             .from(purchases)
             .where(and(
@@ -384,8 +434,8 @@ templateRouter.get('/', optionalAuth, async (req: AuthenticatedRequest, res: Res
   }
 });
 
-// ✅ SECURE: Get single template (public metadata, workflow requires purchase)
-templateRouter.get('/:id', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
+// Get single template (public metadata, workflow requires purchase)
+templateRouter.get('/:id', optionalSessionAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     
@@ -427,10 +477,9 @@ templateRouter.get('/:id', optionalAuth, async (req: AuthenticatedRequest, res: 
       }
     }
 
-    // Return template data based on access level
     const responseData = {
       ...template,
-      workflowJson: (hasAccess || template.creatorId === 'admin_user_id') ? template.workflowJson : null, // Fixed: Always show workflow for admin templates
+      workflowJson: (hasAccess || template.creatorId === 'admin_user_id') ? template.workflowJson : null,
       hasAccess,
       isPurchased: !!purchaseInfo,
       isOwner: req.user?.id === template.creatorId,
@@ -449,8 +498,8 @@ templateRouter.get('/:id', optionalAuth, async (req: AuthenticatedRequest, res: 
   }
 });
 
-// ✅ SECURE: Create template (authenticated users)
-templateRouter.post('/', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+// Create template (authenticated users)
+templateRouter.post('/', authenticateSession, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { name, description, price, workflowJson, imageUrl } = req.body;
     const userId = req.user!.id;
@@ -471,8 +520,8 @@ templateRouter.post('/', authenticateUser, async (req: AuthenticatedRequest, res
         workflowJson,
         imageUrl,
         creatorId: userId,
-        status: 'published', // ✅ Auto-publish new templates
-        isPublic: true,      // ✅ Auto-make public
+        status: 'published',
+        isPublic: true,
       })
       .returning();
 
@@ -491,8 +540,8 @@ templateRouter.post('/', authenticateUser, async (req: AuthenticatedRequest, res
   }
 });
 
-// ✅ SECURE: Update template (creator or admin only)
-templateRouter.patch('/:id', authenticateUser, requireCreatorOrAdmin, async (req: AuthenticatedRequest, res: Response) => {
+// Update template (creator or admin only)
+templateRouter.patch('/:id', authenticateSession, requireCreatorOrAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const { name, description, price, workflowJson, imageUrl } = req.body;
@@ -536,12 +585,11 @@ templateRouter.patch('/:id', authenticateUser, requireCreatorOrAdmin, async (req
   }
 });
 
-// ✅ SECURE: Delete template (creator or admin only)
-templateRouter.delete('/:id', authenticateUser, requireCreatorOrAdmin, async (req: AuthenticatedRequest, res: Response) => {
+// Delete template (creator or admin only)
+templateRouter.delete('/:id', authenticateSession, requireCreatorOrAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     
-    // Also delete associated purchases
     await db.delete(purchases).where(eq(purchases.templateId, id));
     
     const [deletedTemplate] = await db.delete(templates)
@@ -569,8 +617,8 @@ templateRouter.delete('/:id', authenticateUser, requireCreatorOrAdmin, async (re
   }
 });
 
-// ✅ SECURE: Download workflow (requires authentication AND purchase verification)
-templateRouter.get('/:id/download-workflow', authenticateUser, requirePurchase, async (req: AuthenticatedRequest, res: Response) => {
+// Download workflow (requires authentication AND purchase verification)
+templateRouter.get('/:id/download-workflow', authenticateSession, requirePurchase, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     
@@ -587,7 +635,6 @@ templateRouter.get('/:id/download-workflow', authenticateUser, requirePurchase, 
       });
     }
 
-    // Log the download for audit purposes
     console.log(`DEBUG: User ${req.user!.id} downloading template ${id} workflow`);
 
     const filename = template.name ? 
@@ -609,8 +656,8 @@ templateRouter.get('/:id/download-workflow', authenticateUser, requirePurchase, 
   }
 });
 
-// ✅ SECURE: Get user's purchased templates
-templateRouter.get('/user/purchases', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+// Get user's purchased templates
+templateRouter.get('/user/purchases', authenticateSession, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
 
@@ -640,8 +687,8 @@ templateRouter.get('/user/purchases', authenticateUser, async (req: Authenticate
   }
 });
 
-// ✅ SECURE: Get user's created templates
-templateRouter.get('/user/created', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+// Get user's created templates
+templateRouter.get('/user/created', authenticateSession, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
 
