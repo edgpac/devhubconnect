@@ -68,17 +68,17 @@ export const Dashboard = () => {
             toast.success('Purchase completed successfully! Welcome to your dashboard.');
             
             // Clean up URL parameters
-            const newUrl = new URL(window.location);
-            newUrl.searchParams.delete('purchase');
-            newUrl.searchParams.delete('template');
-            window.history.replaceState({}, '', newUrl.toString());
-          }
-        } else {
-          // If auth fails and this is NOT a Stripe return, redirect to GitHub
-          if (!isStripeReturn) {
-            window.location.href = '/auth/github';
-            return;
-          }
+           const newUrl = new URL(window.location);
+           newUrl.searchParams.delete('purchase');
+           newUrl.searchParams.delete('template');
+           window.history.replaceState({}, '', newUrl.toString());
+         }
+       } else {
+         // If auth fails and this is NOT a Stripe return, redirect to GitHub using absolute custom domain URL
+         if (!isStripeReturn) {
+           window.location.href = 'https://www.devhubconnect.com/auth/github';
+           return;
+         }
           
           // For Stripe returns, try one more time after another delay
           console.log('First auth check failed for Stripe return, trying again...');
