@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiCall } from '@/config/api';
-import { useAuth } from "@/components/AuthProvider"; // ADD: Import useAuth hook
+import { useAuth } from "@/components/auth/AuthProvider"; /// ADD: Import useAuth hook
 
 import { 
   ShoppingBag, 
