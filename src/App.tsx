@@ -41,21 +41,18 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => (
   </ProtectedRoute>
 );
 
-// GitHub OAuth redirect component with fix to handle post-checkout authentication
+// GitHub OAuth redirect component
 const GitHubAuthRedirect = () => {
- // Fix: Check if the redirect is due to a successful checkout before forcing GitHub auth
- const urlParams = new URLSearchParams(window.location.search);
- const purchaseSuccess = urlParams.get('purchase') === 'success';
- 
- if (purchaseSuccess) {
-   // If coming from a successful purchase, redirect to dashboard using absolute custom domain URL
-   window.location.href = 'https://www.devhubconnect.com/dashboard';
- } else {
-   // Proceed with GitHub authentication for initial login/register using absolute custom domain URL
-   window.location.href = 'https://www.devhubconnect.com/auth/github';
- }
- 
- return <div>Redirecting to {purchaseSuccess ? 'dashboard' : 'GitHub authentication'}...</div>;
+  const urlParams = new URLSearchParams(window.location.search);
+  const purchaseSuccess = urlParams.get('purchase') === 'success';
+  
+  if (purchaseSuccess) {
+    window.location.href = 'https://www.devhubconnect.com/dashboard';
+  } else {
+    window.location.href = 'https://www.devhubconnect.com/auth/github';
+  }
+  
+  return <div>Redirecting to {purchaseSuccess ? 'dashboard' : 'GitHub authentication'}...</div>;
 };
 
 const App = () => (
@@ -77,7 +74,8 @@ const App = () => (
               <Route path="/terms" element={<TermsOfService />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
 
-              {/* Authentication Routes - Redirect to GitHub OAuth with fix */}
+              {/* Authentication Routes */}
+              <Route path="/auth" element={<AuthPage />} />
               <Route path="/login" element={<GitHubAuthRedirect />} />
               <Route path="/register" element={<GitHubAuthRedirect />} />
               <Route path="/auth/success" element={<AuthSuccess />} />
