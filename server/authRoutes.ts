@@ -457,7 +457,7 @@ authRouter.get('/github/callback', callbackLimiter, async (req: Request, res: Re
        sameSite: 'lax',
        maxAge: 24 * 60 * 60 * 1000,
        path: '/',
-       domain: NODE_ENV === 'production' ? '.devhubconnect.com' : undefined  // FIX THIS LINE
+       domain: NODE_ENV === 'production' ? '.devhubconnect.com' : undefined
      });
 
      // 🔍 DEBUG: Verify session was created in database
