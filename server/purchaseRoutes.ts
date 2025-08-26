@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "./db";
-import { purchases, templates, users } from "../shared/schema";
+import { purchases, templates, users, sessions } from "../shared/schema"; // Fixed: Added sessions import
 import { eq } from "drizzle-orm";
 
 export const purchaseRouter = Router();
