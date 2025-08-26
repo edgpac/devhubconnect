@@ -1,4 +1,4 @@
-//API Configuration for DevHubConnect
+// API Configuration for DevHubConnect
 // This centralizes all API URLs and handles environment switching
 
 const isDevelopment = import.meta.env.DEV;
@@ -36,7 +36,10 @@ export const API_ENDPOINTS = {
 };
 
 // Helper function for making API calls with consistent options
-export const apiCall = async (url: string, options: RequestInit = {}) => {
+export const apiCall = async (endpoint: string, options: RequestInit = {}) => {
+  // Handle both relative and absolute URLs
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  
   const defaultOptions: RequestInit = {
     credentials: 'include',
     headers: {
