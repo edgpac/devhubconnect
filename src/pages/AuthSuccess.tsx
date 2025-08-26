@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/components/context/AuthProvider';
 import { toast } from 'sonner';
+import { apiCall } from '@/config/api';
 
 export const AuthSuccess = () => {
   const navigate = useNavigate();
@@ -54,13 +55,8 @@ export const AuthSuccess = () => {
         try {
           console.log('🔄 Checking backend session...');
           
-          const sessionResponse = await fetch('/auth/profile/session', {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          });
+          // FIXED: Use apiCall instead of raw fetch and correct endpoint
+          const sessionResponse = await apiCall('/api/auth/profile/session');
 
           if (sessionResponse.ok) {
             const sessionData = await sessionResponse.json();
@@ -151,7 +147,7 @@ export const AuthSuccess = () => {
           <p className="text-sm text-gray-600 text-center mb-4">{error}</p>
           <div className="flex space-x-3">
             <button
-              onClick={() => window.location.href = '/auth/github'}
+              onClick={() => window.location.href = 'https://www.devhubconnect.com/auth/github'}
               className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
             >
               Try Again

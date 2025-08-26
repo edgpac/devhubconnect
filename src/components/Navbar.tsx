@@ -151,9 +151,20 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
     setIsRefreshing(false);
   };
 
-  // ✅ FIXED: Handle GitHub authentication with proper absolute URL
+  // ✅ ENHANCED: Handle GitHub authentication with payment context preservation
   const handleGitHubAuth = () => {
     console.log('🔐 Redirecting to GitHub OAuth...');
+    
+    // Preserve payment context if coming from Stripe
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasPaymentParams = urlParams.has('session_id') || urlParams.has('payment_intent');
+    
+    if (hasPaymentParams) {
+      // Store payment context before OAuth
+      sessionStorage.setItem('payment_context', window.location.search);
+      console.log('💰 Stored payment context for post-auth restoration');
+    }
+    
     window.location.href = "https://www.devhubconnect.com/auth/github";
   };
 

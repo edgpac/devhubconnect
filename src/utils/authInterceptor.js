@@ -102,9 +102,9 @@ class AuthInterceptor {
           localStorage.removeItem('devhub_user');
           localStorage.removeItem('admin_auth');
           
-          // Redirect to login
-          if (window.location.pathname !== '/login') {
-            window.location.href = '/login';
+          // Redirect to GitHub OAuth - FIXED: Use absolute URL
+          if (window.location.pathname !== '/auth') {
+            window.location.href = 'https://www.devhubconnect.com/auth/github';
           }
           
           throw refreshError;

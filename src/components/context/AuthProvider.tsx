@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from "react";
+import { apiCall } from '../config/api';
 
 type User = {
   id: string;
@@ -33,14 +34,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('🔍 Checking session with backend...');
       
-      // ✅ FIXED: Use correct endpoint (no /api prefix)
-      const response = await fetch('/auth/profile/session', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      // FIXED: Use apiCall instead of raw fetch and correct endpoint
+      const response = await apiCall('/api/auth/profile/session');
 
       if (response.ok) {
         const data = await response.json();
@@ -191,13 +186,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('🔐 Starting logout...');
     
     try {
-      // Call backend logout - Fixed endpoint
-      await fetch('/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      // FIXED: Use apiCall instead of raw fetch and correct endpoint
+      const response = await apiCall('/api/auth/logout', {
+        method: 'POST'
       });
       console.log('✅ Backend logout successful');
     } catch (error) {

@@ -440,13 +440,13 @@ authRouter.get('/github/callback', callbackLimiter, async (req: Request, res: Re
      
      // ✅ SECURE: Set secure HTTP-only cookie
      res.cookie('devhub_session', sessionId, {
-       httpOnly: true,
-       secure: NODE_ENV === 'production',
-       sameSite: 'lax',
-       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-       path: '/',
-       domain: NODE_ENV === 'production' ? '.devhubconnect.com' : undefined
-     });
+      httpOnly: true,
+      secure: NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      path: '/',
+      domain: NODE_ENV === 'production' ? '.devhubconnect.com' : undefined
+    });
      
      // 🔍 DEBUG: Log what we're setting
      console.log(`🔍 DEBUG: Setting cookie devhub_session = ${sessionId}`);
@@ -457,7 +457,7 @@ authRouter.get('/github/callback', callbackLimiter, async (req: Request, res: Re
        sameSite: 'lax',
        maxAge: 24 * 60 * 60 * 1000,
        path: '/',
-       domain: NODE_ENV === 'production' ? undefined : undefined
+       domain: NODE_ENV === 'production' ? '.devhubconnect.com' : undefined  // FIX THIS LINE
      });
 
      // 🔍 DEBUG: Verify session was created in database

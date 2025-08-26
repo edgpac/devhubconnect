@@ -3,6 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { Navbar } from '../components/Navbar'; // Adjust path if necessary
 import { Button } from '../components/ui/button'; // Adjust path if necessary
+import { apiCall } from '../config/api';
 
 export const SuccessPage = () => {
   const location = useLocation();
@@ -15,8 +16,8 @@ export const SuccessPage = () => {
 
     const verifyPayment = async (id: string) => {
       try {
-        // ✅ Replace the simulated call with an actual fetch to your backend
-        const response = await fetch(`https://www.devhubconnect.com/api/stripe/verify-payment?session_id=${id}`);
+        // FIXED: Use apiCall instead of raw fetch for consistent API handling
+        const response = await apiCall(`/api/stripe/verify-payment?session_id=${id}`);
         const data = await response.json();
 
         if (response.ok && data.status === 'paid') {
@@ -81,4 +82,3 @@ export const SuccessPage = () => {
     </div>
   );
 };
-

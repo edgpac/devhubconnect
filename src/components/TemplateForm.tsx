@@ -59,17 +59,14 @@ export default function TemplateForm() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/ai/generate-template-details', {
-  method: 'POST',
-  credentials: 'include',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    workflowJson: formData.workflowJson,
-    templateName: formData.title,
-    description: formData.description
-  }),
+      // FIXED: Use apiCall instead of raw fetch
+      const response = await apiCall('/api/ai/generate-template-details', {
+        method: 'POST',
+        body: JSON.stringify({
+          workflowJson: formData.workflowJson,
+          templateName: formData.title,
+          description: formData.description
+        }),
       });
 
       if (!response.ok) {

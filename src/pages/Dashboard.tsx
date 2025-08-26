@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { apiCall } from '@/config/api';
 
 import { 
   ShoppingBag, 
@@ -55,10 +56,8 @@ export const Dashboard = () => {
           await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
         }
 
-        // Use your existing session endpoint
-        const response = await fetch('/auth/profile/session', {
-          credentials: 'include'
-        });
+        // FIXED: Use apiCall instead of raw fetch and correct endpoint
+        const response = await apiCall('/api/auth/profile/session');
 
         if (response.ok) {
           setIsAuthenticated(true);
@@ -74,7 +73,7 @@ export const Dashboard = () => {
            window.history.replaceState({}, '', newUrl.toString());
          }
        } else {
-         // If auth fails and this is NOT a Stripe return, redirect to GitHub using absolute custom domain URL
+         // FIXED: Use absolute URL for GitHub OAuth redirect
          if (!isStripeReturn) {
            window.location.href = 'https://www.devhubconnect.com/auth/github';
            return;
@@ -84,9 +83,8 @@ export const Dashboard = () => {
           console.log('First auth check failed for Stripe return, trying again...');
           await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 more seconds
           
-          const retryResponse = await fetch('/auth/profile/session', {
-            credentials: 'include'
-          });
+          // FIXED: Use apiCall for retry attempt
+          const retryResponse = await apiCall('/api/auth/profile/session');
           
           if (retryResponse.ok) {
             setIsAuthenticated(true);
@@ -94,7 +92,8 @@ export const Dashboard = () => {
           } else {
             console.log('Auth failed after Stripe - redirecting to GitHub');
             toast.error('Session expired during checkout. Please sign in again.');
-            window.location.href = '/auth/github';
+            // FIXED: Use absolute URL for GitHub OAuth redirect
+            window.location.href = 'https://www.devhubconnect.com/auth/github';
             return;
           }
         }
@@ -105,7 +104,8 @@ export const Dashboard = () => {
           toast.error('Authentication failed after purchase. Please sign in again.');
         }
         
-        window.location.href = '/auth/github';
+        // FIXED: Use absolute URL for GitHub OAuth redirect
+        window.location.href = 'https://www.devhubconnect.com/auth/github';
       } finally {
         setAuthLoading(false);
       }
@@ -120,10 +120,8 @@ export const Dashboard = () => {
 
     const fetchPurchases = async () => {
       try {
-        const response = await fetch('/api/user/purchases', {
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' }
-        });
+        // FIXED: Use apiCall instead of raw fetch
+        const response = await apiCall('/api/user/purchases');
         
         if (response.ok) {
           const data = await response.json();
@@ -159,10 +157,8 @@ export const Dashboard = () => {
 
     const fetchRecommendations = async () => {
       try {
-        const response = await fetch('/api/recommendations?limit=12', {
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' }
-        });
+        // FIXED: Use apiCall instead of raw fetch
+        const response = await apiCall('/api/recommendations?limit=12');
         
         if (response.ok) {
           const data = await response.json();

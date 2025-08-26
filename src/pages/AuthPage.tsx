@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Github, ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from "sonner";
+import { apiCall, API_ENDPOINTS } from '../config/api';
 
 // ✅ Corrected useAuth import based on actual file path
 import { useAuth } from "@/components/context/AuthProvider";
@@ -40,9 +41,8 @@ export const AuthPage = () => {
 
   const checkAuthStatus = async () => {
     try {
-      const response = await fetch('/api/auth/user', {
-        credentials: 'include'
-      });
+      // FIXED: Use apiCall instead of raw fetch
+      const response = await apiCall('/api/auth/user');
       
       if (response.ok) {
         // User is already authenticated, redirect to dashboard or intended page
@@ -57,10 +57,8 @@ export const AuthPage = () => {
     try {
       setIsLoading(true);
       
-      // Verify authentication with backend
-      const response = await fetch('/api/auth/user', {
-        credentials: 'include'
-      });
+      // FIXED: Use apiCall instead of raw fetch
+      const response = await apiCall('/api/auth/user');
       
       if (response.ok) {
         const userData = await response.json();
@@ -86,7 +84,7 @@ export const AuthPage = () => {
     }
   };
 
-  // ✅ FIX: Updated handleGithubAuth to redirect to backend's GitHub OAuth initiation endpoint
+  // ✅ FIXED: GitHub OAuth initiation with absolute URL
   const handleGithubAuth = () => {
     setIsLoading(true);
     setAuthError(null);
@@ -96,8 +94,7 @@ export const AuthPage = () => {
       sessionStorage.setItem('auth_redirect', from);
     }
     
-    // Redirect to your backend's GitHub OAuth initiation route
-    // This route on your backend will then redirect to GitHub's authorization page.
+    // FIXED: Use absolute URL for GitHub OAuth initiation
     window.location.href = "https://www.devhubconnect.com/auth/github";
   };
 
