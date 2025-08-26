@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from "react";
-import { apiCall } from '../config/api.ts';
+import { apiCall, API_ENDPOINTS } from '@/config/api.ts';
 
 type User = {
   id: string;
@@ -9,13 +9,12 @@ type User = {
   isAdmin?: boolean;
   username?: string;
   github_id?: string;
-  avatar?: string;  // ✅ FIXED: Added avatar field
+  avatar?: string;
 };
 
 type AuthContextType = {
   currentUser: User | null;
-  token: string | null;
-  login: (token: string, user: User) => void;
+  login: (user: User) => void;
   logout: () => void;
   setUser: (user: User) => void;
   isLoading: boolean;
@@ -26,22 +25,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Simple session check function
+  // Session check function - relies on session cookies only
   const checkSession = async () => {
     try {
-      console.log('🔍 Checking session with backend...');
+      console.log('Checking session with backend...');
       
-      // FIXED: Use apiCall instead of raw fetch and correct endpoint
-      const response = await apiCall('/api/auth/profile/session');
+      const response = await apiCall(API_ENDPOINTS.AUTH_SESSION);
 
       if (response.ok) {
         const data = await response.json();
-        // ✅ FIXED: Backend returns flat user data, not nested in success/user
+        
         if (data && data.id) {
-          console.log('✅ Session valid:', data.email || data.name);
+          console.log('Session valid:', data.email || data.name);
           
           const user = {
             id: data.id,
@@ -51,35 +48,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isAdmin: data.isAdmin || data.role === 'admin',
             username: data.name || data.email?.split('@')[0],
             github_id: data.id,
-            avatar: data.avatar || data.avatar_url  // ✅ FIXED: Map avatar field
+            avatar: data.avatar || data.avatar_url
           };
           
           setCurrentUser(user);
-          setToken('session'); // Use 'session' as token indicator
           
-          // ✅ FIXED: Store session token, not JWT
-          localStorage.setItem('token', 'session');
+          // Cache user profile for UI performance only
           localStorage.setItem('devhub_user', JSON.stringify(user));
           
           return;
         }
       }
       
-      console.log('❌ No valid session found');
+      console.log('No valid session found');
       clearAuth();
       
     } catch (error) {
-      console.error('❌ Session check error:', error);
+      console.error('Session check error:', error);
       // Don't clear auth on network errors, just log them
     }
   };
 
-  // ✅ NEW: Handle OAuth callback
+  // Handle OAuth callback
   const handleOAuthCallback = async () => {
     const urlParams = new URLSearchParams(window.location.search);
     
     if (urlParams.get('success') === 'true') {
-      console.log('🎉 OAuth success detected! Checking session...');
+      console.log('OAuth success detected! Checking session...');
       
       // Clean URL first
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -90,51 +85,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Check for new session
       await checkSession();
     } else if (urlParams.get('auth_error')) {
-      console.log('❌ OAuth error detected:', urlParams.get('auth_error'));
+      console.log('OAuth error detected:', urlParams.get('auth_error'));
       clearAuth();
-      // Could show toast/alert here
     }
   };
 
   // Clear authentication state
   const clearAuth = () => {
-    console.log('🔓 Clearing auth state');
+    console.log('Clearing auth state');
     setCurrentUser(null);
-    setToken(null);
-    localStorage.removeItem('token');
     localStorage.removeItem('devhub_user');
   };
 
   // Initialize auth on app startup
   useEffect(() => {
     const initAuth = async () => {
-      console.log('🚀 Initializing Auth Checker...');
+      console.log('Initializing Auth Checker...');
       
-      // ✅ NEW: Handle OAuth callback first
+      // Handle OAuth callback first
       await handleOAuthCallback();
       
-      // Check if we have stored auth
-      const storedToken = localStorage.getItem('token');
+      // Check for cached user profile to prevent flash
       const storedUserStr = localStorage.getItem('devhub_user');
       
-      if (storedToken && storedUserStr) {
+      if (storedUserStr) {
         try {
           const storedUser = JSON.parse(storedUserStr);
-          console.log('🔍 Found stored auth for:', storedUser.email || storedUser.username);
+          console.log('Found cached user profile:', storedUser.email || storedUser.username);
           
           // Set immediately to prevent flash
           setCurrentUser(storedUser);
-          setToken(storedToken);
           
-          // Verify with backend in the background
+          // Verify session is still valid in background
           await checkSession();
         } catch (error) {
-          console.error('❌ Error parsing stored user:', error);
+          console.error('Error parsing cached user:', error);
           clearAuth();
         }
       } else {
-        console.log('🔍 No stored auth found');
-        // Still check for existing session
+        console.log('No cached user found');
+        // Check for existing session
         await checkSession();
       }
       
@@ -144,9 +134,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  // Login function
-  const login = (newToken: string, user: User) => {
-    console.log('🔐 Login for:', user.email || user.username);
+  // Login function - session cookies handled by browser automatically
+  const login = (user: User) => {
+    console.log('Login for:', user.email || user.username);
     
     const enhancedUser = {
       ...user,
@@ -154,18 +144,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setCurrentUser(enhancedUser);
-    setToken(newToken);
     
-    // Store in localStorage
-    localStorage.setItem('token', newToken);
+    // Cache user profile for UI performance
     localStorage.setItem('devhub_user', JSON.stringify(enhancedUser));
     
-    console.log('✅ Login successful for:', enhancedUser.email || enhancedUser.username);
+    console.log('Login successful for:', enhancedUser.email || enhancedUser.username);
   };
 
   // Set user function (for manual updates)
   const setUser = (user: User) => {
-    console.log('🔄 Setting user:', user.email || user.username);
+    console.log('Setting user:', user.email || user.username);
     
     const enhancedUser = {
       ...user,
@@ -173,32 +161,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     
     setCurrentUser(enhancedUser);
-    setToken('session');
     
-    localStorage.setItem('token', 'session');
+    // Update cached profile
     localStorage.setItem('devhub_user', JSON.stringify(enhancedUser));
     
-    console.log('✅ User updated:', enhancedUser.email || enhancedUser.username);
+    console.log('User updated:', enhancedUser.email || enhancedUser.username);
   };
 
-  // Logout function
+  // Logout function - clears session cookie on backend
   const logout = async () => {
-    console.log('🔐 Starting logout...');
+    console.log('Starting logout...');
     
     try {
-      // FIXED: Use apiCall instead of raw fetch and correct endpoint
-      const response = await apiCall('/api/auth/logout', {
+      const response = await apiCall(API_ENDPOINTS.AUTH_LOGOUT, {
         method: 'POST'
       });
-      console.log('✅ Backend logout successful');
+      console.log('Backend logout successful');
     } catch (error) {
-      console.error('❌ Backend logout error:', error);
+      console.error('Backend logout error:', error);
     }
 
     // Clear local state
     clearAuth();
     
-    console.log('✅ Logout complete, redirecting...');
+    console.log('Logout complete, redirecting...');
     window.location.href = '/';
   };
 
@@ -217,7 +203,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider value={{ 
       currentUser, 
-      token, 
       login, 
       logout, 
       setUser,

@@ -14,17 +14,17 @@ interface AuthContextType {
   isLoading: boolean;
 }
 
-// 🔒 SECURITY: Hybrid auth hook supporting both session and admin JWT
+// Session-based auth hook - no JWT token logic
 const useAuth = (): AuthContextType => {
   const [user, setUser] = React.useState<User | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
-  const { currentUser: sessionUser, token: sessionToken, isLoading: providerLoading } = useAuthProvider();
+  const { currentUser: sessionUser, isLoading: providerLoading } = useAuthProvider();
 
   React.useEffect(() => {
     const checkAuth = () => {
       try {
-        // 🔒 SECURITY: Primary - Use session-based authentication for regular users
-        if (sessionUser && sessionToken) {
+        // Use session-based authentication only
+        if (sessionUser) {
           setUser({
             id: sessionUser.id,
             email: sessionUser.email,
@@ -32,36 +32,6 @@ const useAuth = (): AuthContextType => {
             isAdmin: sessionUser.isAdmin || false
           });
           return;
-        }
-
-        // 🔒 SECURITY: Secondary - Check for admin JWT token (matches backend)
-        const adminToken = localStorage.getItem('token');
-        const adminAuth = localStorage.getItem('admin_auth');
-        
-        if (adminToken && adminAuth === 'true') {
-          try {
-            // Verify token is still valid (basic check)
-            const tokenPayload = JSON.parse(atob(adminToken.split('.')[1]));
-            const now = Math.floor(Date.now() / 1000);
-            
-            if (tokenPayload.exp && tokenPayload.exp > now && tokenPayload.isAdmin) {
-              setUser({
-                id: tokenPayload.id || 'admin_user_id',
-                email: 'admin@devhubconnect.com',
-                role: 'admin',
-                isAdmin: true
-              });
-              return;
-            } else {
-              // Token expired or invalid, clean up
-              localStorage.removeItem('token');
-              localStorage.removeItem('admin_auth');
-            }
-          } catch (error) {
-            console.error('Invalid admin token format:', error);
-            localStorage.removeItem('token');
-            localStorage.removeItem('admin_auth');
-          }
         }
 
         // No valid authentication found
@@ -77,19 +47,18 @@ const useAuth = (): AuthContextType => {
     };
 
     checkAuth();
-  }, [sessionUser, sessionToken, providerLoading]);
+  }, [sessionUser, providerLoading]);
 
   return { user, isLoading };
 };
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'user' | 'admin';           // ✅ KEEP: Backward compatibility
-  requireAdmin?: boolean;                     // ✅ NEW: Modern prop
-  requireCreatorOrAdmin?: boolean;            // ✅ NEW: Modern prop
+  requiredRole?: 'user' | 'admin';
+  requireAdmin?: boolean;
+  requireCreatorOrAdmin?: boolean;
 }
 
-// 🔒 SECURITY: Enhanced ProtectedRoute with backward compatibility
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
   children, 
   requiredRole,
@@ -110,46 +79,46 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // 🔒 SECURITY: Redirect to login if no user
+  // Redirect to GitHub OAuth if no user
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/auth" replace />;
   }
 
-  // 🔒 SECURITY: Normalize admin checking (handles both old and new props)
+  // Normalize admin checking (handles both old and new props)
   const needsAdmin = requireAdmin || requiredRole === 'admin';
   const needsUser = requiredRole === 'user';
 
-  // 🔒 SECURITY: Admin-only route protection
+  // Admin-only route protection
   if (needsAdmin && !user.isAdmin) {
     console.warn(`Access denied: User ${user.email} attempted to access admin route`);
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
-  // 🔒 SECURITY: Creator or Admin route protection
+  // Creator or Admin route protection
   if (requireCreatorOrAdmin && !user.isAdmin) {
     // Note: In a real app, you'd also check if user is the creator of the specific resource
     console.warn(`Access denied: User ${user.email} attempted to access creator/admin route`);
     return <Navigate to="/dashboard" replace />;
   }
 
-  // 🔒 SECURITY: User-only routes (admins can access these too)
+  // User-only routes (admins can access these too)
   if (needsUser && !user) {
     console.warn(`Access denied: No user for user-required route`);
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/auth" replace />;
   }
 
-  // 🔒 SECURITY: Log successful access for audit purposes
+  // Log successful access for audit purposes
   const accessType = needsAdmin ? 'admin' : 
                     requireCreatorOrAdmin ? 'creator/admin' : 
                     needsUser ? 'user' :
                     'protected';
   
-  console.log(`✅ Access granted: ${user.email} (${user.role}) → ${accessType} route`);
+  console.log(`Access granted: ${user.email} (${user.role}) → ${accessType} route`);
   
   return <>{children}</>;
 };
 
-// 🔒 SECURITY: Hook for components to check user permissions
+// Hook for components to check user permissions
 export const useUserPermissions = () => {
   const { user } = useAuth();
   
@@ -166,7 +135,7 @@ export const useUserPermissions = () => {
   };
 };
 
-// 🔒 SECURITY: Admin-only wrapper component
+// Admin-only wrapper component
 export const AdminOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <ProtectedRoute requireAdmin>
@@ -175,7 +144,7 @@ export const AdminOnly: React.FC<{ children: React.ReactNode }> = ({ children })
   );
 };
 
-// 🔒 SECURITY: User-only wrapper component  
+// User-only wrapper component  
 export const UserOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <ProtectedRoute requiredRole="user">

@@ -59,7 +59,6 @@ export default function TemplateForm() {
 
     setLoading(true);
     try {
-      // FIXED: Use apiCall instead of raw fetch
       const response = await apiCall('/api/ai/generate-template-details', {
         method: 'POST',
         body: JSON.stringify({
@@ -75,7 +74,6 @@ export default function TemplateForm() {
 
       const data = await response.json();
       
-      // Parse AI response (you might need to adjust this based on your AI response format)
       setFormData(prev => ({
         ...prev,
         title: data.title || data.response?.title || '',
@@ -143,9 +141,6 @@ export default function TemplateForm() {
     try {
       const response = await apiCall(API_ENDPOINTS.TEMPLATES, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
         body: JSON.stringify({
           name: formData.title,
           description: formData.description,
@@ -405,7 +400,6 @@ export default function TemplateForm() {
         }}
         onDownload={() => {
           toast.info('This is a preview - template not yet created');
-          setShowPreview(false);
         }}
       />
     </div>
