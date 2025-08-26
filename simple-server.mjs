@@ -15,7 +15,6 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
-import recommendationsRouter from './server/recommendationsRoutes.js';
 import purchaseRouter from './purchaseRouter.js';
 import cookieParser from 'cookie-parser';
 import Groq from 'groq-sdk';  // ✅ FIXED: Added missing Groq import
@@ -352,7 +351,7 @@ if (process.env.NODE_ENV !== 'production') {
   console.log('  - GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'SET' : 'NOT SET');
 }
 
-// ✅ PART 2: AI FUNCTIONS & SECURITY - ALL FIXES APPLIED WITH CORRECT MODEL
+// ✅ PART 2: AI FUNCTIONS & SECURITY
 
 // ✅ ENHANCED: Template analysis with Groq AI - SECURE & COMPLETE
 async function analyzeTemplateQuestion(prompt, templateContext, userId) {
