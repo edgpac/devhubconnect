@@ -98,7 +98,7 @@ export const AuthPage = () => {
     
     // Redirect to your backend's GitHub OAuth initiation route
     // This route on your backend will then redirect to GitHub's authorization page.
-    window.location.href = "/auth/github";
+    window.location.href = "https://www.devhubconnect.com/auth/github";
   };
 
   if (isLoading) {
