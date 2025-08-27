@@ -86,29 +86,21 @@ function checkAIRateLimit(userId) {
 // ✅ MIDDLEWARE SETUP - CORRECT ORDER
 app.use(cookieParser());
 
+app.use(express.urlencoded({ extended: true }));
+
 // CRITICAL FIX: Domain redirect middleware for Railway domain
 app.use((req, res, next) => {
   const host = req.get('Host');
   if (host && host.includes('railway.app')) {
+    // Skip redirect for CORS preflight requests
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
+    
     const targetDomain = process.env.FRONTEND_URL || 'https://www.devhubconnect.com';
     console.log(`🔄 Redirecting Railway domain ${host} to ${targetDomain}`);
     return res.redirect(301, `${targetDomain}${req.url}`);
   }
-  next();
-});
-
-app.use(express.urlencoded({ extended: true }));
-
-// ✅ DEBUG: Add request logging
-app.use((req, res, next) => {
-  console.log(`📥 ${req.method} ${req.path}`);
-  
-  // Log asset requests specifically
-  if (req.path.startsWith('/assets/')) {
-    console.log('🎯 Asset request detected:', req.path);
-    console.log('📄 File extension:', path.extname(req.path));
-  }
-  
   next();
 });
 
