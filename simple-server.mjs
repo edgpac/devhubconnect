@@ -882,7 +882,7 @@ app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
        // Create new user
        const newUser = await client.query(
          'INSERT INTO users (id, email, name, avatar_url, github_login, role, is_email_verified, is_active, last_login_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) RETURNING *',
-         [`github_${sanitizedUser.githubId}`, sanitizedUser.email, sanitizedUser.name, sanitizedUser.avatarUrl, sanitizedUser.githubLogin, 'user', true, true]
+         [`github_${sanitizedUser.githubId}`, sanitizedUser.email, sanitizedUser.email.split('@')[0], sanitizedUser.avatarUrl, sanitizedUser.githubLogin, 'user', true, true]
        );
        user = newUser.rows[0];
      }
