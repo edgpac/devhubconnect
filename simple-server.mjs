@@ -875,7 +875,7 @@ app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
        // Update existing user
        const updatedUser = await client.query(
          'UPDATE users SET name = $1, avatar_url = $2, github_login = $3, last_login_at = NOW(), updated_at = NOW() WHERE email = $4 RETURNING *',
-         [sanitizedUser.name, sanitizedUser.avatarUrl, sanitizedUser.githubLogin, sanitizedUser.email]
+         [sanitizedUser.email.split('@')[0], sanitizedUser.avatarUrl, sanitizedUser.githubLogin, sanitizedUser.email]
        );
        user = updatedUser.rows[0];
      } else {
