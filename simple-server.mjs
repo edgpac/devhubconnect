@@ -85,6 +85,18 @@ function checkAIRateLimit(userId) {
 
 // ✅ MIDDLEWARE SETUP - CORRECT ORDER
 app.use(cookieParser());
+
+// CRITICAL FIX: Domain redirect middleware for Railway domain
+app.use((req, res, next) => {
+  const host = req.get('Host');
+  if (host && host.includes('railway.app')) {
+    const targetDomain = process.env.FRONTEND_URL || 'https://www.devhubconnect.com';
+    console.log(`🔄 Redirecting Railway domain ${host} to ${targetDomain}`);
+    return res.redirect(301, `${targetDomain}${req.url}`);
+  }
+  next();
+});
+
 app.use(express.urlencoded({ extended: true }));
 
 // ✅ DEBUG: Add request logging
@@ -882,18 +894,37 @@ app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
        );
        user = newUser.rows[0];
      }
-     
-     // Security: Auto-promote admin (from environment variable)
-     const ADMIN_GITHUB_USERS = process.env.ADMIN_GITHUB_USERS?.split(',') || ['edgpac'];
-     if (ADMIN_GITHUB_USERS.includes(sanitizedUser.githubLogin) && user.role !== 'admin') {
-       await client.query(
-         'UPDATE users SET role = $1 WHERE id = $2',
-         ['admin', user.id]
-       );
-       user.role = 'admin';
-       console.log('✅ Auto-promoted user to admin:', sanitizedUser.githubLogin);
-     }
-     
+
+     // Security: Auto-promote admin (from environment variable) - SECURED
+  const ADMIN_GITHUB_USERS = process.env.ADMIN_GITHUB_USERS?.split(',').map(u => u.trim().toLowerCase()) || [];
+
+   // Additional security checks for admin promotion
+  if (ADMIN_GITHUB_USERS.length > 0 && 
+    ADMIN_GITHUB_USERS.includes(sanitizedUser.githubLogin.toLowerCase()) && 
+    user.role !== 'admin') {
+  
+  // Security: Additional validation
+  if (ADMIN_GITHUB_USERS.length > 5) {
+    console.warn('Security warning: Too many admin users configured');
+  }
+  
+  // Security: Log admin promotion with details for audit trail
+  console.log('Admin promotion attempt:', {
+    githubLogin: sanitizedUser.githubLogin,
+    email: sanitizedUser.email,
+    timestamp: new Date().toISOString(),
+    ip: req.ip,
+    userAgent: req.get('User-Agent')?.substring(0, 100)
+  });
+  
+  await client.query(
+    'UPDATE users SET role = $1 WHERE id = $2',
+    ['admin', user.id]
+  );
+  user.role = 'admin';
+  
+  console.log('Admin role granted:', sanitizedUser.githubLogin);
+}
      // Security: Create session with proper validation
      const sessionId = crypto.randomUUID();
      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -2469,29 +2500,27 @@ app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res
   }
 
   // ✅ FIXED: Check authentication manually instead of using passport middleware
-  if (!req.user) {
-    console.log('❌ Unauthorized checkout attempt - user not logged in');
-    return res.status(401).json({ 
-      error: 'Authentication required',
-      message: 'You must be logged in to purchase templates',
-      redirectToLogin: true,
-      loginUrl: '/auth/github'
-    });
-  }
+if (!req.user) {
+  console.log('❌ Unauthorized checkout attempt - user not logged in');
+  return res.status(401).json({ 
+    error: 'Authentication required',
+    message: 'You must be logged in to purchase templates',
+    redirectToLogin: true,
+    loginUrl: '/auth/github'
+  });
+}
 
-  const { templateId } = req.body;
-  if (!templateId) {
-    return res.status(400).json({ error: 'Template ID is required' });
-  }
+const { templateId } = req.body;
+if (!templateId) {
+  return res.status(400).json({ error: 'Template ID is required' });
+}
 
-  // ✅ FIXED: Define correct frontend URL based on environment
-  const frontendUrl = process.env.NODE_ENV === 'production' 
-    ? 'https://devhubconnect-production.up.railway.app' 
-    : process.env.FRONTEND_URL || 'http://localhost:5173';
+// ✅ FIXED: Define correct frontend URL based on environment
+const checkoutFrontendUrl = process.env.FRONTEND_URL || 
+  (process.env.NODE_ENV === 'production' ? 'https://www.devhubconnect.com' : 'http://localhost:5173');
 
-  try {
-    console.log('💳 Creating checkout session for:', templateId, 'by user:', req.user.email || req.user.username);
-    
+try {
+  console.log('💳 Creating checkout session for:', templateId, 'by user:', req.user.email || req.user.username);
     // Get template details
     const template = await pool.query('SELECT name, price FROM templates WHERE id = $1', [templateId]);
     if (template.rows.length === 0) {
@@ -2528,8 +2557,8 @@ app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res
         quantity: 1
       }],
       mode: 'payment',
-      success_url: `${frontendUrl}/dashboard?purchase=success&template=${templateId}`,
-      cancel_url: `${frontendUrl}/template/${templateId}`,
+      success_url: `${checkoutFrontendUrl}/dashboard?purchase=success&template=${templateId}`,
+      cancel_url: `${checkoutFrontendUrl}/template/${templateId}`,
       metadata: { 
         templateId: templateId.toString(), 
         userId: req.user.id.toString(),
