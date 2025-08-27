@@ -1,83 +1,81 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>DevHubConnect - Premium Automation Templates</title>
-    <meta name="description" content="Discover and purchase premium automation workflow templates. Save development time with our curated collection." />
-    <meta name="author" content="DevHubConnect" />
+  <title>DevHubConnect - Premium Automation Templates</title>
+  <meta name="description" content="Discover and purchase premium automation workflow templates. Save development time with our curated collection." />
+  <meta name="author" content="DevHubConnect" />
 
-    <!-- Open Graph -->
-    <meta property="og:title" content="DevHubConnect - Premium Automation Templates" />
-    <meta property="og:description" content="Discover and purchase premium automation workflow templates. Save development time with our curated collection." />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-    <meta property="og:url" content="https://devhubconnect-production.up.railway.app" />
+  <!-- Open Graph -->
+  <meta property="og:title" content="DevHubConnect - Premium Automation Templates" />
+  <meta property="og:description" content="Discover and purchase premium automation workflow templates. Save development time with our curated collection." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.devhubconnect.com" />
 
-    <!-- Twitter Cards -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@devhubconnect" />
-    <meta name="twitter:title" content="DevHubConnect - Premium Automation Templates" />
-    <meta name="twitter:description" content="Discover and purchase premium automation workflow templates. Save development time with our curated collection." />
-    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+  <!-- Twitter Cards -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@devhubconnect" />
+  <meta name="twitter:title" content="DevHubConnect - Premium Automation Templates" />
+  <meta name="twitter:description" content="Discover and purchase premium automation workflow templates. Save development time with our curated collection." />
 
-    <!-- Favicon (Expanded Support) -->
-    <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="icon" type="image/png" href="/apple-touch-icon.png">
+  <!-- Favicon (Expanded Support) -->
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
-    <!-- Preconnect to improve image CDN load time -->
-    <link rel="preconnect" href="https://lovable.dev" crossorigin />
-    <link rel="preconnect" href="https://i.ibb.co" crossorigin />
+  <!-- Preconnect to improve image CDN load time -->
+  <link rel="preconnect" href="https://i.ibb.co" crossorigin />
 
-    <!-- Optional: Boost lazy loading with low fetch priority (no script required) -->
-    <meta name="fetchpriority" content="low" />
+  <!-- Optional: Boost lazy loading with low fetch priority (no script required) -->
+  <meta name="fetchpriority" content="low" />
 
-    <!-- Minimal OAuth Callback Handler -->
-    <script>
-      // Only handle OAuth callback URL cleanup - React handles the rest
-      (function() {
-        const urlParams = new URLSearchParams(window.location.search);
+  <!-- Minimal OAuth Callback Handler -->
+  <script>
+    // Only handle OAuth callback URL cleanup - React handles the rest
+    (function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      
+      // Clean up OAuth callback parameters from URL
+      if (urlParams.get('success') === 'true' || urlParams.get('auth_error')) {
+        console.log('🔄 OAuth callback detected, cleaning URL...');
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      // Handle error pages redirect to React app
+      if (urlParams.get('error') && window.location.pathname.includes('/auth/error')) {
+        console.log('🔄 Auth error detected, redirecting to React app...');
+        window.location.href = '/?auth_error=' + urlParams.get('error');
+      }
+    })();
+
+    // Global logout function for any legacy links
+    window.devHubLogout = async function() {
+      try {
+        const response = await fetch('/auth/logout', {
+          method: 'POST',
+          credentials: 'include'
+        });
         
-        // Clean up OAuth callback parameters from URL
-        if (urlParams.get('success') === 'true' || urlParams.get('auth_error')) {
-          console.log('🔄 OAuth callback detected, cleaning URL...');
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-
-        // Handle error pages redirect to React app
-        if (urlParams.get('error') && window.location.pathname.includes('/auth/error')) {
-          console.log('🔄 Auth error detected, redirecting to React app...');
-          window.location.href = '/?auth_error=' + urlParams.get('error');
-        }
-      })();
-
-      // Global logout function for any legacy links
-      window.devHubLogout = async function() {
-        try {
-          const response = await fetch('/auth/logout', {
-            method: 'POST',
-            credentials: 'include'
-          });
-          
-          if (response.ok) {
-            window.location.href = '/';
-          }
-        } catch (error) {
-          console.error('Logout error:', error);
-          // Force redirect even if logout fails
+        if (response.ok) {
           window.location.href = '/';
         }
-      };
-    </script>
-    <script type="module" crossorigin src="/assets/index-CVBkyE2X.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/vendor-BAbyG3wx.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-Cse-T5_L.css">
-  </head>
+      } catch (error) {
+        console.error('Logout error:', error);
+        // Force redirect even if logout fails
+        window.location.href = '/';
+      }
+    };
+  </script>
+  <script type="module" crossorigin src="/assets/index-CVBkyE2X.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/vendor-BAbyG3wx.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-Cse-T5_L.css">
+</head>
 
-  <body>
-    <div id="root"></div>
-  </body>
+<body>
+  <div id="root"></div>
+</body>
 </html>
