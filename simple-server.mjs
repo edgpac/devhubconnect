@@ -118,29 +118,33 @@ app.get('/assets/*.js', (req, res) => {
   
   // Send file directly
   res.sendFile(filePath, (err) => {
-    if (err) {
-      console.error('❌ Error serving JS file:', req.path, err);
+  if (err) {
+    console.error('❌ Error serving JS file:', req.path, err);
+    if (!res.headersSent) {
       res.status(404).send('JavaScript file not found');
-    } else {
-      console.log('✅ Successfully served JS file:', req.path);
     }
-  });
+  } else {
+    console.log('✅ Successfully served JS file:', req.path);
+  }
+});
 });
 
 // ✅ Handle CSS files (this is working)
 app.get('/assets/*.css', (req, res) => {
-  console.log('🔧 CSS route handler triggered for:', req.path);
-  
-  const filePath = path.join(__dirname, 'dist', req.path);
-  res.setHeader('Content-Type', 'text/css; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-  
-  res.sendFile(filePath, (err) => {
-    if (err) {
-      console.error('❌ Error serving CSS file:', req.path, err);
+console.log('🔧 CSS route handler triggered for:', req.path);
+
+const filePath = path.join(__dirname, 'dist', req.path);
+res.setHeader('Content-Type', 'text/css; charset=utf-8');
+res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+res.sendFile(filePath, (err) => {
+  if (err) {
+    console.error('❌ Error serving CSS file:', req.path, err);
+    if (!res.headersSent) {
       res.status(404).send('CSS file not found');
-    } else {
-      console.log('✅ Successfully served CSS file:', req.path);
+    }
+  } else {
+    console.log('✅ Successfully served CSS file:', req.path);
     }
   });
 });
