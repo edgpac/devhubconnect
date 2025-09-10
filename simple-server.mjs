@@ -154,6 +154,39 @@ app.use(express.static(path.join(__dirname, 'dist'), {
   index: false
 }));
 
+// ADD THE SITEMAP ROUTE HERE (after line 155)
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const templates = await pool.query(
+      'SELECT id, updated_at FROM templates WHERE is_public = true ORDER BY id'
+    );
+    
+    let sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.devhubconnect.com/</loc>
+    <priority>1.0</priority>
+  </url>`;
+    
+    templates.rows.forEach(template => {
+      sitemap += `
+  <url>
+    <loc>https://www.devhubconnect.com/template/${template.id}</loc>
+    <lastmod>${template.updated_at.toISOString().split('T')[0]}</lastmod>
+    <priority>0.8</priority>
+  </url>`;
+    });
+    
+    sitemap += '\n</urlset>';
+    
+    res.set('Content-Type', 'application/xml');
+    res.send(sitemap);
+  } catch (error) {
+    console.error('Sitemap error:', error);
+    res.status(500).send('Sitemap generation failed');
+  }
+});
+
 // ✅ CRITICAL FIX: STRIPE WEBHOOK MUST BE BEFORE express.json() AND FIXED PURCHASE LOGIC
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
   const sig = req.headers['stripe-signature'];
