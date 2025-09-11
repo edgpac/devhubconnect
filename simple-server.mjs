@@ -112,21 +112,41 @@ app.get('/assets/*.js', (req, res) => {
   console.log('📁 Looking for file at:', filePath);
   console.log('📄 File exists:', require('fs').existsSync(filePath));
   
+  // Handle client disconnect
+  req.on('close', () => {
+    console.log('🔌 Client disconnected during JS file serving:', req.path);
+  });
+  
   // Set headers FIRST
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   
-  // Send file directly
-  res.sendFile(filePath, (err) => {
-  if (err) {
-    console.error('❌ Error serving JS file:', req.path, err);
-    if (!res.headersSent) {
-      res.status(404).send('JavaScript file not found');
+  // Add error handling for the response stream
+  res.on('error', (err) => {
+    if (err.code === 'EPIPE' || err.code === 'ECONNRESET') {
+      console.log('🔌 Client disconnected:', req.path);
+      return; // Don't crash, just log
     }
-  } else {
-    console.log('✅ Successfully served JS file:', req.path);
-  }
-});
+    console.error('❌ Response error:', err);
+  });
+  
+  // Send file with better error handling
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      // Only handle if response isn't already closed
+      if (err.code === 'EPIPE' || err.code === 'ECONNRESET') {
+        console.log('🔌 Client disconnected during file send:', req.path);
+        return;
+      }
+      
+      console.error('❌ Error serving JS file:', req.path, err);
+      if (!res.headersSent && !res.destroyed) {
+        res.status(404).send('JavaScript file not found');
+      }
+    } else {
+      console.log('✅ Successfully served JS file:', req.path);
+    }
+  });
 });
 
 // ✅ Handle CSS files (this is working)
