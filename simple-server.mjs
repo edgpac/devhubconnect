@@ -169,23 +169,28 @@ res.sendFile(filePath, (err) => {
   });
 });
 
-// ✅ General static middleware for other files
-app.use(express.static(path.join(__dirname, 'dist'), {
-  index: false
-}));
-
-// ADD THE SITEMAP ROUTE HERE (after line 155)
+// ✅ CRITICAL FIX: SITEMAP ROUTE MOVED BEFORE STATIC MIDDLEWARE
 app.get('/sitemap.xml', async (req, res) => {
   try {
+    console.log('🗺️ Generating dynamic sitemap with all templates...');
+    
     const templates = await pool.query(
       'SELECT id, updated_at FROM templates WHERE is_public = true ORDER BY id'
     );
+    
+    console.log(`📋 Found ${templates.rows.length} templates for sitemap`);
     
     let sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://www.devhubconnect.com/</loc>
+    <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.devhubconnect.com/dashboard</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
   </url>`;
     
     templates.rows.forEach(template => {
@@ -193,19 +198,41 @@ app.get('/sitemap.xml', async (req, res) => {
   <url>
     <loc>https://www.devhubconnect.com/template/${template.id}</loc>
     <lastmod>${template.updated_at.toISOString().split('T')[0]}</lastmod>
+    <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>`;
     });
     
+    // Add pagination pages
+    const templatesPerPage = 12;
+    const totalPages = Math.ceil(templates.rows.length / templatesPerPage);
+    
+    for (let page = 2; page <= Math.min(totalPages, 50); page++) {
+      sitemap += `
+  <url>
+    <loc>https://www.devhubconnect.com/?page=${page}</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`;
+    }
+    
     sitemap += '\n</urlset>';
+    
+    const urlCount = (sitemap.match(/<url>/g) || []).length;
+    console.log(`✅ Generated sitemap with ${urlCount} URLs (${templates.rows.length} templates + main pages + pagination)`);
     
     res.set('Content-Type', 'application/xml');
     res.send(sitemap);
   } catch (error) {
-    console.error('Sitemap error:', error);
+    console.error('❌ Sitemap error:', error);
     res.status(500).send('Sitemap generation failed');
   }
 });
+
+// ✅ General static middleware for other files - AFTER SITEMAP ROUTE
+app.use(express.static(path.join(__dirname, 'dist'), {
+  index: false
+}));
 
 // ✅ CRITICAL FIX: STRIPE WEBHOOK MUST BE BEFORE express.json() AND FIXED PURCHASE LOGIC
 app.post('/api/stripe/webhook', express.raw({type: 'application/json'}), async (req, res) => {
