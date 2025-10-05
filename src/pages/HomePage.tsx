@@ -310,10 +310,10 @@ export const HomePage = () => {
          <Navbar />
 
          {/* Hero Section */}
-         <section className="bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800 text-white py-20">
+         <section className="bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-800 text-white py-20">
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
              <h1 className="text-5xl font-bold mb-6">The Automation Platform</h1>
-             <p className="text-xl mb-8 text-blue-100 max-w-3xl mx-auto">
+             <p className="text-xl mb-8 text-teal-100 max-w-3xl mx-auto">
                We won't just hand you a solution, we'll build it for you.<br />
                Upload your template and get step by step assistance from our AI.<br />
                Save hours of development time with instantly deployable n8n solutions.
@@ -322,17 +322,17 @@ export const HomePage = () => {
                <div className="flex flex-col items-center">
                  <TrendingUp className="w-8 h-8 mb-2" />
                  <span className="text-2xl font-bold">{templates.length}+</span>
-                 <span className="text-blue-100">Templates</span>
+                 <span className="text-teal-100">Templates</span>
                </div>
                <div className="flex flex-col items-center">
                  <Users className="w-8 h-8 mb-2" />
                  <span className="text-2xl font-bold">7000+</span>
-                 <span className="text-blue-100">Users</span>
+                 <span className="text-teal-100">Users</span>
                </div>
                <div className="flex flex-col items-center">
                  <Star className="w-8 h-8 mb-2" />
                  <span className="text-2xl font-bold">4.9</span>
-                 <span className="text-blue-100">Rating</span>
+                 <span className="text-teal-100">Rating</span>
                </div>
              </div>
            </div>
@@ -358,7 +358,7 @@ export const HomePage = () => {
                    <Badge
                      key={category}
                      variant={selectedCategory === category ? 'default' : 'outline'}
-                     className="cursor-pointer hover:bg-blue-100 transition-colors capitalize whitespace-nowrap"
+                     className="cursor-pointer hover:bg-teal-100 transition-colors capitalize whitespace-nowrap"
                      onClick={() => handleFilterChange(category)}
                    >
                      {category === 'popular' && <TrendingUp className="w-3 h-3 mr-1.5" />}
