@@ -186,7 +186,7 @@ export const TemplateDetail = () => {
           <Navbar />
           <main className="container mx-auto px-4 py-8">
             <div className="flex justify-between items-center mb-6">
-              <Link to={backToTemplatesPath} className="text-blue-600 hover:underline flex items-center">
+              <Link to={backToTemplatesPath} className="text-primary hover:underline flex items-center">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to All Templates
               </Link>
@@ -234,7 +234,7 @@ export const TemplateDetail = () => {
 
                   {template.purchased ? (
                     <div className="space-y-3">
-                      <Button size="lg" className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => handleDownloadJson(template)}>
+                      <Button size="lg" className="w-full bg-primary hover:bg-primary/90" onClick={() => handleDownloadJson(template)}>
                         <Download className="w-5 h-5 mr-2" />
                         Download JSON
                       </Button>
@@ -246,7 +246,7 @@ export const TemplateDetail = () => {
                   ) : (
                     <Button
                       size="lg"
-                      className="w-full bg-purple-600 hover:bg-purple-700"
+                      className="w-full bg-primary hover:bg-primary/90"
                       onClick={handlePurchase}
                       disabled={isPurchasing}
                     >
