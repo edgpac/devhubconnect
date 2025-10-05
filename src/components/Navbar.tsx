@@ -175,10 +175,10 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link to="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">DH</span>
               </div>
-              <span className="text-xl font-bold text-gray-900">DevHub<span className="text-blue-600">Connect</span></span>
+              <span className="text-xl font-bold text-gray-900">DevHub<span className="text-primary">Connect</span></span>
             </Link>
             <div className="w-20 h-8 bg-gray-200 animate-pulse rounded"></div>
           </div>
@@ -192,10 +192,10 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link to="/" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">DH</span>
             </div>
-            <span className="text-xl font-bold text-gray-900">DevHub<span className="text-blue-600">Connect</span></span>
+            <span className="text-xl font-bold text-gray-900">DevHub<span className="text-primary">Connect</span></span>
           </Link>
 
           <div className="flex items-center space-x-4">
@@ -289,7 +289,7 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
               <div data-auth="sign-in" className="flex items-center">
                 <Button 
                   onClick={handleGitHubAuth}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                  className="bg-primary hover:bg-primary/90 text-white"
                   data-auth="github"
                   data-auth-nav="true"
                 >

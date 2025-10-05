@@ -270,7 +270,7 @@ const handlePurchase = async () => {
            className={`w-full ${
              template.purchased 
                ? "border-gray-300 text-gray-700 hover:bg-gray-50" 
-               : "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg"
+               : "bg-primary hover:bg-primary/90 text-white border-0 shadow-lg"
            }`}
            variant={template.purchased ? "outline" : "default"}
            onClick={handleDownload}
