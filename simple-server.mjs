@@ -1046,25 +1046,39 @@ app.get('/auth/github/callback', callbackLimiter, async (req, res) => {
 
 // ✅ SECURE: Session-based profile endpoint - returns flat user data as frontend expects
 app.get('/auth/profile/session', async (req, res) => {
+  // ✅ ADD THIS: Check if client is still connected
+  let clientDisconnected = false;
+  req.on('close', () => {
+    clientDisconnected = true;
+    console.log('🔌 Client disconnected during profile check');
+  });
+
   try {
     const sessionId = req.cookies?.devhub_session;
     console.log('🔍 DEBUG Profile Check:', {
-  sessionId: sessionId ? 'present' : 'missing',
-  sessionLength: sessionId?.length,
-  allCookies: Object.keys(req.cookies || {}),
-  userAgent: req.get('User-Agent')?.substring(0, 50),
-  referer: req.get('Referer')
-});
+      sessionId: sessionId ? 'present' : 'missing',
+      sessionLength: sessionId?.length,
+      allCookies: Object.keys(req.cookies || {}),
+      userAgent: req.get('User-Agent')?.substring(0, 50),
+      referer: req.get('Referer')
+    });
+    
     if (!sessionId || typeof sessionId !== 'string' || sessionId.length > 100) {
       return res.status(401).json({ 
         error: 'No valid session found' 
       });
     }
 
+    // ✅ Check before database call
+    if (clientDisconnected) return;
+
     const session = await pool.query(
       'SELECT user_id, expires_at FROM sessions WHERE id = $1 AND is_active = true',
       [sessionId]
     );
+
+    // ✅ Check before response
+    if (clientDisconnected) return;
 
     if (session.rows.length === 0 || new Date() > session.rows[0].expires_at) {
       return res.status(401).json({ 
@@ -1072,10 +1086,16 @@ app.get('/auth/profile/session', async (req, res) => {
       });
     }
 
+    // ✅ Check before next database call
+    if (clientDisconnected) return;
+
     const user = await pool.query(
       'SELECT id, email, name, avatar_url, role, created_at, last_login_at FROM users WHERE id = $1 AND is_active = true',
       [session.rows[0].user_id]
     );
+
+    // ✅ Check before sending response
+    if (clientDisconnected || res.headersSent) return;
 
     if (user.rows.length === 0) {
       return res.status(404).json({ 
@@ -1096,10 +1116,20 @@ app.get('/auth/profile/session', async (req, res) => {
     });
     
   } catch (error) {
+    // ✅ Handle ECONNRESET gracefully
+    if (error.code === 'ECONNRESET' || error.code === 'EPIPE') {
+      console.log('🔌 Client disconnected, request aborted gracefully');
+      return;
+    }
+    
     console.error('Profile check error:', error.message);
-    res.status(500).json({ 
-      error: 'Internal server error' 
-    });
+    
+    // Only send error if client still connected
+    if (!clientDisconnected && !res.headersSent) {
+      res.status(500).json({ 
+        error: 'Internal server error' 
+      });
+    }
   }
 });
 
