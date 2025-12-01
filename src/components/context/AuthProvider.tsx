@@ -81,16 +81,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Handle OAuth callback
-  const handleOAuthCallback = async () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    
-    // CRITICAL FIX: Only handle OAuth callbacks, not Stripe returns
-    const isStripeReturn = urlParams.get('purchase') === 'success';
-    
-    if (isStripeReturn) {
-      console.log('Stripe purchase return detected - skipping OAuth handler');
-      return; // Don't interfere with Stripe returns
-    }
+const handleOAuthCallback = async () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const search = window.location.search;
+  const hash = window.location.hash;
+
+  // Correct Stripe return detection
+  const isStripeReturn =
+    urlParams.has("session_id") ||
+    urlParams.has("payment_intent") ||
+    /cs_(?:test|live)_[A-Za-z0-9_-]+/.test(search) ||
+    /cs_(?:test|live)_[A-Za-z0-9_-]+/.test(hash);
+
+  if (isStripeReturn) {
+    console.log("⛔️ AuthProvider: Ignoring Stripe return URL");
+    return; // Do NOT process OAuth callback — this is Stripe.
+  }
     
     if (urlParams.get('success') === 'true') {
       console.log('OAuth success detected! Checking session...');
