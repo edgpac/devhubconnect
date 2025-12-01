@@ -1,4 +1,4 @@
-import { useParams, Link, useLocation } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Helmet, HelmetProvider } from "react-helmet-async";
 import { Navbar } from "../components/Navbar";
@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { ArrowLeft, ShoppingCart, Star, Eye, Edit, SlidersHorizontal, Share2, Download, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useAuth } from "@/components/context/AuthProvider"; // ✅ ADDED: Import useAuth
+import { useAuth } from "@/components/context/AuthProvider";
 import { API_ENDPOINTS, apiCall } from '../config/api';
 
 import { getDeterministicRandom } from "@/lib/utils";
@@ -15,17 +15,15 @@ import { loadStripe } from '@stripe/stripe-js';
 // REPLACE WITH YOUR ACTUAL STRIPE PUBLISHABLE KEY
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51RgVfSBS72lorg0VlXnIXjmsGBjriHLK36isBNmKnsbYjkHmTkz6Rp0hK0QboFaJLnzl0qA2FyLMq3hA5ofFEneN005HATkECJ');
 
-// ✅ FIXED: Updated interface to include backend fields
 interface Template {
   id: number;
   name: string;
   description: string;
   price: number;
   imageUrl?: string;
-  image_url?: string; // ✅ ADD: Backend field name
+  image_url?: string;
   workflowJson?: { nodes?: { id: string; name: string; type: string }[] };
-  workflow_json?: { nodes?: { id: string; name: string; type: string }[] }; // ✅ ADD: Backend field name
-  // ✅ ADD: Fields that backend actually sends
+  workflow_json?: { nodes?: { id: string; name: string; type: string }[] };
   steps?: number;
   integratedApps?: string[];
   workflowDetails?: {
@@ -78,9 +76,9 @@ async function fetchTemplateById(id: string | undefined): Promise<Template> {
 
 export const TemplateDetail = () => {
   const { id: templateIdParam } = useParams<{ id: string }>();
-  const location = useLocation();
+  const navigate = useNavigate();
   const [isPurchasing, setIsPurchasing] = useState(false);
-  const { currentUser } = useAuth(); // ✅ ADDED: Get current user from AuthProvider
+  const { currentUser } = useAuth();
 
   const templateId = templateIdParam;
 
@@ -97,10 +95,8 @@ export const TemplateDetail = () => {
   if (error) return <div className="text-center p-12 text-red-500">Error: {(error as Error).message}</div>;
   if (!template) return <div className="text-center p-12">Template not found.</div>;
 
-  // ✅ FIX: Use image_url from backend as fallback to imageUrl
   const imageUrl = template.imageUrl || template.image_url;
 
-  // ✅ DEBUG: Add console logging for investigation
   console.log('🔍 Template Debug Info:', {
     templateId: template.id,
     templateName: template.name,
@@ -114,20 +110,14 @@ export const TemplateDetail = () => {
     imageUrlLength: imageUrl?.length
   });
 
-  const searchParams = new URLSearchParams(location.search);
-  const currentPageFromUrl = searchParams.get('page');
-  const backToTemplatesPath = currentPageFromUrl ? `/?page=${currentPageFromUrl}` : `/`;
-
   const deterministicReviewCount = getDeterministicRandom(String(template.id), 16, 92);
   const deterministicViewsCount = getDeterministicRandom(String(template.id) + "-views", 300, 1500);
   const deterministicRating = (4 + getDeterministicRandom(String(template.id) + "-rating", 1, 9) / 10).toFixed(1);
 
-  // ✅ FIXED: Use both field names for workflow data parsing
   const workflowNodes = template.workflowJson?.nodes || template.workflow_json?.nodes;
   const integratedApps = template.integratedApps || template.workflowDetails?.apps || getIntegratedApps(workflowNodes);
   const stepCount = template.steps || template.workflowDetails?.steps || workflowNodes?.length || 0;
 
-  // ✅ FIXED: Proper admin detection using AuthProvider
   const isAdmin = currentUser?.role === 'admin' || currentUser?.isAdmin || false;
 
   const handlePurchase = async () => {
@@ -146,8 +136,6 @@ export const TemplateDetail = () => {
       });
 
       if (!response.ok) {
-        // It's important to check the raw text if response.json() fails,
-        // as it will contain the HTML error page.
         const errorText = await response.text();
         console.error("Backend error response:", errorText);
         throw new Error(`Failed to create checkout session. Server responded with: ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 100)}...`);
@@ -155,18 +143,8 @@ export const TemplateDetail = () => {
 
       const session = await response.json();
 
-      // ✅ FIX: Use the session.url for redirection, as it's more direct and reliable
       window.location.href = session.url;
 
-      // The original redirectToCheckout is also valid, but session.url is often simpler
-      // const result = await stripe.redirectToCheckout({
-      //   sessionId: session.id,
-      // });
-
-      // if (result.error) {
-      //   console.error(result.error.message);
-      //   toast.error("Payment failed", { description: result.error.message });
-      // }
     } catch (error) {
       console.error("Error during purchase:", error);
       toast.error("Purchase failed", { description: (error as Error).message });
@@ -186,18 +164,21 @@ export const TemplateDetail = () => {
           <Navbar />
           <main className="container mx-auto px-4 py-8">
             <div className="flex justify-between items-center mb-6">
-              <Link to={backToTemplatesPath} className="text-primary hover:underline flex items-center">
+              {/* ✅ FIXED: Use navigate(-1) to preserve pagination */}
+              <button 
+                onClick={() => navigate(-1)} 
+                className="text-primary hover:underline flex items-center cursor-pointer bg-transparent border-none p-0"
+              >
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to All Templates
-              </Link>
-              {/* ✅ FIXED: Correct admin check and route path */}
+              </button>
               {isAdmin && (
-                <Link to={`/admin/templates/${templateId}/edit`}>
+                <button onClick={() => navigate(`/admin/templates/${templateId}/edit`)}>
                   <Button variant="outline">
                       <Edit className="w-4 h-4 mr-2" />
                       Edit Template
                   </Button>
-                </Link>
+                </button>
               )}
             </div>
 

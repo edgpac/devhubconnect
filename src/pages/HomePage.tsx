@@ -32,7 +32,7 @@ import {
  Star,
  ChevronsUpDown,
 } from 'lucide-react';
-import ChatBox from '../components/ChatBox'; // ✅ NEW: Import the ChatBox component
+import ChatBox from '../components/ChatBox';
 import { API_ENDPOINTS, apiCall } from '../config/api';
 
 interface Template {
@@ -47,16 +47,14 @@ interface Template {
 }
 
 const fetchTemplates = async (): Promise<Template[]> => {
- // --- FIX: Added the full backend URL ---
  const response = await apiCall(API_ENDPOINTS.TEMPLATES);
  if (!response.ok) {
    throw new Error('Network response was not ok');
  }
  const data = await response.json();
- return data.templates; // ✅ FIXED: Extract templates from response object
+ return data.templates;
 };
 
-// ✅ ANALYTICS: Track search queries
 const trackSearch = async (searchTerm: string) => {
  try {
    await fetch('/api/templates/analytics/search', {
@@ -68,12 +66,10 @@ const trackSearch = async (searchTerm: string) => {
      })
    });
  } catch (error) {
-   // Silently fail - don't break search if analytics fail
    console.log('Search analytics tracking failed:', error);
  }
 };
 
-// ✅ ANALYTICS: Track template views
 const trackTemplateView = async (templateId: number) => {
  try {
    await fetch(`/api/templates/analytics/view/${templateId}`, {
@@ -90,16 +86,13 @@ const getPaginationItems = (
  totalPages: number,
  siblingCount = 1
 ): (number | string)[] => {
- const totalPageNumbersToShow = siblingCount * 2 + 5; // Total pages displayed if not too many pages overall
+ const totalPageNumbersToShow = siblingCount * 2 + 5;
 
- // Define the specific fixed jump pages you want to always appear (e.g., 20, 40, 60, 80, 100)
  const fixedJumpPages = [20, 40, 60, 80, 100].filter(page => page < totalPages);
 
  if (totalPages <= totalPageNumbersToShow && totalPages > 0) {
-   // If total pages are few, show all pages
    return Array.from({ length: totalPages }, (_, i) => i + 1);
  } else if (totalPages === 0) {
-   // Handle case with no pages
    return [];
  }
 
@@ -116,27 +109,21 @@ const getPaginationItems = (
  itemsSet.add(firstPageIndex);
  itemsSet.add(lastPageIndex);
 
- // Add siblings
  for (let i = leftSiblingIndex; i <= rightSiblingIndex; i++) {
    itemsSet.add(i);
  }
 
- // Add current page
  itemsSet.add(currentPage);
 
- // Add fixed jump pages
  fixedJumpPages.forEach(page => itemsSet.add(page));
 
- // Convert to array and sort
  let sortedItems = Array.from(itemsSet).sort((a, b) => a - b);
 
- // Insert ellipses
  const finalItems: (number | string)[] = [];
  let lastAddedItem: number | string | null = null;
 
  for (const item of sortedItems) {
    if (lastAddedItem !== null && typeof lastAddedItem === 'number' && item > lastAddedItem + 1) {
-     // Check if there's a gap greater than 1, then insert ellipsis
      finalItems.push('...');
    }
    finalItems.push(item);
@@ -192,18 +179,15 @@ export const HomePage = () => {
  let filtered: Template[] = Array.isArray(templates) ? templates : [];
 
  if (selectedCategory === 'popular') {
-   // ✅ Filter for productivity-related templates
    filtered = filtered.filter((template) =>
      template.description.toLowerCase().includes('llm') ||
      template.name.toLowerCase().includes('llm')
    );
 
-   // ✅ Sort by most downloaded
    filtered.sort((a, b) => b.downloads - a.downloads);
    return filtered;
  }
 
- // ✅ Normal category filtering
  if (selectedCategory !== 'all') {
    filtered = filtered.filter(
      (template) =>
@@ -272,7 +256,6 @@ export const HomePage = () => {
    setCurrentPage(1);
  };
 
- // ✅ ANALYTICS: Modified search handler to include tracking
  const handleSearchChange = (value: string) => {
    setSearchTerm(value);
    setCurrentPage(1);
@@ -281,7 +264,6 @@ export const HomePage = () => {
    }
  };
 
- // ✅ ANALYTICS: Handle template click with view tracking
  const handleTemplateClick = (templateId: number) => {
    trackTemplateView(templateId);
    navigate(`/template/${templateId}`);
@@ -477,21 +459,19 @@ export const HomePage = () => {
              )}
            </div>
          </section>
-         {/* ChatBox Section - Made wider and changed border color to white */}
+         {/* ChatBox Section */}
          <section className="py-12 bg-white-50">
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
              <h2 className="text-3xl font-bold text-gray-900 mb-6">Need Assistance? Ask Our AI!</h2>
              <p className="text-lg text-gray-600 mb-8">
                Upload your .json file to get AI help deploying your n8n template or answering related questions..
              </p>
-             {/* Changed from max-w-5xl to max-w-7xl to make it as wide as the web app */}
              <div className="max-w-7xl mx-auto">
-               <ChatBox /> {/* The ChatBox component */}
+               <ChatBox />
              </div>
            </div>
          </section>
          {/* Footer */}
-         {/* Note: The actual Footer component is rendered in App.tsx, this is just a placeholder section */}
          <footer className="bg-white-800 text-white py-12 border-t-[6px] border-white">
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
              {/* Footer content remains unchanged from your original structure */}
