@@ -120,15 +120,6 @@ export const TemplateDetail = () => {
     // Show what we're about to do
     alert(`📍 Navigating to page ${lastPage}`);
 
-    // This completely bypasses React Router and browser history
-    sessionStorage.setItem('skipStripe', 'true'); // Flag to prevent any Stripe redirects
-    
-    // Force a hard page reload to the listing page
-    window.location.replace(`/?page=${lastPage}`);
-    
-    console.log('Navigation command executed');
-};
-    
     // Nuclear option: Clear ALL navigation and force a fresh page load
     // This completely bypasses React Router and browser history
     sessionStorage.setItem('skipStripe', 'true'); // Flag to prevent any Stripe redirects
