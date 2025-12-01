@@ -4,7 +4,7 @@ import { Helmet, HelmetProvider } from "react-helmet-async";
 import { Navbar } from "../components/Navbar";
 import { Button } from "../components/ui/button";
 import { ArrowLeft, ShoppingCart, Star, Eye, Edit, SlidersHorizontal, Share2, Download, Copy } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/context/AuthProvider";
 import { API_ENDPOINTS, apiCall } from '../config/api';
@@ -82,10 +82,7 @@ export const TemplateDetail = () => {
   const templateId = templateIdParam;
 
   const handleBackToTemplates = () => {
-    // Get the saved page number from sessionStorage
     const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
-    
-    // Navigate back to that page using window.location for a clean reload
     window.location.href = `/?page=${lastPage}`;
   };
 
