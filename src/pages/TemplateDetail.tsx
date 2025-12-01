@@ -83,92 +83,80 @@ export const TemplateDetail = () => {
   const templateId = templateIdParam;
 
   const handleBackToTemplates = () => {
-  const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
+    const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
 
-  const href = window.location.href || '';
-  const search = window.location.search || '';
-  const hash = window.location.hash || '';
-  const urlParams = new URLSearchParams(search);
+    const href = window.location.href || '';
+    const search = window.location.search || '';
+    const hash = window.location.hash || '';
+    const urlParams = new URLSearchParams(search);
 
     // 🔥 Reliable Stripe return detection — works even with encoded or wrapped fragments
-  const returnedFromStripe =
-    hash.includes("cs_") ||
-    decodeURIComponent(hash || "").includes("cs_");
+    const returnedFromStripe =
+      hash.includes("cs_") ||
+      decodeURIComponent(hash || "").includes("cs_");
 
-  // Retain referrer check for debug info
-  const referrerIndicatesStripe =
-    document.referrer && document.referrer.includes("checkout.stripe.com");
+    // Retain referrer check for debug info
+    const referrerIndicatesStripe =
+      document.referrer && document.referrer.includes("checkout.stripe.com");
 
-  // DEBUG LOGGING (very explicit)
-  console.log("🐛 DEBUG Back Button Clicked:");
-  console.log("  lastPage:", lastPage);
-  console.log("  window.location.href:", href);
-  console.log("  window.location.search:", search);
-  console.log("  window.location.hash:", hash);
-  console.log("  urlParams (keys):", Array.from(urlParams.keys()));
-  console.log("  returnedFromStripe (regex):", returnedFromStripe);
-  console.log("  referrerIndicatesStripe:", referrerIndicatesStripe);
-  console.log("  window.history.length:", window.history.length);
+    // DEBUG LOGGING (very explicit)
+    console.log("🐛 DEBUG Back Button Clicked:");
+    console.log("  lastPage:", lastPage);
+    console.log("  window.location.href:", href);
+    console.log("  window.location.search:", search);
+    console.log("  window.location.hash:", hash);
+    console.log("  urlParams (keys):", Array.from(urlParams.keys()));
+    console.log("  returnedFromStripe (regex):", returnedFromStripe);
+    console.log("  referrerIndicatesStripe:", referrerIndicatesStripe);
+    console.log("  window.history.length:", window.history.length);
 
-  const cleanStripeReturnParams = () => {
-    try {
-      const u = new URL(window.location.href);
-      // remove common stripe params
-      u.searchParams.delete("session_id");
+    const cleanStripeReturnParams = () => {
+      try {
+        const u = new URL(window.location.href);
+        // remove common stripe params
+        u.searchParams.delete("session_id");
 
-      // remove any query param keys or values that contain cs_test / cs_live tokens
-      for (const [k, v] of Array.from(u.searchParams.entries())) {
-        if (/cs_(?:test|live)_/.test(k) || /cs_(?:test|live)_/.test(String(v))) {
-          u.searchParams.delete(k);
+        // remove any query param keys or values that contain cs_test / cs_live tokens
+        for (const [k, v] of Array.from(u.searchParams.entries())) {
+          if (/cs_(?:test|live)_/.test(k) || /cs_(?:test|live)_/.test(String(v))) {
+            u.searchParams.delete(k);
+          }
         }
-      }
 
-      // also remove tokens from the hash if present
-      if (u.hash && /cs_(?:test|live)_/.test(u.hash)) {
-        u.hash = "";
-      }
+        // also remove tokens from the hash if present
+        if (u.hash && /cs_(?:test|live)_/.test(u.hash)) {
+          u.hash = "";
+        }
 
-      // Update the visible URL without navigating
-      const clean =
-        u.pathname +
-        (u.search ? `?${u.searchParams.toString()}` : "") +
-        (u.hash ? `#${u.hash}` : "");
-      window.history.replaceState(null, "", clean || "/");
-      console.log("✅ Cleaned Stripe params from URL. New URL:", clean);
-    } catch (err) {
-      console.warn("Unable to clean Stripe params:", err);
+        // Update the visible URL without navigating
+        const clean =
+          u.pathname +
+          (u.search ? `?${u.searchParams.toString()}` : "") +
+          (u.hash ? `#${u.hash}` : "");
+        window.history.replaceState(null, "", clean || "/");
+        console.log("✅ Cleaned Stripe params from URL. New URL:", clean);
+      } catch (err) {
+        console.warn("Unable to clean Stripe params:", err);
+      }
+    };
+
+    // 🎯 FIX: ALWAYS navigate directly to the listing page
+    // This prevents going back through Stripe checkout in browser history
+    // Whether user completed checkout or canceled, we skip the Stripe URL entirely
+    
+    // If returning from Stripe, clean the URL first
+    if (returnedFromStripe) {
+      console.log(
+        "✅ Stripe return detected → cleaning URL and redirecting to page",
+        lastPage
+      );
+      cleanStripeReturnParams();
     }
+
+    // Always navigate directly to the listing page (never use browser back)
+    console.log(`✅ Navigating directly to page ${lastPage} (bypassing any Stripe URLs in history)`);
+    navigate(`/?page=${lastPage}`, { replace: true });
   };
-
-  // FIX: If we detect a Stripe return, clean URL and navigate to the listing page (skip back)
-  if (returnedFromStripe) {
-    console.log(
-      "✅ Stripe return detected → cleaning URL and redirecting to page",
-      lastPage
-    );
-    cleanStripeReturnParams();
-    navigate(`/?page=${lastPage}`);
-    return;
-  }
-
-  // Normal back behavior (but guard against referrer pointing to stripe)
-  if (window.history.length > 1 && !referrerIndicatesStripe) {
-    console.log('✅ Using browser back (-1)');
-    navigate(-1);
-    return;
-  }
-
-  // Fallbacks
-  if (lastPage) {
-    console.log('✅ Using fallback → page', lastPage);
-    navigate(`/?page=${lastPage}`);
-    return;
-  }
-
-  console.log('✅ Using final fallback → homepage');
-  navigate('/');
-};
-
 
   if (!templateId || templateId.trim() === '') {
     return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
@@ -252,7 +240,7 @@ export const TemplateDetail = () => {
           <Navbar />
           <main className="container mx-auto px-4 py-8">
             <div className="flex justify-between items-center mb-6">
-              {/* ✅ FIXED: Smart back button that handles Stripe returns and preserves pagination */}
+              {/* ✅ FIXED: Always navigates directly to listing page, bypassing Stripe in history */}
               <button 
                 onClick={handleBackToTemplates} 
                 className="text-primary hover:underline flex items-center cursor-pointer bg-transparent border-none p-0"
