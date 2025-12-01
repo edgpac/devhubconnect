@@ -66,7 +66,13 @@ const App = () => (
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
+              
+              {/* ✅ FIXED: Added /templates/:id route (with 's') */}
+              <Route path="/templates/:id" element={<TemplateDetail />} />
+              
+              {/* ✅ KEPT: Old /template/:id route for backward compatibility */}
               <Route path="/template/:id" element={<TemplateDetail />} />
+              
               <Route path="/guidance" element={<GuidancePage />} />
               <Route path="/success" element={<SuccessPage />} />
               
@@ -109,6 +115,16 @@ const App = () => (
               {/* Template Edit Routes (Creator/Admin Only) */}
               <Route
                 path="/template/:id/edit"
+                element={
+                  <ProtectedRoute requireCreatorOrAdmin>
+                    <TemplateEdit />
+                  </ProtectedRoute>
+                }
+              />
+              
+              {/* ✅ ADDED: Also support /templates/:id/edit for consistency */}
+              <Route
+                path="/templates/:id/edit"
                 element={
                   <ProtectedRoute requireCreatorOrAdmin>
                     <TemplateEdit />

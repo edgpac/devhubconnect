@@ -107,19 +107,12 @@ export const TemplateDetail = () => {
   const handleBackToTemplates = () => {
     const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
     
-    console.log('=== BACK TO ALL TEMPLATES CLICKED ===');
-    console.log('Last page from sessionStorage:', lastPage);
-    console.log('Current URL:', window.location.href);
-    console.log('About to navigate to: /?page=' + lastPage);
-    
     // Nuclear option: Clear ALL navigation and force a fresh page load
     // This completely bypasses React Router and browser history
     sessionStorage.setItem('skipStripe', 'true'); // Flag to prevent any Stripe redirects
     
     // Force a hard page reload to the listing page
     window.location.replace(`/?page=${lastPage}`);
-    
-    console.log('Navigation command executed');
   };
 
   if (!templateId || templateId.trim() === '') {
