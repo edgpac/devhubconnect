@@ -155,6 +155,11 @@ export const HomePage = () => {
 
  const templatesPerPage = 9;
 
+ // ✅ FIX: Save current page to sessionStorage whenever it changes
+ useEffect(() => {
+   sessionStorage.setItem('lastTemplatePage', currentPage.toString());
+ }, [currentPage]);
+
  useEffect(() => {
    const params = new URLSearchParams(location.search);
    if (currentPage !== 1) {

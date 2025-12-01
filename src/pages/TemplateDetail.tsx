@@ -82,6 +82,23 @@ export const TemplateDetail = () => {
 
   const templateId = templateIdParam;
 
+  // ✅ FIX: Smart back button that preserves pagination
+  const handleBackToTemplates = () => {
+    // Try to get the last page from sessionStorage
+    const lastPage = sessionStorage.getItem('lastTemplatePage');
+    
+    if (window.history.length > 1) {
+      // If there's history, use browser back button
+      navigate(-1);
+    } else if (lastPage) {
+      // If opened in new tab but we have the page saved, go there
+      navigate(`/?page=${lastPage}`);
+    } else {
+      // Fallback to homepage
+      navigate('/');
+    }
+  };
+
   if (!templateId || templateId.trim() === '') {
     return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
   }
@@ -164,9 +181,9 @@ export const TemplateDetail = () => {
           <Navbar />
           <main className="container mx-auto px-4 py-8">
             <div className="flex justify-between items-center mb-6">
-              {/* ✅ FIXED: Use navigate(-1) to preserve pagination */}
+              {/* ✅ FIXED: Smart back button with sessionStorage fallback */}
               <button 
-                onClick={() => navigate(-1)} 
+                onClick={handleBackToTemplates} 
                 className="text-primary hover:underline flex items-center cursor-pointer bg-transparent border-none p-0"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />

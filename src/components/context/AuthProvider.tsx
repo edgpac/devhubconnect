@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from "react";
+import React, { createContext, useState, useEffect, useContext, useRef } from "react";
 import { apiCall, API_ENDPOINTS } from '@/config/api.ts';
 
 type User = {
@@ -26,9 +26,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isCheckingSession = useRef(false); // ✅ ADDED: Prevent duplicate session checks
 
   // Session check function - relies on session cookies only
   const checkSession = async () => {
+    // ✅ ADDED: Prevent multiple simultaneous checks
+    if (isCheckingSession.current) {
+      return;
+    }
+
+    isCheckingSession.current = true;
+
     try {
       console.log('Checking session with backend...');
       
@@ -66,6 +74,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Session check error:', error);
       // Don't clear auth on network errors, just log them
+    } finally {
+      // ✅ ADDED: Reset the checking flag
+      isCheckingSession.current = false;
     }
   };
 
