@@ -82,35 +82,43 @@ export const TemplateDetail = () => {
 
   const templateId = templateIdParam;
 
-  const handleBackToTemplates = () => {
-    const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
+  // 🔧 FIX: Clean Stripe params from URL when returning from checkout
+  useEffect(() => {
     const hash = window.location.hash || '';
     const search = window.location.search || '';
     
-    // Check if we just returned from Stripe
+    // Detect if we just returned from Stripe
     const returnedFromStripe =
       hash.includes("cs_") ||
       decodeURIComponent(hash || "").includes("cs_") ||
       search.includes("session_id=cs_");
 
-    console.log('🔙 Back to Templates clicked');
-    console.log('  Last page:', lastPage);
-    console.log('  Returned from Stripe:', returnedFromStripe);
-
     if (returnedFromStripe) {
-      // 🎯 FIX: Clean the URL first to remove Stripe params from history
-      console.log('  Cleaning Stripe params from URL...');
+      console.log('🔧 Detected return from Stripe - cleaning history');
       
-      // Remove Stripe params from current URL in browser history
-      const cleanUrl = window.location.pathname; // Just the path, no query or hash
+      // Clean the URL to remove Stripe params
+      const cleanUrl = window.location.pathname;
       window.history.replaceState(null, '', cleanUrl);
       
-      // Now navigate, which replaces the cleaned URL with the listing page
-      console.log(`  Navigating to page ${lastPage} with replace`);
-      navigate(`/?page=${lastPage}`, { replace: true });
+      console.log('✅ Stripe params removed from URL');
+    }
+  }, []); // Run once on mount
+
+  const handleBackToTemplates = () => {
+    const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
+    
+    console.log('🔙 Back button clicked, target page:', lastPage);
+    
+    // Check if the previous page in history is Stripe
+    const referrer = document.referrer;
+    const hasStripeInHistory = referrer && referrer.includes('stripe.com');
+    
+    if (hasStripeInHistory) {
+      console.log('⚠️ Stripe detected in history - using direct navigation');
+      // Go directly to listing page, bypassing history completely
+      window.location.href = `/?page=${lastPage}`;
     } else {
-      // Normal navigation
-      console.log(`  Normal navigation to page ${lastPage}`);
+      console.log('✅ Normal navigation');
       navigate(`/?page=${lastPage}`, { replace: true });
     }
   };
