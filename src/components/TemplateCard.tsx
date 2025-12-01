@@ -54,7 +54,6 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
   const currentPage = urlParams.get('page') || '1';
   sessionStorage.setItem('lastTemplatePage', currentPage);
   
-  // ✅ FIXED: Changed from /template/ to /templates/ (added 's')
   navigate(`/templates/${template.id}`);
 };
 
@@ -188,8 +187,21 @@ const handlePurchase = async () => {
    }
  };
 
+ // ✅ FIX: Handle card click to navigate to template detail
+ const handleCardClick = (e: React.MouseEvent) => {
+   // Don't navigate if clicking on buttons
+   const target = e.target as HTMLElement;
+   if (target.closest('button')) {
+     return;
+   }
+   handlePreview();
+ };
+
  return (
-   <Card className="h-full flex flex-col hover:shadow-lg transition-shadow duration-200">
+   <Card 
+     className="h-full flex flex-col hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+     onClick={handleCardClick}
+   >
      <div className="relative overflow-hidden rounded-t-lg">
        {(template.imageUrl || template.image_url) ? (
          <img 
