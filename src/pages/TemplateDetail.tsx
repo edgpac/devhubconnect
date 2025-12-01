@@ -85,54 +85,86 @@ export const TemplateDetail = () => {
   const handleBackToTemplates = () => {
   const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
 
-  const url = window.location.search;
-  const urlParams = new URLSearchParams(url);
+  const href = window.location.href || '';
+  const search = window.location.search || '';
+  const hash = window.location.hash || '';
+  const urlParams = new URLSearchParams(search);
 
-
-  // Detect Stripe returns from ANY source
+  // Robust Stripe detection: matches session_id= OR cs_test_/cs_live_ tokens anywhere in href/search/hash
+  const stripeTokenRegex = /cs_(?:test|live)_[A-Za-z0-9_-]+/;
   const returnedFromStripe =
-  url.includes("session_id") ||
-  url.includes("cs_test") ||
-  url.includes("cs_live") ||
-  url.match(/cs_(test|live)_[A-Za-z0-9]+/);
+    /session_id=/.test(search) ||
+    stripeTokenRegex.test(href) ||
+    stripeTokenRegex.test(search) ||
+    stripeTokenRegex.test(hash);
 
-  // Retain old referrer logic for debug visibility
-  const referrerIndicatesStripe = document.referrer.includes('checkout.stripe.com');
+  // Retain referrer check for debug info
+  const referrerIndicatesStripe = document.referrer && document.referrer.includes('checkout.stripe.com');
 
-  // DEBUG LOGGING
+  // DEBUG LOGGING (very explicit)
   console.log('🐛 DEBUG Back Button Clicked:');
   console.log('  lastPage:', lastPage);
-  console.log('  document.referrer:', document.referrer);
-  console.log('  window.location.search:', window.location.search);
-  console.log('  returnedFromStripe:', returnedFromStripe);
+  console.log('  window.location.href:', href);
+  console.log('  window.location.search:', search);
+  console.log('  window.location.hash:', hash);
+  console.log('  urlParams (keys):', Array.from(urlParams.keys()));
+  console.log('  returnedFromStripe (regex):', returnedFromStripe);
   console.log('  referrerIndicatesStripe:', referrerIndicatesStripe);
   console.log('  window.history.length:', window.history.length);
 
-  // 🚀 FIX: Stripe return always skips browser history
+  const cleanStripeReturnParams = () => {
+    try {
+      const u = new URL(window.location.href);
+      // remove common stripe params
+      u.searchParams.delete('session_id');
+
+      // remove any query param keys or values that contain cs_test / cs_live tokens
+      for (const [k, v] of Array.from(u.searchParams.entries())) {
+        if (/cs_(?:test|live)_/.test(k) || /cs_(?:test|live)_/.test(String(v))) {
+          u.searchParams.delete(k);
+        }
+      }
+
+      // also remove tokens from the hash if present
+      if (u.hash && /cs_(?:test|live)_/.test(u.hash)) {
+        u.hash = '';
+      }
+
+      // Update the visible URL without navigating
+      const clean = u.pathname + (u.search ? `?${u.searchParams.toString()}` : '') + (u.hash ? `#${u.hash}` : '');
+      window.history.replaceState(null, '', clean || '/');
+      console.log('✅ Cleaned Stripe params from URL. New URL:', clean);
+    } catch (err) {
+      console.warn('Unable to clean Stripe params:', err);
+    }
+  };
+
+  // FIX: If we detect a Stripe return, clean URL and navigate to the listing page (skip back)
   if (returnedFromStripe) {
-    console.log('✅ Stripe return detected → redirecting to pagination page', lastPage);
+    console.log('✅ Stripe return detected → cleaning URL and redirecting to page', lastPage);
+    cleanStripeReturnParams();
     navigate(`/?page=${lastPage}`);
     return;
   }
 
-  // Normal back behavior
+  // Normal back behavior (but guard against referrer pointing to stripe)
   if (window.history.length > 1 && !referrerIndicatesStripe) {
     console.log('✅ Using browser back (-1)');
     navigate(-1);
     return;
   }
 
-  // Fallback to lastPage
+  // Fallbacks
   if (lastPage) {
     console.log('✅ Using fallback → page', lastPage);
     navigate(`/?page=${lastPage}`);
     return;
   }
 
-  // Final fallback
   console.log('✅ Using final fallback → homepage');
   navigate('/');
 };
+
 
   if (!templateId || templateId.trim() === '') {
     return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
