@@ -105,32 +105,20 @@ export const TemplateDetail = () => {
   }, []); // Run once on mount
 
   const handleBackToTemplates = () => {
-  alert('🔔 Button clicked!');
-  
-  // Check what's in sessionStorage
-  const lastPage = sessionStorage.getItem('lastTemplatePage');
-  const fallbackPage = lastPage || '1';
-  
-  alert(`Raw value from sessionStorage: "${lastPage}"`);
-  alert(`Final page value: "${fallbackPage}"`);
-  alert(`Type: ${typeof fallbackPage}`);
-  
-  console.log('=== BACK TO ALL TEMPLATES CLICKED ===');
-  console.log('Raw sessionStorage value:', lastPage);
-  console.log('After fallback:', fallbackPage);
-  console.log('Current URL:', window.location.href);
-  console.log('Current history length:', window.history.length);
-  console.log('Document referrer:', document.referrer);
-  console.log('About to navigate to: /?page=' + fallbackPage);
-  
-  // Force a hard page reload to the listing page
-  const targetUrl = `/?page=${fallbackPage}`;
-  alert(`Final URL: ${targetUrl}`);
-  
-  window.location.replace(targetUrl);
-  
-  console.log('Navigation command executed');
-};
+    // Check if we came from Stripe by looking at the referrer
+    const cameFromStripe = document.referrer.includes('stripe.com') || 
+                           document.referrer.includes('checkout.stripe');
+    
+    if (cameFromStripe) {
+      // If returning from Stripe, go back 2 steps to skip it
+      console.log('🔄 Detected Stripe in history - going back 2 steps');
+      window.history.go(-2);
+    } else {
+      // Normal navigation - just go back 1 step
+      console.log('🔄 Normal back navigation');
+      window.history.back();
+    }
+  };
 
   if (!templateId || templateId.trim() === '') {
     return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
@@ -214,7 +202,7 @@ export const TemplateDetail = () => {
           <Navbar />
           <main className="container mx-auto px-4 py-8">
             <div className="flex justify-between items-center mb-6">
-              {/* ✅ FIXED: Always navigates directly to listing page, bypassing Stripe in history */}
+              {/* ✅ FIXED: Uses browser history to navigate back, skipping Stripe if needed */}
               <button 
                 onClick={handleBackToTemplates} 
                 className="text-primary hover:underline flex items-center cursor-pointer bg-transparent border-none p-0"
