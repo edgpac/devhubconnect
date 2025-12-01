@@ -77,38 +77,16 @@ export const TemplateDetail = () => {
   const { id: templateIdParam } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [isPurchasing, setIsPurchasing] = useState(false);
-  const [returnedFromStripe, setReturnedFromStripe] = useState(false);
   const { currentUser } = useAuth();
 
   const templateId = templateIdParam;
 
-  // Detect if we returned from Stripe checkout
-  useEffect(() => {
-    const hash = window.location.hash || '';
-    const search = window.location.search || '';
-    
-    const hasStripeParams =
-      hash.includes("cs_") ||
-      decodeURIComponent(hash || "").includes("cs_") ||
-      search.includes("session_id=cs_");
-
-    if (hasStripeParams) {
-      setReturnedFromStripe(true);
-      
-      // Clean the URL
-      const cleanUrl = window.location.pathname;
-      window.history.replaceState(null, '', cleanUrl);
-    }
-  }, []);
-
   const handleBackToTemplates = () => {
-    if (returnedFromStripe) {
-      // Go back 2 steps to skip Stripe
-      window.history.go(-2);
-    } else {
-      // Normal back navigation
-      window.history.back();
-    }
+    // Get the saved page number from sessionStorage
+    const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
+    
+    // Navigate back to that page using window.location for a clean reload
+    window.location.href = `/?page=${lastPage}`;
   };
 
   if (!templateId || templateId.trim() === '') {

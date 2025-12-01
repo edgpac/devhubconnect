@@ -13,11 +13,11 @@ interface Template {
  description: string;
  price: number;
  imageUrl?: string;
- image_url?: string; // ✅ ADD: Backend field name
+ image_url?: string;
  workflowJson?: any;
- workflow_json?: any; // ✅ ADD: Backend field name
+ workflow_json?: any;
  createdAt?: string;
- created_at?: string; // ✅ ADD: Backend field name
+ created_at?: string;
  downloads?: number;
  downloadCount?: number;
  purchased?: boolean;
@@ -38,10 +38,8 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
  const [isRemoving, setIsRemoving] = useState(false);
  const [isPurchasing, setPurchasing] = useState(false);
  
- // ✅ MAIN FIX: Handle both field name formats for image
  const imageUrl = template.imageUrl || template.image_url || null;
  
- // ✅ ALWAYS use fake numbers to make templates look popular
  const downloadCount = getDeterministicRandom(String(template.id) + "-downloads", 45, 850);
  
  const rating = template._rating || 
@@ -51,25 +49,20 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
    getDeterministicRandom(String(template.id) + "-reviews", 8, 120);
 
  const handlePreview = () => {
-  // ✅ FIX: Save current page before navigating to template detail
+  // Save current page before navigating to template detail
   const urlParams = new URLSearchParams(window.location.search);
   const currentPage = urlParams.get('page') || '1';
   sessionStorage.setItem('lastTemplatePage', currentPage);
   
-  console.log(`📄 Saving page ${currentPage} before navigating to template ${template.id}`);
-  
-  // Navigate to the template detail page
-  navigate(`/template/${template.id}`);
+  // ✅ FIXED: Changed from /template/ to /templates/ (added 's')
+  navigate(`/templates/${template.id}`);
 };
-
-// HandlePurchase function:
 
 const handlePurchase = async () => {
   setPurchasing(true);
   try {
     console.log(`Initiating purchase for template ${template.id}`);
     
-    // Use your existing server endpoint
     const response = await fetch('/api/stripe/create-checkout-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -87,7 +80,7 @@ const handlePurchase = async () => {
     
     if (session.url) {
       console.log(`Redirecting to Stripe checkout: ${session.url}`);
-      window.location.href = session.url; // This will redirect to Stripe, then back to dashboard
+      window.location.href = session.url;
     } else {
       throw new Error('No checkout URL received from server');
     }
@@ -99,9 +92,7 @@ const handlePurchase = async () => {
   }
 };
 
- // ✅ Real download functionality with DEBUG logging
  const handleDownload = async () => {
-   // ✅ DEBUG: Template object analysis
    console.log('🐛 DEBUG: Full template object:', template);
    console.log('🐛 DEBUG: Template ID:', template.id);
    console.log('🐛 DEBUG: Template ID type:', typeof template.id);
@@ -113,7 +104,6 @@ const handlePurchase = async () => {
      return;
    }
 
-   // ✅ Validation
    if (template.id === undefined || template.id === null) {
      console.error('❌ Template ID is undefined or invalid');
      alert('Error: Template ID is missing');
@@ -139,7 +129,6 @@ const handlePurchase = async () => {
        }
      }
 
-     // Get the filename from the response headers
      const contentDisposition = response.headers.get('Content-Disposition');
      let filename = `${template.name.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
      
@@ -150,7 +139,6 @@ const handlePurchase = async () => {
        }
      }
 
-     // Create blob and download
      const blob = await response.blob();
      const url = window.URL.createObjectURL(blob);
      const a = document.createElement('a');
@@ -170,7 +158,6 @@ const handlePurchase = async () => {
    }
  };
 
- // ✅ NEW: Individual template removal functionality
  const handleRemoveTemplate = async () => {
    const confirmed = window.confirm(
      `Remove "${template.name}" from your collection?\n\nYou can always purchase it again later.`
@@ -188,7 +175,6 @@ const handlePurchase = async () => {
      if (response.ok) {
        const result = await response.json();
        toast.success(`"${template.name}" removed from collection`);
-       // Notify parent component to update the list
        onTemplateRemoved?.(template.id);
      } else {
        const error = await response.json();
@@ -204,16 +190,13 @@ const handlePurchase = async () => {
 
  return (
    <Card className="h-full flex flex-col hover:shadow-lg transition-shadow duration-200">
-     {/* Template Image */}
      <div className="relative overflow-hidden rounded-t-lg">
-       {/* ✅ FIXED: Use the resolved imageUrl variable and handle both field names */}
        {(template.imageUrl || template.image_url) ? (
          <img 
            src={template.imageUrl || template.image_url} 
            alt={template.name}
            className="w-full h-48 object-cover transition-transform duration-300 ease-in-out hover:scale-110"
            onError={(e) => {
-             // ✅ BONUS: Fallback if image fails to load
              console.log('🐛 DEBUG: Image failed to load:', imageUrl);
              e.currentTarget.style.display = 'none';
              e.currentTarget.parentElement?.querySelector('.image-fallback')?.classList.remove('hidden');
@@ -221,22 +204,13 @@ const handlePurchase = async () => {
          />
        ) : null}
        
-       {/* ✅ Always show fallback div, hide it when image loads successfully */}
        <div className={`w-full h-48 bg-gray-100 flex items-center justify-center transition-transform duration-300 ease-in-out hover:scale-110 image-fallback ${(template.imageUrl || template.image_url) ? 'hidden' : ''}`}>
          <div className="text-center text-gray-400">
            <div className="text-4xl mb-2">📋</div>
            <div className="text-sm">Workflow Preview</div>
-           {/* ✅ DEBUG: Show what image URL we tried to load */}
-           {process.env.NODE_ENV === 'development' && (
-             <div className="text-xs mt-2 px-2 py-1 bg-red-100 text-red-600 rounded">
-               DEBUG: {imageUrl || 'No image URL found'}<br/>
-               Fields checked: imageUrl={template.imageUrl || 'undefined'}, image_url={template.image_url || 'undefined'}
-             </div>
-           )}
          </div>
        </div>
        
-       {/* Price Badge */}
        <div className="absolute top-3 right-3 z-10">
          <Badge variant="secondary" className="bg-white/90 text-gray-800 font-semibold">
            {Number(template.price) === 0 
@@ -253,12 +227,10 @@ const handlePurchase = async () => {
      </CardHeader>
      
      <CardContent className="flex-1 flex flex-col justify-between">
-       {/* Description */}
        <p className="text-sm text-gray-600 line-clamp-3 mb-4">
          {template.description}
        </p>
        
-       {/* Stats Row */}
        <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
          <div className="flex items-center space-x-1">
            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
@@ -271,7 +243,6 @@ const handlePurchase = async () => {
          </div>
        </div>
        
-       {/* Action Buttons */}
        <div className="space-y-2">
          <Button 
            className={`w-full ${
@@ -306,7 +277,6 @@ const handlePurchase = async () => {
            )}
          </Button>
          
-         {/* Secondary Actions Row */}
          <div className="flex space-x-2">
            <Button 
              variant="outline" 
@@ -318,7 +288,6 @@ const handlePurchase = async () => {
              Preview
            </Button>
            
-           {/* Individual Remove Button - Only show for purchased templates */}
            {template.purchased && (
              <Button 
                variant="outline" 
