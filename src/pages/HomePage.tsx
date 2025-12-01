@@ -153,6 +153,11 @@ export const HomePage = () => {
  const [sortOrder, setSortOrder] = useState('all');
  const [currentPage, setCurrentPage] = useState(initialPage);
 
+ // ✅ FIX: Update currentPage when URL changes (e.g., when coming back from template detail)
+ useEffect(() => {
+   setCurrentPage(initialPage);
+ }, [initialPage]);
+
  const templatesPerPage = 9;
 
  // ✅ FIX: Save current page to sessionStorage whenever it changes
