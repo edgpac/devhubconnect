@@ -84,26 +84,28 @@ export const TemplateDetail = () => {
 
   // ✅ FIX: Smart back button that preserves pagination and handles Stripe returns
   const handleBackToTemplates = () => {
-    // Try to get the last page from sessionStorage
-    const lastPage = sessionStorage.getItem('lastTemplatePage');
-    
-    // Check if we came from Stripe (checkout.stripe.com in the referrer)
-    const cameFromStripe = document.referrer.includes('checkout.stripe.com');
-    
-    if (cameFromStripe && lastPage) {
-      // If returning from Stripe, use sessionStorage to go to the saved page
-      navigate(`/?page=${lastPage}`);
-    } else if (window.history.length > 1 && !cameFromStripe) {
-      // If there's history and we didn't come from Stripe, use browser back
-      navigate(-1);
-    } else if (lastPage) {
-      // Fallback to sessionStorage
-      navigate(`/?page=${lastPage}`);
-    } else {
-      // Final fallback to homepage
-      navigate('/');
-    }
-  };
+  // Try to get the last page from sessionStorage
+  const lastPage = sessionStorage.getItem('lastTemplatePage');
+  
+  // Check if we came from Stripe (session ID in URL or referrer)
+  const urlParams = new URLSearchParams(window.location.search);
+  const hasStripeSession = urlParams.toString().includes('cs_live') || urlParams.toString().includes('cs_test');
+  const cameFromStripe = document.referrer.includes('checkout.stripe.com') || hasStripeSession;
+  
+  if (cameFromStripe && lastPage) {
+    // If returning from Stripe, use sessionStorage to go to the saved page
+    navigate(`/?page=${lastPage}`);
+  } else if (window.history.length > 1 && !cameFromStripe) {
+    // If there's history and we didn't come from Stripe, use browser back
+    navigate(-1);
+  } else if (lastPage) {
+    // Fallback to sessionStorage
+    navigate(`/?page=${lastPage}`);
+  } else {
+    // Final fallback to homepage
+    navigate('/');
+  }
+};
 
   if (!templateId || templateId.trim() === '') {
     return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
