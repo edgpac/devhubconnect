@@ -12,7 +12,6 @@ import { API_ENDPOINTS, apiCall } from '../config/api';
 import { getDeterministicRandom } from "@/lib/utils";
 import { loadStripe } from '@stripe/stripe-js';
 
-// REPLACE WITH YOUR ACTUAL STRIPE PUBLISHABLE KEY
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51RgVfSBS72lorg0VlXnIXjmsGBjriHLK36isBNmKnsbYjkHmTkz6Rp0hK0QboFaJLnzl0qA2FyLMq3hA5ofFEneN005HATkECJ');
 
 interface Template {
@@ -78,44 +77,36 @@ export const TemplateDetail = () => {
   const { id: templateIdParam } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [returnedFromStripe, setReturnedFromStripe] = useState(false);
   const { currentUser } = useAuth();
 
   const templateId = templateIdParam;
 
-  // 🔧 FIX: Clean Stripe params from URL when returning from checkout
+  // Detect if we returned from Stripe checkout
   useEffect(() => {
     const hash = window.location.hash || '';
     const search = window.location.search || '';
     
-    // Detect if we just returned from Stripe
-    const returnedFromStripe =
+    const hasStripeParams =
       hash.includes("cs_") ||
       decodeURIComponent(hash || "").includes("cs_") ||
       search.includes("session_id=cs_");
 
-    if (returnedFromStripe) {
-      console.log('🔧 Detected return from Stripe - cleaning history');
+    if (hasStripeParams) {
+      setReturnedFromStripe(true);
       
-      // Clean the URL to remove Stripe params
+      // Clean the URL
       const cleanUrl = window.location.pathname;
       window.history.replaceState(null, '', cleanUrl);
-      
-      console.log('✅ Stripe params removed from URL');
     }
-  }, []); // Run once on mount
+  }, []);
 
   const handleBackToTemplates = () => {
-    // Check if we came from Stripe by looking at the referrer
-    const cameFromStripe = document.referrer.includes('stripe.com') || 
-                           document.referrer.includes('checkout.stripe');
-    
-    if (cameFromStripe) {
-      // If returning from Stripe, go back 2 steps to skip it
-      console.log('🔄 Detected Stripe in history - going back 2 steps');
+    if (returnedFromStripe) {
+      // Go back 2 steps to skip Stripe
       window.history.go(-2);
     } else {
-      // Normal navigation - just go back 1 step
-      console.log('🔄 Normal back navigation');
+      // Normal back navigation
       window.history.back();
     }
   };
@@ -134,19 +125,6 @@ export const TemplateDetail = () => {
   if (!template) return <div className="text-center p-12">Template not found.</div>;
 
   const imageUrl = template.imageUrl || template.image_url;
-
-  console.log('🔍 Template Debug Info:', {
-    templateId: template.id,
-    templateName: template.name,
-    imageUrl: template.imageUrl,
-    image_url: template.image_url,
-    finalImageUrl: imageUrl,
-    workflowJson: template.workflowJson,
-    workflow_json: template.workflow_json,
-    hasImageUrl: !!imageUrl,
-    imageUrlType: typeof imageUrl,
-    imageUrlLength: imageUrl?.length
-  });
 
   const deterministicReviewCount = getDeterministicRandom(String(template.id), 16, 92);
   const deterministicViewsCount = getDeterministicRandom(String(template.id) + "-views", 300, 1500);
@@ -202,7 +180,6 @@ export const TemplateDetail = () => {
           <Navbar />
           <main className="container mx-auto px-4 py-8">
             <div className="flex justify-between items-center mb-6">
-              {/* ✅ FIXED: Uses browser history to navigate back, skipping Stripe if needed */}
               <button 
                 onClick={handleBackToTemplates} 
                 className="text-primary hover:underline flex items-center cursor-pointer bg-transparent border-none p-0"
@@ -232,16 +209,10 @@ export const TemplateDetail = () => {
                         src={imageUrl} 
                         alt={`${template.name} preview`} 
                         className="max-w-full h-auto rounded-md"
-                        onLoad={() => console.log('✅ Image loaded successfully:', imageUrl)}
-                        onError={(e) => {
-                          console.error('❌ Image failed to load:', imageUrl);
-                          console.error('Error details:', e);
-                        }}
                       />
                     ) : (
                       <div>
                         <p className="text-gray-500">No visual preview available.</p>
-                        <p className="text-xs text-gray-400 mt-2">Debug: imageUrl = "{template.imageUrl}", image_url = "{template.image_url}"</p>
                       </div>
                     )}
                   </div>
