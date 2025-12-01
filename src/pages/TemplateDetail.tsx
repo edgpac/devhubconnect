@@ -107,20 +107,19 @@ export const TemplateDetail = () => {
   const handleBackToTemplates = () => {
     const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
     
-    console.log('🔙 Back button clicked, target page:', lastPage);
+    console.log('=== BACK TO ALL TEMPLATES CLICKED ===');
+    console.log('Last page from sessionStorage:', lastPage);
+    console.log('Current URL:', window.location.href);
+    console.log('About to navigate to: /?page=' + lastPage);
     
-    // Check if the previous page in history is Stripe
-    const referrer = document.referrer;
-    const hasStripeInHistory = referrer && referrer.includes('stripe.com');
+    // Nuclear option: Clear ALL navigation and force a fresh page load
+    // This completely bypasses React Router and browser history
+    sessionStorage.setItem('skipStripe', 'true'); // Flag to prevent any Stripe redirects
     
-    if (hasStripeInHistory) {
-      console.log('⚠️ Stripe detected in history - using direct navigation');
-      // Go directly to listing page, bypassing history completely
-      window.location.href = `/?page=${lastPage}`;
-    } else {
-      console.log('✅ Normal navigation');
-      navigate(`/?page=${lastPage}`, { replace: true });
-    }
+    // Force a hard page reload to the listing page
+    window.location.replace(`/?page=${lastPage}`);
+    
+    console.log('Navigation command executed');
   };
 
   if (!templateId || templateId.trim() === '') {
