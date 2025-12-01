@@ -88,11 +88,13 @@ export const TemplateDetail = () => {
   const url = window.location.search;
   const urlParams = new URLSearchParams(url);
 
+
   // Detect Stripe returns from ANY source
   const returnedFromStripe =
-    url.includes("session_id") ||
-    url.includes("cs_test") ||
-    url.includes("cs_live");
+  url.includes("session_id") ||
+  url.includes("cs_test") ||
+  url.includes("cs_live") ||
+  url.match(/cs_(test|live)_[A-Za-z0-9]+/);
 
   // Retain old referrer logic for debug visibility
   const referrerIndicatesStripe = document.referrer.includes('checkout.stripe.com');
