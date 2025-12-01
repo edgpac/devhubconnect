@@ -74,35 +74,43 @@ async function fetchTemplateById(id: string | undefined): Promise<Template> {
   return data.template;
 }
 
-const handleBackToTemplates = () => {
-  const lastPage = sessionStorage.getItem('lastTemplatePage');
-  const urlParams = new URLSearchParams(window.location.search);
-  const hasStripeSession = urlParams.toString().includes('cs_live') || urlParams.toString().includes('cs_test');
-  const cameFromStripe = document.referrer.includes('checkout.stripe.com') || hasStripeSession;
-  
-  // DEBUG LOGGING
-  console.log('🐛 DEBUG Back Button Clicked:');
-  console.log('  lastPage:', lastPage);
-  console.log('  document.referrer:', document.referrer);
-  console.log('  window.location.search:', window.location.search);
-  console.log('  hasStripeSession:', hasStripeSession);
-  console.log('  cameFromStripe:', cameFromStripe);
-  console.log('  window.history.length:', window.history.length);
-  
-  if (cameFromStripe && lastPage) {
-    console.log('✅ Using Stripe return path → page', lastPage);
-    navigate(`/?page=${lastPage}`);
-  } else if (window.history.length > 1 && !cameFromStripe) {
-    console.log('✅ Using browser back (-1)');
-    navigate(-1);
-  } else if (lastPage) {
-    console.log('✅ Using fallback → page', lastPage);
-    navigate(`/?page=${lastPage}`);
-  } else {
-    console.log('✅ Using final fallback → homepage');
-    navigate('/');
-  }
-};
+export const TemplateDetail = () => {
+  const { id: templateIdParam } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const { currentUser } = useAuth();
+
+  const templateId = templateIdParam;
+
+  const handleBackToTemplates = () => {
+    const lastPage = sessionStorage.getItem('lastTemplatePage');
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasStripeSession = urlParams.toString().includes('cs_live') || urlParams.toString().includes('cs_test');
+    const cameFromStripe = document.referrer.includes('checkout.stripe.com') || hasStripeSession;
+    
+    // DEBUG LOGGING
+    console.log('🐛 DEBUG Back Button Clicked:');
+    console.log('  lastPage:', lastPage);
+    console.log('  document.referrer:', document.referrer);
+    console.log('  window.location.search:', window.location.search);
+    console.log('  hasStripeSession:', hasStripeSession);
+    console.log('  cameFromStripe:', cameFromStripe);
+    console.log('  window.history.length:', window.history.length);
+    
+    if (cameFromStripe && lastPage) {
+      console.log('✅ Using Stripe return path → page', lastPage);
+      navigate(`/?page=${lastPage}`);
+    } else if (window.history.length > 1 && !cameFromStripe) {
+      console.log('✅ Using browser back (-1)');
+      navigate(-1);
+    } else if (lastPage) {
+      console.log('✅ Using fallback → page', lastPage);
+      navigate(`/?page=${lastPage}`);
+    } else {
+      console.log('✅ Using final fallback → homepage');
+      navigate('/');
+    }
+  };
 
   if (!templateId || templateId.trim() === '') {
     return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
