@@ -82,19 +82,25 @@ export const TemplateDetail = () => {
 
   const templateId = templateIdParam;
 
-  // ✅ FIX: Smart back button that preserves pagination
+  // ✅ FIX: Smart back button that preserves pagination and handles Stripe returns
   const handleBackToTemplates = () => {
     // Try to get the last page from sessionStorage
     const lastPage = sessionStorage.getItem('lastTemplatePage');
     
-    if (window.history.length > 1) {
-      // If there's history, use browser back button
+    // Check if we came from Stripe (checkout.stripe.com in the referrer)
+    const cameFromStripe = document.referrer.includes('checkout.stripe.com');
+    
+    if (cameFromStripe && lastPage) {
+      // If returning from Stripe, use sessionStorage to go to the saved page
+      navigate(`/?page=${lastPage}`);
+    } else if (window.history.length > 1 && !cameFromStripe) {
+      // If there's history and we didn't come from Stripe, use browser back
       navigate(-1);
     } else if (lastPage) {
-      // If opened in new tab but we have the page saved, go there
+      // Fallback to sessionStorage
       navigate(`/?page=${lastPage}`);
     } else {
-      // Fallback to homepage
+      // Final fallback to homepage
       navigate('/');
     }
   };
@@ -181,7 +187,7 @@ export const TemplateDetail = () => {
           <Navbar />
           <main className="container mx-auto px-4 py-8">
             <div className="flex justify-between items-center mb-6">
-              {/* ✅ FIXED: Smart back button with sessionStorage fallback */}
+              {/* ✅ FIXED: Smart back button that handles Stripe returns and preserves pagination */}
               <button 
                 onClick={handleBackToTemplates} 
                 className="text-primary hover:underline flex items-center cursor-pointer bg-transparent border-none p-0"
