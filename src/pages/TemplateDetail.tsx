@@ -83,34 +83,54 @@ export const TemplateDetail = () => {
   const templateId = templateIdParam;
 
   const handleBackToTemplates = () => {
-    const lastPage = sessionStorage.getItem('lastTemplatePage');
-    const urlParams = new URLSearchParams(window.location.search);
-    const hasStripeSession = urlParams.toString().includes('cs_live') || urlParams.toString().includes('cs_test');
-    const cameFromStripe = document.referrer.includes('checkout.stripe.com') || hasStripeSession;
-    
-    // DEBUG LOGGING
-    console.log('🐛 DEBUG Back Button Clicked:');
-    console.log('  lastPage:', lastPage);
-    console.log('  document.referrer:', document.referrer);
-    console.log('  window.location.search:', window.location.search);
-    console.log('  hasStripeSession:', hasStripeSession);
-    console.log('  cameFromStripe:', cameFromStripe);
-    console.log('  window.history.length:', window.history.length);
-    
-    if (cameFromStripe && lastPage) {
-      console.log('✅ Using Stripe return path → page', lastPage);
-      navigate(`/?page=${lastPage}`);
-    } else if (window.history.length > 1 && !cameFromStripe) {
-      console.log('✅ Using browser back (-1)');
-      navigate(-1);
-    } else if (lastPage) {
-      console.log('✅ Using fallback → page', lastPage);
-      navigate(`/?page=${lastPage}`);
-    } else {
-      console.log('✅ Using final fallback → homepage');
-      navigate('/');
-    }
-  };
+  const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
+
+  const url = window.location.search;
+  const urlParams = new URLSearchParams(url);
+
+  // Detect Stripe returns from ANY source
+  const returnedFromStripe =
+    url.includes("session_id") ||
+    url.includes("cs_test") ||
+    url.includes("cs_live");
+
+  // Retain old referrer logic for debug visibility
+  const referrerIndicatesStripe = document.referrer.includes('checkout.stripe.com');
+
+  // DEBUG LOGGING
+  console.log('🐛 DEBUG Back Button Clicked:');
+  console.log('  lastPage:', lastPage);
+  console.log('  document.referrer:', document.referrer);
+  console.log('  window.location.search:', window.location.search);
+  console.log('  returnedFromStripe:', returnedFromStripe);
+  console.log('  referrerIndicatesStripe:', referrerIndicatesStripe);
+  console.log('  window.history.length:', window.history.length);
+
+  // 🚀 FIX: Stripe return always skips browser history
+  if (returnedFromStripe) {
+    console.log('✅ Stripe return detected → redirecting to pagination page', lastPage);
+    navigate(`/?page=${lastPage}`);
+    return;
+  }
+
+  // Normal back behavior
+  if (window.history.length > 1 && !referrerIndicatesStripe) {
+    console.log('✅ Using browser back (-1)');
+    navigate(-1);
+    return;
+  }
+
+  // Fallback to lastPage
+  if (lastPage) {
+    console.log('✅ Using fallback → page', lastPage);
+    navigate(`/?page=${lastPage}`);
+    return;
+  }
+
+  // Final fallback
+  console.log('✅ Using final fallback → homepage');
+  navigate('/');
+};
 
   if (!templateId || templateId.trim() === '') {
     return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
