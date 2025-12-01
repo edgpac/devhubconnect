@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
  Select,
  SelectContent,
@@ -139,41 +139,38 @@ export const HomePage = () => {
    queryFn: fetchTemplates,
  });
 
- const location = useLocation();
+ const [searchParams] = useSearchParams();
  const navigate = useNavigate();
-
- const initialPage = useMemo(() => {
-   const params = new URLSearchParams(location.search);
-   const page = parseInt(params.get('page') || '1', 10);
-   return Math.max(1, page);
- }, [location.search]);
 
  const [searchTerm, setSearchTerm] = useState('');
  const [selectedCategory, setSelectedCategory] = useState('all');
  const [sortOrder, setSortOrder] = useState('all');
- const [currentPage, setCurrentPage] = useState(initialPage);
+ 
+ // ✅ YOUR FIX: Initialize page state from URL
+ const [page, setPage] = useState(() => {
+   const urlPage = searchParams.get("page");
+   return urlPage ? Number(urlPage) : 1;
+ });
 
- // ✅ FIX: Update currentPage when URL changes (e.g., when coming back from template detail)
+ // ✅ YOUR FIX: Sync page when URL changes (refresh, back button, deep link)
  useEffect(() => {
-   setCurrentPage(initialPage);
- }, [initialPage]);
+   const urlPage = searchParams.get("page");
+   if (urlPage && Number(urlPage) !== page) {
+     setPage(Number(urlPage));
+   }
+ }, [searchParams]);
 
  const templatesPerPage = 9;
 
- // ✅ FIX: Save current page to sessionStorage whenever it changes
  useEffect(() => {
-   sessionStorage.setItem('lastTemplatePage', currentPage.toString());
- }, [currentPage]);
-
- useEffect(() => {
-   const params = new URLSearchParams(location.search);
-   if (currentPage !== 1) {
-     params.set('page', currentPage.toString());
+   const params = new URLSearchParams(searchParams);
+   if (page !== 1) {
+     params.set('page', page.toString());
    } else {
      params.delete('page');
    }
    navigate(`?${params.toString()}`, { replace: true });
- }, [currentPage, location.search, navigate]);
+ }, [page, navigate]);
 
  const categories = [
    'all',
@@ -238,18 +235,18 @@ export const HomePage = () => {
  const totalPages = Math.ceil(processedTemplates.length / templatesPerPage);
 
  useEffect(() => {
-   if (currentPage > totalPages && totalPages > 0) {
-     setCurrentPage(totalPages);
+   if (page > totalPages && totalPages > 0) {
+     setPage(totalPages);
    }
-   else if (totalPages === 0 && currentPage !== 1) {
-     setCurrentPage(1);
+   else if (totalPages === 0 && page !== 1) {
+     setPage(1);
    }
- }, [currentPage, totalPages]);
+ }, [page, totalPages]);
 
- const startIndex = (currentPage - 1) * templatesPerPage;
+ const startIndex = (page - 1) * templatesPerPage;
  const endIndex = startIndex + templatesPerPage;
  const currentTemplates = processedTemplates.slice(startIndex, endIndex);
- const paginationItems = getPaginationItems(currentPage, totalPages);
+ const paginationItems = getPaginationItems(page, totalPages);
 
  const handleFilterChange = (category: string) => {
    if (category === 'popular') {
@@ -258,17 +255,17 @@ export const HomePage = () => {
      setSortOrder('newest');
    }
    setSelectedCategory(category);
-   setCurrentPage(1);
+   setPage(1);
  };
 
  const handleSortChange = (value: string) => {
    setSortOrder(value);
-   setCurrentPage(1);
+   setPage(1);
  };
 
  const handleSearchChange = (value: string) => {
    setSearchTerm(value);
-   setCurrentPage(1);
+   setPage(1);
    if (value.trim()) {
      trackSearch(value.trim());
    }
@@ -408,7 +405,7 @@ export const HomePage = () => {
                    onClick={() => {
                      setSearchTerm('');
                      setSelectedCategory('all');
-                     setCurrentPage(1);
+                     setPage(1);
                    }}
                  >
                    Clear Filters
@@ -423,12 +420,12 @@ export const HomePage = () => {
                    <PaginationContent>
                      <PaginationItem>
                        <PaginationPrevious
-                         href={`?page=${currentPage - 1}`}
+                         href={`?page=${page - 1}`}
                          onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
                            e.preventDefault();
-                           if (currentPage > 1) setCurrentPage(currentPage - 1);
+                           if (page > 1) setPage(page - 1);
                          }}
-                         className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
+                         className={page === 1 ? 'pointer-events-none opacity-50' : ''}
                        />
                      </PaginationItem>
 
@@ -439,9 +436,9 @@ export const HomePage = () => {
                              href={`?page=${item}`}
                              onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
                                e.preventDefault();
-                               setCurrentPage(item);
+                               setPage(item);
                              }}
-                             isActive={currentPage === item}
+                             isActive={page === item}
                            >
                              {item}
                            </PaginationLink>
@@ -455,12 +452,12 @@ export const HomePage = () => {
 
                      <PaginationItem>
                        <PaginationNext
-                         href={`?page=${currentPage + 1}`}
+                         href={`?page=${page + 1}`}
                          onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
                            e.preventDefault();
-                           if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                           if (page < totalPages) setPage(page + 1);
                          }}
-                         className={currentPage === totalPages ? 'pointer-events-none opacity-50' : ''}
+                         className={page === totalPages ? 'pointer-events-none opacity-50' : ''}
                        />
                      </PaginationItem>
                    </PaginationContent>

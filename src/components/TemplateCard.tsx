@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Star, Download, ShoppingCart, Eye, Trash2, Loader2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { getDeterministicRandom } from "@/lib/utils";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -34,6 +34,7 @@ interface TemplateCardProps {
 
 export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: TemplateCardProps) => {
  const navigate = useNavigate();
+ const [searchParams] = useSearchParams();
  const [isDownloading, setIsDownloading] = useState(false);
  const [isRemoving, setIsRemoving] = useState(false);
  const [isPurchasing, setPurchasing] = useState(false);
@@ -48,56 +49,47 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
  const reviewCount = template._reviewCount || 
    getDeterministicRandom(String(template.id) + "-reviews", 8, 120);
 
+ // ✅ YOUR FIX: Save current page before navigating
  const handlePreview = () => {
-  // Save current page before navigating to template detail
-  const urlParams = new URLSearchParams(window.location.search);
-  const currentPage = urlParams.get('page') || '1';
-  sessionStorage.setItem('lastTemplatePage', currentPage);
-  
-  navigate(`/templates/${template.id}`);
-};
+   const currentPage = searchParams.get("page") || "1";
+   sessionStorage.setItem("lastTemplatePage", currentPage);
+ };
 
-const handlePurchase = async () => {
-  setPurchasing(true);
-  try {
-    console.log(`Initiating purchase for template ${template.id}`);
-    
-    const response = await fetch('/api/stripe/create-checkout-session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ templateId: template.id }),
-      credentials: 'include'
-    });
+ const handlePurchase = async () => {
+   setPurchasing(true);
+   try {
+     console.log(`Initiating purchase for template ${template.id}`);
+     
+     const response = await fetch('/api/stripe/create-checkout-session', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ templateId: template.id }),
+       credentials: 'include'
+     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Purchase failed:', errorData);
-      throw new Error(errorData.message || `Failed to create checkout session: ${response.status}`);
-    }
+     if (!response.ok) {
+       const errorData = await response.json();
+       console.error('Purchase failed:', errorData);
+       throw new Error(errorData.message || `Failed to create checkout session: ${response.status}`);
+     }
 
-    const session = await response.json();
-    
-    if (session.url) {
-      console.log(`Redirecting to Stripe checkout: ${session.url}`);
-      window.location.href = session.url;
-    } else {
-      throw new Error('No checkout URL received from server');
-    }
-  } catch (error: any) {
-    console.error('Purchase error:', error);
-    toast.error(`Purchase failed: ${error.message}`);
-  } finally {
-    setPurchasing(false);
-  }
-};
+     const session = await response.json();
+     
+     if (session.url) {
+       console.log(`Redirecting to Stripe checkout: ${session.url}`);
+       window.location.href = session.url;
+     } else {
+       throw new Error('No checkout URL received from server');
+     }
+   } catch (error: any) {
+     console.error('Purchase error:', error);
+     toast.error(`Purchase failed: ${error.message}`);
+   } finally {
+     setPurchasing(false);
+   }
+ };
 
  const handleDownload = async () => {
-   console.log('🐛 DEBUG: Full template object:', template);
-   console.log('🐛 DEBUG: Template ID:', template.id);
-   console.log('🐛 DEBUG: Template ID type:', typeof template.id);
-   console.log('🐛 DEBUG: Template purchased:', template.purchased);
-   console.log('🐛 DEBUG: Image URL resolved to:', imageUrl);
-
    if (!template.purchased) {
      handlePurchase();
      return;
@@ -112,7 +104,6 @@ const handlePurchase = async () => {
    setIsDownloading(true);
    try {
      const downloadUrl = `/api/templates/${template.id}/download`;
-     console.log('🐛 DEBUG: Download URL:', downloadUrl);
 
      const response = await fetch(downloadUrl, {
        credentials: 'include',
@@ -187,74 +178,70 @@ const handlePurchase = async () => {
    }
  };
 
- // ✅ FIX: Handle card click to navigate to template detail
- const handleCardClick = (e: React.MouseEvent) => {
-   // Don't navigate if clicking on buttons
-   const target = e.target as HTMLElement;
-   if (target.closest('button')) {
-     return;
-   }
-   handlePreview();
- };
-
  return (
-   <Card 
-     className="h-full flex flex-col hover:shadow-lg transition-shadow duration-200 cursor-pointer"
-     onClick={handleCardClick}
-   >
-     <div className="relative overflow-hidden rounded-t-lg">
-       {(template.imageUrl || template.image_url) ? (
-         <img 
-           src={template.imageUrl || template.image_url} 
-           alt={template.name}
-           className="w-full h-48 object-cover transition-transform duration-300 ease-in-out hover:scale-110"
-           onError={(e) => {
-             console.log('🐛 DEBUG: Image failed to load:', imageUrl);
-             e.currentTarget.style.display = 'none';
-             e.currentTarget.parentElement?.querySelector('.image-fallback')?.classList.remove('hidden');
-           }}
-         />
-       ) : null}
-       
-       <div className={`w-full h-48 bg-gray-100 flex items-center justify-center transition-transform duration-300 ease-in-out hover:scale-110 image-fallback ${(template.imageUrl || template.image_url) ? 'hidden' : ''}`}>
-         <div className="text-center text-gray-400">
-           <div className="text-4xl mb-2">📋</div>
-           <div className="text-sm">Workflow Preview</div>
+   <Card className="h-full flex flex-col hover:shadow-lg transition-shadow duration-200">
+     {/* ✅ YOUR FIX: Wrap card content in Link with onClick to save page */}
+     <Link
+       to={`/templates/${template.id}`}
+       onClick={handlePreview}
+       className="flex flex-col flex-1"
+     >
+       <div className="relative overflow-hidden rounded-t-lg">
+         {(template.imageUrl || template.image_url) ? (
+           <img 
+             src={template.imageUrl || template.image_url} 
+             alt={template.name}
+             className="w-full h-48 object-cover transition-transform duration-300 ease-in-out hover:scale-110"
+             onError={(e) => {
+               e.currentTarget.style.display = 'none';
+               e.currentTarget.parentElement?.querySelector('.image-fallback')?.classList.remove('hidden');
+             }}
+           />
+         ) : null}
+         
+         <div className={`w-full h-48 bg-gray-100 flex items-center justify-center transition-transform duration-300 ease-in-out hover:scale-110 image-fallback ${(template.imageUrl || template.image_url) ? 'hidden' : ''}`}>
+           <div className="text-center text-gray-400">
+             <div className="text-4xl mb-2">📋</div>
+             <div className="text-sm">Workflow Preview</div>
+           </div>
+         </div>
+         
+         <div className="absolute top-3 right-3 z-10">
+           <Badge variant="secondary" className="bg-white/90 text-gray-800 font-semibold">
+             {Number(template.price) === 0 
+               ? 'Free' 
+               : `$${(Number(template.price) / 100).toFixed(2)}`}
+           </Badge>
          </div>
        </div>
-       
-       <div className="absolute top-3 right-3 z-10">
-         <Badge variant="secondary" className="bg-white/90 text-gray-800 font-semibold">
-           {Number(template.price) === 0 
-             ? 'Free' 
-             : `$${(Number(template.price) / 100).toFixed(2)}`}
-         </Badge>
-       </div>
-     </div>
 
-     <CardHeader className="pb-3">
-       <CardTitle className="text-lg font-semibold line-clamp-2 min-h-[3.5rem]">
-         {template.name}
-       </CardTitle>
-     </CardHeader>
+       <CardHeader className="pb-3">
+         <CardTitle className="text-lg font-semibold line-clamp-2 min-h-[3.5rem]">
+           {template.name}
+         </CardTitle>
+       </CardHeader>
+       
+       <CardContent className="flex-1 flex flex-col justify-between">
+         <p className="text-sm text-gray-600 line-clamp-3 mb-4">
+           {template.description}
+         </p>
+         
+         <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+           <div className="flex items-center space-x-1">
+             <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+             <span className="font-medium">{rating.toFixed(1)}</span>
+             {reviewCount > 0 && <span className="text-gray-400">({reviewCount})</span>}
+           </div>
+           <div className="flex items-center space-x-1">
+             <Download className="h-4 w-4" />
+             <span className="font-medium">{downloadCount.toLocaleString()}</span>
+           </div>
+         </div>
+       </CardContent>
+     </Link>
      
-     <CardContent className="flex-1 flex flex-col justify-between">
-       <p className="text-sm text-gray-600 line-clamp-3 mb-4">
-         {template.description}
-       </p>
-       
-       <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-         <div className="flex items-center space-x-1">
-           <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-           <span className="font-medium">{rating.toFixed(1)}</span>
-           {reviewCount > 0 && <span className="text-gray-400">({reviewCount})</span>}
-         </div>
-         <div className="flex items-center space-x-1">
-           <Download className="h-4 w-4" />
-           <span className="font-medium">{downloadCount.toLocaleString()}</span>
-         </div>
-       </div>
-       
+     {/* Buttons outside Link so they work independently */}
+     <CardContent className="pt-0">
        <div className="space-y-2">
          <Button 
            className={`w-full ${
@@ -263,7 +250,10 @@ const handlePurchase = async () => {
                : "bg-primary hover:bg-primary/90 text-white border-0 shadow-lg"
            }`}
            variant={template.purchased ? "outline" : "default"}
-           onClick={handleDownload}
+           onClick={(e) => {
+             e.preventDefault();
+             handleDownload();
+           }}
            disabled={isDownloading || isPurchasing}
          >
            {isDownloading ? (
@@ -294,7 +284,11 @@ const handlePurchase = async () => {
              variant="outline" 
              size="sm" 
              className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50"
-             onClick={handlePreview}
+             onClick={(e) => {
+               e.preventDefault();
+               handlePreview();
+               navigate(`/templates/${template.id}`);
+             }}
            >
              <Eye className="h-4 w-4 mr-2" />
              Preview
@@ -304,7 +298,10 @@ const handlePurchase = async () => {
              <Button 
                variant="outline" 
                size="sm"
-               onClick={handleRemoveTemplate}
+               onClick={(e) => {
+                 e.preventDefault();
+                 handleRemoveTemplate();
+               }}
                disabled={isRemoving}
                className="px-3 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
                title={`Remove "${template.name}" from collection`}

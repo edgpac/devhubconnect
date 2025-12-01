@@ -4,15 +4,13 @@ import { Helmet, HelmetProvider } from "react-helmet-async";
 import { Navbar } from "../components/Navbar";
 import { Button } from "../components/ui/button";
 import { ArrowLeft, ShoppingCart, Star, Eye, Edit, SlidersHorizontal, Share2, Download, Copy } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/context/AuthProvider";
 import { API_ENDPOINTS, apiCall } from '../config/api';
-
 import { getDeterministicRandom } from "@/lib/utils";
 import { loadStripe } from '@stripe/stripe-js';
 
-// REPLACE WITH YOUR ACTUAL STRIPE PUBLISHABLE KEY
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51RgVfSBS72lorg0VlXnIXjmsGBjriHLK36isBNmKnsbYjkHmTkz6Rp0hK0QboFaJLnzl0qA2FyLMq3hA5ofFEneN005HATkECJ');
 
 interface Template {
@@ -82,37 +80,12 @@ export const TemplateDetail = () => {
 
   const templateId = templateIdParam;
 
-  // 🔧 FIX: Clean Stripe params from URL when returning from checkout
-  useEffect(() => {
-    const hash = window.location.hash || '';
-    const search = window.location.search || '';
-    
-    // Detect if we just returned from Stripe
-    const returnedFromStripe =
-      hash.includes("cs_") ||
-      decodeURIComponent(hash || "").includes("cs_") ||
-      search.includes("session_id=cs_");
+  // ✅ YOUR FIX: Read saved page at the top
+  const lastPage = sessionStorage.getItem("lastTemplatePage") || "1";
 
-    if (returnedFromStripe) {
-      console.log('🔧 Detected return from Stripe - cleaning history');
-      
-      // Clean the URL to remove Stripe params
-      const cleanUrl = window.location.pathname;
-      window.history.replaceState(null, '', cleanUrl);
-      
-      console.log('✅ Stripe params removed from URL');
-    }
-  }, []); // Run once on mount
-
+  // ✅ YOUR FIX: Back button handler uses saved page
   const handleBackToTemplates = () => {
-    const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
-    
-    // Nuclear option: Clear ALL navigation and force a fresh page load
-    // This completely bypasses React Router and browser history
-    sessionStorage.setItem('skipStripe', 'true'); // Flag to prevent any Stripe redirects
-    
-    // Force a hard page reload to the listing page
-    window.location.replace(`/?page=${lastPage}`);
+    navigate(`/?page=${lastPage}`);
   };
 
   if (!templateId || templateId.trim() === '') {
@@ -130,19 +103,6 @@ export const TemplateDetail = () => {
 
   const imageUrl = template.imageUrl || template.image_url;
 
-  console.log('🔍 Template Debug Info:', {
-    templateId: template.id,
-    templateName: template.name,
-    imageUrl: template.imageUrl,
-    image_url: template.image_url,
-    finalImageUrl: imageUrl,
-    workflowJson: template.workflowJson,
-    workflow_json: template.workflow_json,
-    hasImageUrl: !!imageUrl,
-    imageUrlType: typeof imageUrl,
-    imageUrlLength: imageUrl?.length
-  });
-
   const deterministicReviewCount = getDeterministicRandom(String(template.id), 16, 92);
   const deterministicViewsCount = getDeterministicRandom(String(template.id) + "-views", 300, 1500);
   const deterministicRating = (4 + getDeterministicRandom(String(template.id) + "-rating", 1, 9) / 10).toFixed(1);
@@ -158,8 +118,7 @@ export const TemplateDetail = () => {
     try {
       const stripe = await stripePromise;
       if (!stripe) {
-        console.error("Stripe.js failed to load.");
-        toast.error("Payment system not available. Please try again later.", { description: "Stripe.js failed to load." });
+        toast.error("Payment system not available. Please try again later.");
         return;
       }
 
@@ -169,17 +128,13 @@ export const TemplateDetail = () => {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Backend error response:", errorText);
-        throw new Error(`Failed to create checkout session. Server responded with: ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 100)}...`);
+        throw new Error('Failed to create checkout session');
       }
 
       const session = await response.json();
-
       window.location.href = session.url;
 
     } catch (error) {
-      console.error("Error during purchase:", error);
       toast.error("Purchase failed", { description: (error as Error).message });
     } finally {
       setIsPurchasing(false);
@@ -197,7 +152,6 @@ export const TemplateDetail = () => {
           <Navbar />
           <main className="container mx-auto px-4 py-8">
             <div className="flex justify-between items-center mb-6">
-              {/* ✅ FIXED: Always navigates directly to listing page, bypassing Stripe in history */}
               <button 
                 onClick={handleBackToTemplates} 
                 className="text-primary hover:underline flex items-center cursor-pointer bg-transparent border-none p-0"
@@ -227,17 +181,9 @@ export const TemplateDetail = () => {
                         src={imageUrl} 
                         alt={`${template.name} preview`} 
                         className="max-w-full h-auto rounded-md"
-                        onLoad={() => console.log('✅ Image loaded successfully:', imageUrl)}
-                        onError={(e) => {
-                          console.error('❌ Image failed to load:', imageUrl);
-                          console.error('Error details:', e);
-                        }}
                       />
                     ) : (
-                      <div>
-                        <p className="text-gray-500">No visual preview available.</p>
-                        <p className="text-xs text-gray-400 mt-2">Debug: imageUrl = "{template.imageUrl}", image_url = "{template.image_url}"</p>
-                      </div>
+                      <p className="text-gray-500">No visual preview available.</p>
                     )}
                   </div>
                 </div>
@@ -252,7 +198,7 @@ export const TemplateDetail = () => {
                         <Download className="w-5 h-5 mr-2" />
                         Download JSON
                       </Button>
-                      <Button size="lg" variant="secondary" className="w-full" onClick={() => alert('Logic to copy workflow to be implemented!')}>
+                      <Button size="lg" variant="secondary" className="w-full" onClick={() => toast.info('Coming soon!')}>
                         <Copy className="w-5 h-5 mr-2" />
                         Copy to My Workflows
                       </Button>
@@ -296,7 +242,7 @@ export const TemplateDetail = () => {
                     </div>
                     <div>
                         <div className="flex items-center text-sm font-semibold text-gray-600 mb-3">
-                            <Share2 className="w-4 h-4 mr-2" />
+                            <Share2 className="w-4 w-4 mr-2" />
                             Integrated Apps
                         </div>
                         <div className="flex flex-wrap gap-2">
