@@ -51,9 +51,16 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
    getDeterministicRandom(String(template.id) + "-reviews", 8, 120);
 
  const handlePreview = () => {
-   // Navigate to the template detail page
-   navigate(`/template/${template.id}`);
- };
+  // ✅ FIX: Save current page before navigating to template detail
+  const urlParams = new URLSearchParams(window.location.search);
+  const currentPage = urlParams.get('page') || '1';
+  sessionStorage.setItem('lastTemplatePage', currentPage);
+  
+  console.log(`📄 Saving page ${currentPage} before navigating to template ${template.id}`);
+  
+  // Navigate to the template detail page
+  navigate(`/template/${template.id}`);
+};
 
 // HandlePurchase function:
 
