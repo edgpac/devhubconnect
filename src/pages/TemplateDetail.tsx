@@ -4,7 +4,7 @@ import { Helmet, HelmetProvider } from "react-helmet-async";
 import { Navbar } from "../components/Navbar";
 import { Button } from "../components/ui/button";
 import { ArrowLeft, ShoppingCart, Star, Eye, Edit, SlidersHorizontal, Share2, Download, Copy } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/context/AuthProvider";
 import { API_ENDPOINTS, apiCall } from '../config/api';
@@ -12,6 +12,7 @@ import { API_ENDPOINTS, apiCall } from '../config/api';
 import { getDeterministicRandom } from "@/lib/utils";
 import { loadStripe } from '@stripe/stripe-js';
 
+// REPLACE WITH YOUR ACTUAL STRIPE PUBLISHABLE KEY
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51RgVfSBS72lorg0VlXnIXjmsGBjriHLK36isBNmKnsbYjkHmTkz6Rp0hK0QboFaJLnzl0qA2FyLMq3hA5ofFEneN005HATkECJ');
 
 interface Template {
@@ -81,9 +82,44 @@ export const TemplateDetail = () => {
 
   const templateId = templateIdParam;
 
+  // 🔧 FIX: Clean Stripe params from URL when returning from checkout
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    const search = window.location.search || '';
+    
+    // Detect if we just returned from Stripe
+    const returnedFromStripe =
+      hash.includes("cs_") ||
+      decodeURIComponent(hash || "").includes("cs_") ||
+      search.includes("session_id=cs_");
+
+    if (returnedFromStripe) {
+      console.log('🔧 Detected return from Stripe - cleaning history');
+      
+      // Clean the URL to remove Stripe params
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState(null, '', cleanUrl);
+      
+      console.log('✅ Stripe params removed from URL');
+    }
+  }, []); // Run once on mount
+
   const handleBackToTemplates = () => {
     const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
-    window.location.href = `/?page=${lastPage}`;
+    
+    console.log('=== BACK TO ALL TEMPLATES CLICKED ===');
+    console.log('Last page from sessionStorage:', lastPage);
+    console.log('Current URL:', window.location.href);
+    console.log('About to navigate to: /?page=' + lastPage);
+    
+    // Nuclear option: Clear ALL navigation and force a fresh page load
+    // This completely bypasses React Router and browser history
+    sessionStorage.setItem('skipStripe', 'true'); // Flag to prevent any Stripe redirects
+    
+    // Force a hard page reload to the listing page
+    window.location.replace(`/?page=${lastPage}`);
+    
+    console.log('Navigation command executed');
   };
 
   if (!templateId || templateId.trim() === '') {
@@ -100,6 +136,19 @@ export const TemplateDetail = () => {
   if (!template) return <div className="text-center p-12">Template not found.</div>;
 
   const imageUrl = template.imageUrl || template.image_url;
+
+  console.log('🔍 Template Debug Info:', {
+    templateId: template.id,
+    templateName: template.name,
+    imageUrl: template.imageUrl,
+    image_url: template.image_url,
+    finalImageUrl: imageUrl,
+    workflowJson: template.workflowJson,
+    workflow_json: template.workflow_json,
+    hasImageUrl: !!imageUrl,
+    imageUrlType: typeof imageUrl,
+    imageUrlLength: imageUrl?.length
+  });
 
   const deterministicReviewCount = getDeterministicRandom(String(template.id), 16, 92);
   const deterministicViewsCount = getDeterministicRandom(String(template.id) + "-views", 300, 1500);
@@ -155,6 +204,7 @@ export const TemplateDetail = () => {
           <Navbar />
           <main className="container mx-auto px-4 py-8">
             <div className="flex justify-between items-center mb-6">
+              {/* ✅ FIXED: Always navigates directly to listing page, bypassing Stripe in history */}
               <button 
                 onClick={handleBackToTemplates} 
                 className="text-primary hover:underline flex items-center cursor-pointer bg-transparent border-none p-0"
@@ -184,10 +234,16 @@ export const TemplateDetail = () => {
                         src={imageUrl} 
                         alt={`${template.name} preview`} 
                         className="max-w-full h-auto rounded-md"
+                        onLoad={() => console.log('✅ Image loaded successfully:', imageUrl)}
+                        onError={(e) => {
+                          console.error('❌ Image failed to load:', imageUrl);
+                          console.error('Error details:', e);
+                        }}
                       />
                     ) : (
                       <div>
                         <p className="text-gray-500">No visual preview available.</p>
+                        <p className="text-xs text-gray-400 mt-2">Debug: imageUrl = "{template.imageUrl}", image_url = "{template.image_url}"</p>
                       </div>
                     )}
                   </div>
