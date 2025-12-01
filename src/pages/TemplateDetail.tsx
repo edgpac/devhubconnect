@@ -84,78 +84,35 @@ export const TemplateDetail = () => {
 
   const handleBackToTemplates = () => {
     const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
-
-    const href = window.location.href || '';
-    const search = window.location.search || '';
     const hash = window.location.hash || '';
-    const urlParams = new URLSearchParams(search);
-
-    // 🔥 Reliable Stripe return detection — works even with encoded or wrapped fragments
+    const search = window.location.search || '';
+    
+    // Check if we just returned from Stripe
     const returnedFromStripe =
       hash.includes("cs_") ||
-      decodeURIComponent(hash || "").includes("cs_");
+      decodeURIComponent(hash || "").includes("cs_") ||
+      search.includes("session_id=cs_");
 
-    // Retain referrer check for debug info
-    const referrerIndicatesStripe =
-      document.referrer && document.referrer.includes("checkout.stripe.com");
+    console.log('🔙 Back to Templates clicked');
+    console.log('  Last page:', lastPage);
+    console.log('  Returned from Stripe:', returnedFromStripe);
 
-    // DEBUG LOGGING (very explicit)
-    console.log("🐛 DEBUG Back Button Clicked:");
-    console.log("  lastPage:", lastPage);
-    console.log("  window.location.href:", href);
-    console.log("  window.location.search:", search);
-    console.log("  window.location.hash:", hash);
-    console.log("  urlParams (keys):", Array.from(urlParams.keys()));
-    console.log("  returnedFromStripe (regex):", returnedFromStripe);
-    console.log("  referrerIndicatesStripe:", referrerIndicatesStripe);
-    console.log("  window.history.length:", window.history.length);
-
-    const cleanStripeReturnParams = () => {
-      try {
-        const u = new URL(window.location.href);
-        // remove common stripe params
-        u.searchParams.delete("session_id");
-
-        // remove any query param keys or values that contain cs_test / cs_live tokens
-        for (const [k, v] of Array.from(u.searchParams.entries())) {
-          if (/cs_(?:test|live)_/.test(k) || /cs_(?:test|live)_/.test(String(v))) {
-            u.searchParams.delete(k);
-          }
-        }
-
-        // also remove tokens from the hash if present
-        if (u.hash && /cs_(?:test|live)_/.test(u.hash)) {
-          u.hash = "";
-        }
-
-        // Update the visible URL without navigating
-        const clean =
-          u.pathname +
-          (u.search ? `?${u.searchParams.toString()}` : "") +
-          (u.hash ? `#${u.hash}` : "");
-        window.history.replaceState(null, "", clean || "/");
-        console.log("✅ Cleaned Stripe params from URL. New URL:", clean);
-      } catch (err) {
-        console.warn("Unable to clean Stripe params:", err);
-      }
-    };
-
-    // 🎯 FIX: ALWAYS navigate directly to the listing page
-    // This prevents going back through Stripe checkout in browser history
-    // Whether user completed checkout or canceled, we skip the Stripe URL entirely
-    
-    // If returning from Stripe, clean the URL first
     if (returnedFromStripe) {
-      console.log(
-        "✅ Stripe return detected → cleaning URL and redirecting to page",
-        lastPage
-      );
-      cleanStripeReturnParams();
+      // 🎯 FIX: Clean the URL first to remove Stripe params from history
+      console.log('  Cleaning Stripe params from URL...');
+      
+      // Remove Stripe params from current URL in browser history
+      const cleanUrl = window.location.pathname; // Just the path, no query or hash
+      window.history.replaceState(null, '', cleanUrl);
+      
+      // Now navigate, which replaces the cleaned URL with the listing page
+      console.log(`  Navigating to page ${lastPage} with replace`);
+      navigate(`/?page=${lastPage}`, { replace: true });
+    } else {
+      // Normal navigation
+      console.log(`  Normal navigation to page ${lastPage}`);
+      navigate(`/?page=${lastPage}`, { replace: true });
     }
-
-    // Always navigate directly to the listing page (never use browser back)
-    console.log(`✅ Navigating directly to page ${lastPage} (bypassing any Stripe URLs in history)`);
-    navigate(`/?page=${lastPage}`, { replace: true });
   };
 
   if (!templateId || templateId.trim() === '') {
