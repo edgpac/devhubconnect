@@ -105,30 +105,32 @@ export const TemplateDetail = () => {
   }, []); // Run once on mount
 
   const handleBackToTemplates = () => {
-    // First, verify the function is actually being called
-    alert('🔔 Button clicked!');
-    
-    const lastPage = sessionStorage.getItem('lastTemplatePage') || '1';
-    
-    console.log('=== BACK TO ALL TEMPLATES CLICKED ===');
-    console.log('Last page from sessionStorage:', lastPage);
-    console.log('Current URL:', window.location.href);
-    console.log('Current history length:', window.history.length);
-    console.log('Document referrer:', document.referrer);
-    console.log('About to navigate to: /?page=' + lastPage);
-    
-    // Show what we're about to do
-    alert(`📍 Navigating to page ${lastPage}`);
-
-    // Nuclear option: Clear ALL navigation and force a fresh page load
-    // This completely bypasses React Router and browser history
-    sessionStorage.setItem('skipStripe', 'true'); // Flag to prevent any Stripe redirects
-    
-    // Force a hard page reload to the listing page
-    window.location.replace(`/?page=${lastPage}`);
-    
-    console.log('Navigation command executed');
-  };
+  alert('🔔 Button clicked!');
+  
+  // Check what's in sessionStorage
+  const lastPage = sessionStorage.getItem('lastTemplatePage');
+  const fallbackPage = lastPage || '1';
+  
+  alert(`Raw value from sessionStorage: "${lastPage}"`);
+  alert(`Final page value: "${fallbackPage}"`);
+  alert(`Type: ${typeof fallbackPage}`);
+  
+  console.log('=== BACK TO ALL TEMPLATES CLICKED ===');
+  console.log('Raw sessionStorage value:', lastPage);
+  console.log('After fallback:', fallbackPage);
+  console.log('Current URL:', window.location.href);
+  console.log('Current history length:', window.history.length);
+  console.log('Document referrer:', document.referrer);
+  console.log('About to navigate to: /?page=' + fallbackPage);
+  
+  // Force a hard page reload to the listing page
+  const targetUrl = `/?page=${fallbackPage}`;
+  alert(`Final URL: ${targetUrl}`);
+  
+  window.location.replace(targetUrl);
+  
+  console.log('Navigation command executed');
+};
 
   if (!templateId || templateId.trim() === '') {
     return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
