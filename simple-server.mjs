@@ -678,7 +678,6 @@ function convertFieldNames(template) {
     price: template.price,
     currency: template.currency,
     imageUrl: template.image_url,
-    workflowJson: template.workflow_json,
     status: template.status,
     isPublic: template.is_public,
     creatorId: template.creator_id,
