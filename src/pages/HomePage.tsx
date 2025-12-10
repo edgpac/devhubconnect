@@ -146,13 +146,13 @@ export const HomePage = () => {
  const [selectedCategory, setSelectedCategory] = useState('all');
  const [sortOrder, setSortOrder] = useState('all');
  
- // ✅ YOUR FIX: Initialize page state from URL
+ // ✅ Initialize page state from URL
  const [page, setPage] = useState(() => {
    const urlPage = searchParams.get("page");
    return urlPage ? Number(urlPage) : 1;
  });
 
- // ✅ YOUR FIX: Sync page when URL changes (refresh, back button, deep link)
+ // ✅ Sync page when URL changes (refresh, back button, deep link)
  useEffect(() => {
    const urlPage = searchParams.get("page");
    if (urlPage && Number(urlPage) !== page) {
@@ -292,7 +292,25 @@ export const HomePage = () => {
    <HelmetProvider>
      <>
        <Helmet>
-         <title>Automation Templates | DevHubConnect</title>
+         <title>Premium n8n Automation Templates & Workflow Marketplace | DevHubConnect</title>
+         <meta 
+           name="description" 
+           content="Browse 580+ premium n8n automation workflow templates. Save hours of development time with ready-to-use integrations for Slack, Gmail, Stripe, and more. Instant download." 
+         />
+         <link rel="canonical" href="https://www.devhubconnect.com/" />
+         
+         {/* Open Graph Tags */}
+         <meta property="og:title" content="Premium n8n Automation Templates | DevHubConnect" />
+         <meta property="og:description" content="Browse 580+ premium n8n automation workflow templates. Save hours with ready-to-use integrations." />
+         <meta property="og:url" content="https://www.devhubconnect.com/" />
+         <meta property="og:type" content="website" />
+         <meta property="og:image" content="https://www.devhubconnect.com/og-image.png" />
+         
+         {/* Twitter Card Tags */}
+         <meta name="twitter:card" content="summary_large_image" />
+         <meta name="twitter:title" content="Premium n8n Automation Templates | DevHubConnect" />
+         <meta name="twitter:description" content="Browse 580+ premium n8n automation workflow templates. Save hours with ready-to-use integrations." />
+         <meta name="twitter:image" content="https://www.devhubconnect.com/og-image.png" />
        </Helmet>
 
        <div className="min-h-screen bg-gray-50">
@@ -301,7 +319,7 @@ export const HomePage = () => {
          {/* Hero Section */}
          <section className="bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-800 text-white py-20">
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-             <h1 className="text-5xl font-bold mb-6">The Automation Platform</h1>
+             <h1 className="text-5xl font-bold mb-6">Premium n8n Automation Templates & Workflows</h1>
              <p className="text-xl mb-8 text-teal-100 max-w-3xl mx-auto">
                We won't just hand you a solution, we'll build it for you.<br />
                Upload your template and get step by step assistance from our AI.<br />
@@ -471,7 +489,7 @@ export const HomePage = () => {
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
              <h2 className="text-3xl font-bold text-gray-900 mb-6">Need Assistance? Ask Our AI!</h2>
              <p className="text-lg text-gray-600 mb-8">
-               Upload your .json file to get AI help deploying your n8n template or answering related questions..
+               Upload your .json file to get help deploying your n8n template or answering related questions..
              </p>
              <div className="max-w-7xl mx-auto">
                <ChatBox />
