@@ -218,12 +218,14 @@ app.get('/assets/*.css', (req, res) => {
   });
 });
 
-// ✅ CRITICAL FIX: SITEMAP ROUTE MOVED BEFORE STATIC MIDDLEWARE
+// ✅ OPTIMIZED SITEMAP - Replace lines 184-235 in simple-server.mjs
+// This fixes: Dashboard URL removed, /template/ → /templates/, no pagination, adds static pages
+
 app.get('/sitemap.xml', async (req, res) => {
   try {
     if (req.isDisconnected()) return;
     
-    console.log('🗺️ Generating dynamic sitemap with all templates...');
+    console.log('🗺️ Generating optimized sitemap...');
     
     const templates = await pool.query(
       'SELECT id, updated_at FROM templates WHERE is_public = true ORDER BY id'
@@ -237,41 +239,39 @@ app.get('/sitemap.xml', async (req, res) => {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://www.devhubconnect.com/</loc>
-    <changefreq>weekly</changefreq>
+    <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://www.devhubconnect.com/dashboard</loc>
+    <loc>https://www.devhubconnect.com/guidance</loc>
     <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.devhubconnect.com/terms</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://www.devhubconnect.com/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
   </url>`;
     
     templates.rows.forEach(template => {
       sitemap += `
   <url>
-    <loc>https://www.devhubconnect.com/template/${template.id}</loc>
+    <loc>https://www.devhubconnect.com/templates/${template.id}</loc>
     <lastmod>${template.updated_at.toISOString().split('T')[0]}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>`;
     });
     
-    const templatesPerPage = 12;
-    const totalPages = Math.ceil(templates.rows.length / templatesPerPage);
-    
-    for (let page = 2; page <= Math.min(totalPages, 50); page++) {
-      sitemap += `
-  <url>
-    <loc>https://www.devhubconnect.com/?page=${page}</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>`;
-    }
-    
     sitemap += '\n</urlset>';
     
     const urlCount = (sitemap.match(/<url>/g) || []).length;
-    console.log(`✅ Generated sitemap with ${urlCount} URLs`);
+    console.log(`✅ Generated optimized sitemap with ${urlCount} URLs (${templates.rows.length} templates + 4 static pages)`);
     
     if (!req.isDisconnected() && !res.headersSent) {
       res.set('Content-Type', 'application/xml');
