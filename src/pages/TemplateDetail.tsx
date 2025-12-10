@@ -141,11 +141,73 @@ export const TemplateDetail = () => {
     }
   };
 
+  // ✅ SEO: Build dynamic meta tags
+  const metaTitle = `${template.name} - n8n Automation Template | DevHubConnect`;
+  const metaDescription = `Download ${template.name}. ${stepCount > 0 ? `${stepCount} nodes` : 'Ready-to-use workflow'} ${integratedApps.length > 0 ? `with ${integratedApps.slice(0, 3).join(', ')}` : ''}. Price: $${(template.price / 100).toFixed(2)}. Instant download.`;
+  const templateUrl = `https://www.devhubconnect.com/templates/${template.id}`;
+  const priceValue = (template.price / 100).toFixed(2);
+
   return (
     <HelmetProvider>
       <>
         <Helmet>
-            <title>{template.name} | DevHubConnect</title>
+            {/* Primary Meta Tags */}
+            <title>{metaTitle}</title>
+            <meta name="title" content={metaTitle} />
+            <meta name="description" content={metaDescription} />
+            
+            {/* Open Graph / Facebook */}
+            <meta property="og:type" content="product" />
+            <meta property="og:url" content={templateUrl} />
+            <meta property="og:title" content={metaTitle} />
+            <meta property="og:description" content={metaDescription} />
+            {imageUrl && <meta property="og:image" content={imageUrl} />}
+            <meta property="og:site_name" content="DevHubConnect" />
+            
+            {/* Twitter */}
+            <meta name="twitter:card" content="summary_large_image" />
+            <meta name="twitter:url" content={templateUrl} />
+            <meta name="twitter:title" content={metaTitle} />
+            <meta name="twitter:description" content={metaDescription} />
+            {imageUrl && <meta name="twitter:image" content={imageUrl} />}
+            
+            {/* Structured Data - Product Schema */}
+            <script type="application/ld+json">
+              {JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "Product",
+                "name": template.name,
+                "description": template.description,
+                "image": imageUrl || "https://www.devhubconnect.com/placeholder.svg",
+                "url": templateUrl,
+                "offers": {
+                  "@type": "Offer",
+                  "url": templateUrl,
+                  "priceCurrency": "USD",
+                  "price": priceValue,
+                  "availability": "https://schema.org/InStock",
+                  "seller": {
+                    "@type": "Organization",
+                    "name": "DevHubConnect"
+                  }
+                },
+                "aggregateRating": {
+                  "@type": "AggregateRating",
+                  "ratingValue": deterministicRating,
+                  "reviewCount": deterministicReviewCount,
+                  "bestRating": "5",
+                  "worstRating": "1"
+                },
+                "brand": {
+                  "@type": "Brand",
+                  "name": "DevHubConnect"
+                },
+                "category": "Software > Automation Tools"
+              })}
+            </script>
+            
+            {/* Canonical URL */}
+            <link rel="canonical" href={templateUrl} />
         </Helmet>
          
         <div className="min-h-screen bg-gray-50">
