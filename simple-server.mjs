@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+import fs from 'fs';  // ✅ ADDED FOR SEO META TAG INJECTION
 import pg from 'pg';
 const { Pool } = pg;
 import Stripe from 'stripe';
@@ -220,7 +221,6 @@ app.get('/assets/*.css', (req, res) => {
 
 // ✅ OPTIMIZED SITEMAP - Replace lines 184-235 in simple-server.mjs
 // This fixes: Dashboard URL removed, /template/ → /templates/, no pagination, adds static pages
-
 app.get('/sitemap.xml', async (req, res) => {
   try {
     if (req.isDisconnected()) return;
@@ -285,7 +285,138 @@ app.get('/sitemap.xml', async (req, res) => {
   }
 });
 
-// ✅ General static middleware for other files - AFTER SITEMAP ROUTE
+// ==================== DYNAMIC META TAG INJECTION FOR SEO ====================
+// ✅ CRITICAL: Template page meta tag injection for SEO - MUST BE BEFORE STATIC MIDDLEWARE
+app.get('/templates/:id', async (req, res) => {
+  try {
+    if (req.isDisconnected()) return;
+    
+    const templateId = req.params.id;
+    console.log('🔍 SEO: Serving template page with dynamic meta tags:', templateId);
+    
+    // Fetch template data from database
+    const templateResult = await pool.query(
+      'SELECT id, name, description, price, image_url, workflow_json FROM templates WHERE id = $1 AND is_public = true',
+      [templateId]
+    );
+    
+    if (req.isDisconnected()) return;
+    
+    if (templateResult.rows.length === 0) {
+      // Template not found - serve 404 page
+      return res.status(404).sendFile(path.join(__dirname, 'dist', 'index.html'));
+    }
+    
+    const template = templateResult.rows[0];
+    
+    // Parse workflow details
+    let stepCount = 0;
+    let integratedApps = [];
+    try {
+      const workflow = template.workflow_json;
+      if (workflow && workflow.nodes) {
+        stepCount = workflow.nodes.length;
+        const appTypes = workflow.nodes.map(node => {
+          const parts = node.type.split('.');
+          return parts.length > 1 ? parts[parts.length - 1] : parts[0];
+        });
+        integratedApps = [...new Set(appTypes)].filter(app => 
+          !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(app)
+        ).slice(0, 3);
+      }
+    } catch (e) {
+      console.log('Could not parse workflow JSON for SEO');
+    }
+    
+    // Build dynamic meta tags
+    const metaTitle = `${template.name} - n8n Automation Template | DevHubConnect`;
+    const metaDescription = `Download ${template.name}. ${stepCount > 0 ? `${stepCount} nodes` : 'Ready-to-use workflow'} ${integratedApps.length > 0 ? `with ${integratedApps.join(', ')}` : ''}. Price: $${(template.price / 100).toFixed(2)}. Instant download.`;
+    const templateUrl = `https://www.devhubconnect.com/templates/${template.id}`;
+    const imageUrl = template.image_url || 'https://www.devhubconnect.com/placeholder.svg';
+    const priceValue = (template.price / 100).toFixed(2);
+    
+    // Read the base HTML file
+    const htmlPath = path.join(__dirname, 'dist', 'index.html');
+    let html = await fs.promises.readFile(htmlPath, 'utf8');
+    
+    // Replace the title
+    html = html.replace(
+      /<title>.*?<\/title>/,
+      `<title>${metaTitle}</title>`
+    );
+    
+    // Inject meta tags right after <title>
+    const metaTags = `
+    <meta name="title" content="${metaTitle}" />
+    <meta name="description" content="${metaDescription}" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="product" />
+    <meta property="og:url" content="${templateUrl}" />
+    <meta property="og:title" content="${metaTitle}" />
+    <meta property="og:description" content="${metaDescription}" />
+    <meta property="og:image" content="${imageUrl}" />
+    <meta property="og:site_name" content="DevHubConnect" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="${templateUrl}" />
+    <meta name="twitter:title" content="${metaTitle}" />
+    <meta name="twitter:description" content="${metaDescription}" />
+    <meta name="twitter:image" content="${imageUrl}" />
+    
+    <!-- Structured Data - Product Schema -->
+    <script type="application/ld+json">
+    ${JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "name": template.name,
+      "description": template.description,
+      "image": imageUrl,
+      "url": templateUrl,
+      "offers": {
+        "@type": "Offer",
+        "url": templateUrl,
+        "priceCurrency": "USD",
+        "price": priceValue,
+        "availability": "https://schema.org/InStock",
+        "seller": {
+          "@type": "Organization",
+          "name": "DevHubConnect"
+        }
+      },
+      "brand": {
+        "@type": "Brand",
+        "name": "DevHubConnect"
+      },
+      "category": "Software > Automation Tools"
+    })}
+    </script>
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="${templateUrl}" />`;
+    
+    html = html.replace('</title>', `</title>${metaTags}`);
+    
+    console.log(`✅ SEO: Injected dynamic meta tags for: ${template.name}`);
+    
+    if (!req.isDisconnected() && !res.headersSent) {
+      res.setHeader('Content-Type', 'text/html');
+      res.send(html);
+    }
+    
+  } catch (error) {
+    if (error.code === 'ECONNRESET' || error.code === 'EPIPE' || error.code === 'ECONNABORTED') {
+      return;
+    }
+    console.error('❌ SEO meta tag injection error:', error);
+    if (!res.headersSent && !req.isDisconnected()) {
+      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    }
+  }
+});
+
+// ✅ General static middleware for other files - AFTER template route
 app.use(express.static(path.join(__dirname, 'dist'), {
   index: false
 }));
