@@ -1,13 +1,14 @@
+import { Helmet, HelmetProvider } from "react-helmet-async";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { 
-  Search, 
-  Filter, 
-  ShoppingCart, 
-  User, 
-  CreditCard, 
+import {
+  Search,
+  Filter,
+  ShoppingCart,
+  User,
+  CreditCard,
   Download,
   Eye,
   MousePointer,
@@ -24,8 +25,29 @@ import { Link } from "react-router-dom";
 
 export const GuidancePage = () => {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <HelmetProvider>
+      <Helmet>
+        <title>How to Use DevHubConnect - n8n Template Marketplace Guide | DevHubConnect</title>
+        <meta
+          name="description"
+          content="Complete guide to buying, downloading, and using n8n automation workflow templates from DevHubConnect. Learn how to browse templates, make secure purchases with GitHub authentication, and deploy workflows with AI assistance."
+        />
+        <link rel="canonical" href="https://www.devhubconnect.com/guidance" />
+
+        {/* Open Graph Tags */}
+        <meta property="og:title" content="How to Use DevHubConnect - n8n Template Guide" />
+        <meta property="og:description" content="Complete guide to using n8n automation templates with AI assistance." />
+        <meta property="og:url" content="https://www.devhubconnect.com/guidance" />
+        <meta property="og:type" content="website" />
+
+        {/* Twitter Card Tags */}
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="How to Use DevHubConnect - n8n Template Guide" />
+        <meta name="twitter:description" content="Complete guide to using n8n automation templates with AI assistance." />
+      </Helmet>
+
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
       
       {/* Header */}
       <section className="bg-primary text-white py-16">
@@ -452,6 +474,7 @@ export const GuidancePage = () => {
           </Card>
         </div>
       </section>
-    </div>
+      </div>
+    </HelmetProvider>
   );
 };

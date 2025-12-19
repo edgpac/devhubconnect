@@ -1,9 +1,20 @@
+import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { Navbar } from '../components/Navbar';
 
 export const PrivacyPolicy = () => {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <HelmetProvider>
+      <Helmet>
+        <title>Privacy Policy | DevHubConnect</title>
+        <meta
+          name="description"
+          content="DevHubConnect Privacy Policy. Learn how we collect, use, and protect your personal information when you use our n8n automation template marketplace. GDPR compliant data practices."
+        />
+        <link rel="canonical" href="https://www.devhubconnect.com/privacy" />
+      </Helmet>
+
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
           <h1 className="text-3xl font-bold mb-6">Privacy Policy</h1>
@@ -52,6 +63,7 @@ export const PrivacyPolicy = () => {
           </div>
         </div>
       </main>
-    </div>
+      </div>
+    </HelmetProvider>
   );
 };

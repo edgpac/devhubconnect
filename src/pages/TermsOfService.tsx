@@ -1,9 +1,20 @@
+import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { Navbar } from '../components/Navbar';
 
 export const TermsOfService = () => {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <HelmetProvider>
+      <Helmet>
+        <title>Terms of Service | DevHubConnect</title>
+        <meta
+          name="description"
+          content="Read DevHubConnect's Terms of Service. Learn about user accounts, purchases, payments, intellectual property rights, and usage policies for our n8n automation template marketplace."
+        />
+        <link rel="canonical" href="https://www.devhubconnect.com/terms" />
+      </Helmet>
+
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
           <h1 className="text-3xl font-bold mb-6">Terms of Service</h1>
@@ -41,6 +52,7 @@ export const TermsOfService = () => {
           </div>
         </div>
       </main>
-    </div>
+      </div>
+    </HelmetProvider>
   );
 };

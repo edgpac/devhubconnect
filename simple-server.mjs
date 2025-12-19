@@ -290,10 +290,16 @@ app.get('/sitemap.xml', async (req, res) => {
 app.get('/templates/:id', async (req, res) => {
   try {
     if (req.isDisconnected()) return;
-    
+
     const templateId = req.params.id;
     console.log('🔍 SEO: Serving template page with dynamic meta tags:', templateId);
-    
+
+    // ✅ SECURITY: Validate template ID is numeric
+    if (!templateId || !/^\d+$/.test(templateId)) {
+      console.log('❌ Invalid template ID format:', templateId);
+      return res.status(404).sendFile(path.join(__dirname, 'dist', 'index.html'));
+    }
+
     // Fetch template data from database
     const templateResult = await pool.query(
       'SELECT id, name, description, price, image_url, workflow_json FROM templates WHERE id = $1 AND is_public = true',
