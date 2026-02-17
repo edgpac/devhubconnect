@@ -287,49 +287,37 @@ app.get('/sitemap.xml', async (req, res) => {
 
 // ==================== DYNAMIC META TAG INJECTION FOR SEO ====================
 
-// ✅ P0 FIX: Redirect /template/:id → /templates/:id (consolidate canonical signals)
-app.get('/template/:id', (req, res) => {
-  const templateId = req.params.id;
-  if (templateId && /^\d+$/.test(templateId)) {
-    return res.redirect(301, `/templates/${templateId}`);
-  }
-  res.status(404).sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
 // ✅ SEO FIX: Redirect /templates (no ID) → homepage (the actual listing page)
 app.get('/templates', (req, res) => {
   res.redirect(301, '/');
 });
 
-// ✅ CRITICAL: Template page meta tag injection for SEO - MUST BE BEFORE STATIC MIDDLEWARE
-app.get('/templates/:id', async (req, res) => {
+// ✅ Shared handler for template SEO injection — used by both /template/:id and /templates/:id
+async function serveTemplatePage(req, res) {
   try {
     if (req.isDisconnected()) return;
 
     const templateId = req.params.id;
     console.log('🔍 SEO: Serving template page with dynamic meta tags:', templateId);
 
-    // ✅ SECURITY: Validate template ID is numeric
+    // Validate template ID is numeric
     if (!templateId || !/^\d+$/.test(templateId)) {
-      console.log('❌ Invalid template ID format:', templateId);
       return res.status(404).sendFile(path.join(__dirname, 'dist', 'index.html'));
     }
 
-    // Fetch template data from database (include meta_description for custom SEO overrides)
     const templateResult = await pool.query(
       'SELECT id, name, description, price, image_url, workflow_json, meta_description FROM templates WHERE id = $1 AND is_public = true',
       [templateId]
     );
-    
+
     if (req.isDisconnected()) return;
-    
+
     if (templateResult.rows.length === 0) {
-      // Template not found - serve 404 page
       return res.status(404).sendFile(path.join(__dirname, 'dist', 'index.html'));
     }
-    
+
     const template = templateResult.rows[0];
-    
+
     // Parse workflow details
     let stepCount = 0;
     let integratedApps = [];
@@ -341,15 +329,15 @@ app.get('/templates/:id', async (req, res) => {
           const parts = node.type.split('.');
           return parts.length > 1 ? parts[parts.length - 1] : parts[0];
         });
-        integratedApps = [...new Set(appTypes)].filter(app => 
+        integratedApps = [...new Set(appTypes)].filter(app =>
           !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(app)
         ).slice(0, 3);
       }
     } catch (e) {
       console.log('Could not parse workflow JSON for SEO');
     }
-    
-    // Build dynamic meta tags with CTR-optimized format
+
+    // Build meta tags — canonical always points to /templates/:id (preferred URL)
     const priceDisplay = template.price === 0 ? 'Free' : `$${(template.price / 100).toFixed(2)}`;
     const metaTitle = `${template.name} | n8n Template ${priceDisplay !== 'Free' ? `– ${priceDisplay}` : '(Free)'} | DevHubConnect`;
     const autoDescription = `${template.name}${stepCount > 0 ? ` — ${stepCount}-step` : ''} n8n automation${integratedApps.length > 0 ? ` with ${integratedApps.join(', ')}` : ''}. ${priceDisplay === 'Free' ? 'Free download' : `Only ${priceDisplay}`} — instant access, ready to import.`;
@@ -357,56 +345,37 @@ app.get('/templates/:id', async (req, res) => {
     const templateUrl = `https://www.devhubconnect.com/templates/${template.id}`;
     const imageUrl = template.image_url || 'https://www.devhubconnect.com/placeholder.svg';
     const priceValue = (template.price / 100).toFixed(2);
-    
-    // Read the base HTML file
+
+    // Read and modify the base HTML
     const htmlPath = path.join(__dirname, 'dist', 'index.html');
     let html = await fs.promises.readFile(htmlPath, 'utf8');
 
-    // Replace the title
-    html = html.replace(
-      /<title>.*?<\/title>/,
-      `<title>${metaTitle}</title>`
-    );
+    html = html.replace(/<title>.*?<\/title>/, `<title>${metaTitle}</title>`);
 
-    // ✅ CRITICAL FIX: Remove base OG, Twitter, and canonical tags to prevent duplicates
-    // Duplicate canonical/OG tags cause Google to ignore the page or pick the wrong canonical
-    html = html.replace(/<meta property="og:type"[^>]*>/g, '');
-    html = html.replace(/<meta property="og:url"[^>]*>/g, '');
-    html = html.replace(/<meta property="og:image"[^>]*>/g, '');
-    html = html.replace(/<meta property="og:image:width"[^>]*>/g, '');
-    html = html.replace(/<meta property="og:image:height"[^>]*>/g, '');
-    html = html.replace(/<meta property="og:site_name"[^>]*>/g, '');
-    html = html.replace(/<meta name="twitter:card"[^>]*>/g, '');
-    html = html.replace(/<meta name="twitter:site"[^>]*>/g, '');
-    html = html.replace(/<meta name="twitter:image"[^>]*>/g, '');
+    // Strip base OG, Twitter, and canonical tags to prevent duplicates
+    html = html.replace(/<meta property="og:[^"]*"[^>]*>/g, '');
+    html = html.replace(/<meta name="twitter:[^"]*"[^>]*>/g, '');
     html = html.replace(/<link rel="canonical"[^>]*>/g, '');
-    // Remove HTML comments for the stripped sections
-    html = html.replace(/<!-- Open Graph - Generic tags only[^>]*-->/g, '');
-    html = html.replace(/<!-- Twitter Cards - Generic tags only[^>]*-->/g, '');
+    html = html.replace(/<!-- Open Graph[^-]*-->/g, '');
+    html = html.replace(/<!-- Twitter Cards[^-]*-->/g, '');
     html = html.replace(/<!-- Canonical URL -->/g, '');
 
-    // Inject clean, template-specific meta tags after <title>
+    // Inject template-specific meta tags
     const metaTags = `
     <meta name="title" content="${metaTitle}" />
     <meta name="description" content="${metaDescription}" />
     <link rel="canonical" href="${templateUrl}" />
-
-    <!-- Open Graph / Facebook -->
     <meta property="og:type" content="product" />
     <meta property="og:url" content="${templateUrl}" />
     <meta property="og:title" content="${metaTitle}" />
     <meta property="og:description" content="${metaDescription}" />
     <meta property="og:image" content="${imageUrl}" />
     <meta property="og:site_name" content="DevHubConnect" />
-
-    <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="${templateUrl}" />
     <meta name="twitter:title" content="${metaTitle}" />
     <meta name="twitter:description" content="${metaDescription}" />
     <meta name="twitter:image" content="${imageUrl}" />
-
-    <!-- Structured Data - Product Schema -->
     <script type="application/ld+json">
     ${JSON.stringify({
       "@context": "https://schema.org",
@@ -421,24 +390,16 @@ app.get('/templates/:id', async (req, res) => {
         "priceCurrency": "USD",
         "price": priceValue,
         "availability": "https://schema.org/InStock",
-        "seller": {
-          "@type": "Organization",
-          "name": "DevHubConnect"
-        }
+        "seller": { "@type": "Organization", "name": "DevHubConnect" }
       },
-      "brand": {
-        "@type": "Brand",
-        "name": "DevHubConnect"
-      },
+      "brand": { "@type": "Brand", "name": "DevHubConnect" },
       "category": "Software > Automation Tools"
     })}
     </script>`;
 
     html = html.replace('</title>', `</title>${metaTags}`);
 
-    // ✅ CRITICAL: Inject pre-rendered content into <body> to prevent Soft 404
-    // Googlebot sees empty <div id="root"></div> and classifies it as a soft 404.
-    // Inject real, visible content that React will overwrite on hydration.
+    // Inject pre-rendered body content for crawlers
     const escapeHtml = (str) => (str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const escapedName = escapeHtml(template.name);
     const escapedDesc = escapeHtml(template.description);
@@ -457,15 +418,9 @@ app.get('/templates/:id', async (req, res) => {
       ${template.image_url ? `<img src="${escapedImageUrl}" alt="${escapedName} preview" style="max-width:100%;border-radius:8px" />` : ''}
     </div>`;
 
-    html = html.replace(
-      '<div id="root"></div>',
-      `<div id="root">${preRenderedContent}</div>`
-    );
+    html = html.replace('<div id="root"></div>', `<div id="root">${preRenderedContent}</div>`);
 
-    // ✅ CRITICAL: Inject template data as global variable so React renders immediately
-    // Without this, React shows "Loading Marketplace..." while fetching API data,
-    // and Google's renderer captures that loading state → classified as soft 404.
-    // NOTE: Exclude workflow_json (15KB+ of noise) — pass computed values instead
+    // Inject SSR data for React hydration (no workflow_json — too large)
     const ssrData = {
       id: template.id,
       name: template.name,
@@ -475,10 +430,7 @@ app.get('/templates/:id', async (req, res) => {
       steps: stepCount,
       integratedApps: integratedApps
     };
-    html = html.replace(
-      '</head>',
-      `<script>window.__SSR_TEMPLATE__=${JSON.stringify(ssrData).replace(/</g, '\\u003c')}</script>\n</head>`
-    );
+    html = html.replace('</head>', `<script>window.__SSR_TEMPLATE__=${JSON.stringify(ssrData).replace(/</g, '\\u003c')}</script>\n</head>`);
 
     console.log(`✅ SEO: Injected meta tags + pre-rendered content for: ${template.name}`);
 
@@ -486,7 +438,7 @@ app.get('/templates/:id', async (req, res) => {
       res.setHeader('Content-Type', 'text/html');
       res.send(html);
     }
-    
+
   } catch (error) {
     if (error.code === 'ECONNRESET' || error.code === 'EPIPE' || error.code === 'ECONNABORTED') {
       return;
@@ -496,7 +448,12 @@ app.get('/templates/:id', async (req, res) => {
       res.sendFile(path.join(__dirname, 'dist', 'index.html'));
     }
   }
-});
+}
+
+// ✅ CRITICAL: Both /template/:id and /templates/:id use the same SSR handler
+// Google has already indexed /template/:id (singular) — DO NOT redirect it
+app.get('/template/:id', serveTemplatePage);
+app.get('/templates/:id', serveTemplatePage);
 
 // ✅ General static middleware for other files - AFTER template route
 app.use(express.static(path.join(__dirname, 'dist'), {
