@@ -92,11 +92,17 @@ export const TemplateDetail = () => {
     return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
   }
 
+  // ✅ SSR: Use server-injected data as initialData to prevent loading flash
+  // Without this, Google's renderer sees "Loading Marketplace..." → soft 404
+  const ssrData = typeof window !== 'undefined' && (window as any).__SSR_TEMPLATE__;
+  const ssrInitialData = ssrData && String(ssrData.id) === templateId ? ssrData as Template : undefined;
+
   const { data: template, isLoading, error } = useQuery<Template>({
     queryKey: ["template", templateId],
     queryFn: () => fetchTemplateById(templateId),
+    initialData: ssrInitialData,
   });
-   
+
   if (isLoading) return <div className="text-center p-12">Loading Marketplace...</div>;
   if (error) return <div className="text-center p-12 text-red-500">Error: {(error as Error).message}</div>;
   if (!template) return <div className="text-center p-12">Template not found.</div>;

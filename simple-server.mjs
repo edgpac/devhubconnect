@@ -462,6 +462,22 @@ app.get('/templates/:id', async (req, res) => {
       `<div id="root">${preRenderedContent}</div>`
     );
 
+    // ✅ CRITICAL: Inject template data as global variable so React renders immediately
+    // Without this, React shows "Loading Marketplace..." while fetching API data,
+    // and Google's renderer captures that loading state → classified as soft 404.
+    const ssrData = {
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      price: template.price,
+      image_url: template.image_url,
+      workflow_json: template.workflow_json
+    };
+    html = html.replace(
+      '</head>',
+      `<script>window.__SSR_TEMPLATE__=${JSON.stringify(ssrData).replace(/</g, '\\u003c')}</script>\n</head>`
+    );
+
     console.log(`✅ SEO: Injected meta tags + pre-rendered content for: ${template.name}`);
 
     if (!req.isDisconnected() && !res.headersSent) {
