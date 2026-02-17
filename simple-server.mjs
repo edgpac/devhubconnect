@@ -286,6 +286,16 @@ app.get('/sitemap.xml', async (req, res) => {
 });
 
 // ==================== DYNAMIC META TAG INJECTION FOR SEO ====================
+
+// ✅ P0 FIX: Redirect /template/:id → /templates/:id (consolidate canonical signals)
+app.get('/template/:id', (req, res) => {
+  const templateId = req.params.id;
+  if (templateId && /^\d+$/.test(templateId)) {
+    return res.redirect(301, `/templates/${templateId}`);
+  }
+  res.status(404).sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 // ✅ CRITICAL: Template page meta tag injection for SEO - MUST BE BEFORE STATIC MIDDLEWARE
 app.get('/templates/:id', async (req, res) => {
   try {
@@ -300,9 +310,9 @@ app.get('/templates/:id', async (req, res) => {
       return res.status(404).sendFile(path.join(__dirname, 'dist', 'index.html'));
     }
 
-    // Fetch template data from database
+    // Fetch template data from database (include meta_description for custom SEO overrides)
     const templateResult = await pool.query(
-      'SELECT id, name, description, price, image_url, workflow_json FROM templates WHERE id = $1 AND is_public = true',
+      'SELECT id, name, description, price, image_url, workflow_json, meta_description FROM templates WHERE id = $1 AND is_public = true',
       [templateId]
     );
     
@@ -334,9 +344,11 @@ app.get('/templates/:id', async (req, res) => {
       console.log('Could not parse workflow JSON for SEO');
     }
     
-    // Build dynamic meta tags
-    const metaTitle = `${template.name} - n8n Automation Template | DevHubConnect`;
-    const metaDescription = `Download ${template.name}. ${stepCount > 0 ? `${stepCount} nodes` : 'Ready-to-use workflow'} ${integratedApps.length > 0 ? `with ${integratedApps.join(', ')}` : ''}. Price: $${(template.price / 100).toFixed(2)}. Instant download.`;
+    // Build dynamic meta tags with CTR-optimized format
+    const priceDisplay = template.price === 0 ? 'Free' : `$${(template.price / 100).toFixed(2)}`;
+    const metaTitle = `${template.name} | n8n Template ${priceDisplay !== 'Free' ? `– ${priceDisplay}` : '(Free)'} | DevHubConnect`;
+    const autoDescription = `${template.name}${stepCount > 0 ? ` — ${stepCount}-step` : ''} n8n automation${integratedApps.length > 0 ? ` with ${integratedApps.join(', ')}` : ''}. ${priceDisplay === 'Free' ? 'Free download' : `Only ${priceDisplay}`} — instant access, ready to import.`;
+    const metaDescription = template.meta_description || autoDescription;
     const templateUrl = `https://www.devhubconnect.com/templates/${template.id}`;
     const imageUrl = template.image_url || 'https://www.devhubconnect.com/placeholder.svg';
     const priceValue = (template.price / 100).toFixed(2);

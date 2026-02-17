@@ -141,9 +141,11 @@ export const TemplateDetail = () => {
     }
   };
 
-  // ✅ SEO: Build dynamic meta tags
-  const metaTitle = `${template.name} - n8n Automation Template | DevHubConnect`;
-  const metaDescription = `Download ${template.name}. ${stepCount > 0 ? `${stepCount} nodes` : 'Ready-to-use workflow'} ${integratedApps.length > 0 ? `with ${integratedApps.slice(0, 3).join(', ')}` : ''}. Price: $${(template.price / 100).toFixed(2)}. Instant download.`;
+  // ✅ SEO: Build dynamic meta tags with CTR-optimized format
+  const priceDisplay = template.price === 0 ? 'Free' : `$${(template.price / 100).toFixed(2)}`;
+  const metaTitle = `${template.name} | n8n Template ${priceDisplay !== 'Free' ? `– ${priceDisplay}` : '(Free)'} | DevHubConnect`;
+  const autoDescription = `${template.name}${stepCount > 0 ? ` — ${stepCount}-step` : ''} n8n automation${integratedApps.length > 0 ? ` with ${integratedApps.slice(0, 3).join(', ')}` : ''}. ${priceDisplay === 'Free' ? 'Free download' : `Only ${priceDisplay}`} — instant access, ready to import.`;
+  const metaDescription = (template as any).metaDescription || autoDescription;
   const templateUrl = `https://www.devhubconnect.com/templates/${template.id}`;
   const priceValue = (template.price / 100).toFixed(2);
 
