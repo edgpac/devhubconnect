@@ -296,6 +296,11 @@ app.get('/template/:id', (req, res) => {
   res.status(404).sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
+// ✅ SEO FIX: Redirect /templates (no ID) → homepage (the actual listing page)
+app.get('/templates', (req, res) => {
+  res.redirect(301, '/');
+});
+
 // ✅ CRITICAL: Template page meta tag injection for SEO - MUST BE BEFORE STATIC MIDDLEWARE
 app.get('/templates/:id', async (req, res) => {
   try {
@@ -356,18 +361,36 @@ app.get('/templates/:id', async (req, res) => {
     // Read the base HTML file
     const htmlPath = path.join(__dirname, 'dist', 'index.html');
     let html = await fs.promises.readFile(htmlPath, 'utf8');
-    
+
     // Replace the title
     html = html.replace(
       /<title>.*?<\/title>/,
       `<title>${metaTitle}</title>`
     );
-    
-    // Inject meta tags right after <title>
+
+    // ✅ CRITICAL FIX: Remove base OG, Twitter, and canonical tags to prevent duplicates
+    // Duplicate canonical/OG tags cause Google to ignore the page or pick the wrong canonical
+    html = html.replace(/<meta property="og:type"[^>]*>/g, '');
+    html = html.replace(/<meta property="og:url"[^>]*>/g, '');
+    html = html.replace(/<meta property="og:image"[^>]*>/g, '');
+    html = html.replace(/<meta property="og:image:width"[^>]*>/g, '');
+    html = html.replace(/<meta property="og:image:height"[^>]*>/g, '');
+    html = html.replace(/<meta property="og:site_name"[^>]*>/g, '');
+    html = html.replace(/<meta name="twitter:card"[^>]*>/g, '');
+    html = html.replace(/<meta name="twitter:site"[^>]*>/g, '');
+    html = html.replace(/<meta name="twitter:image"[^>]*>/g, '');
+    html = html.replace(/<link rel="canonical"[^>]*>/g, '');
+    // Remove HTML comments for the stripped sections
+    html = html.replace(/<!-- Open Graph - Generic tags only[^>]*-->/g, '');
+    html = html.replace(/<!-- Twitter Cards - Generic tags only[^>]*-->/g, '');
+    html = html.replace(/<!-- Canonical URL -->/g, '');
+
+    // Inject clean, template-specific meta tags after <title>
     const metaTags = `
     <meta name="title" content="${metaTitle}" />
     <meta name="description" content="${metaDescription}" />
-    
+    <link rel="canonical" href="${templateUrl}" />
+
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="product" />
     <meta property="og:url" content="${templateUrl}" />
@@ -375,14 +398,14 @@ app.get('/templates/:id', async (req, res) => {
     <meta property="og:description" content="${metaDescription}" />
     <meta property="og:image" content="${imageUrl}" />
     <meta property="og:site_name" content="DevHubConnect" />
-    
+
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="${templateUrl}" />
     <meta name="twitter:title" content="${metaTitle}" />
     <meta name="twitter:description" content="${metaDescription}" />
     <meta name="twitter:image" content="${imageUrl}" />
-    
+
     <!-- Structured Data - Product Schema -->
     <script type="application/ld+json">
     ${JSON.stringify({
@@ -409,11 +432,8 @@ app.get('/templates/:id', async (req, res) => {
       },
       "category": "Software > Automation Tools"
     })}
-    </script>
-    
-    <!-- Canonical URL -->
-    <link rel="canonical" href="${templateUrl}" />`;
-    
+    </script>`;
+
     html = html.replace('</title>', `</title>${metaTags}`);
     
     console.log(`✅ SEO: Injected dynamic meta tags for: ${template.name}`);
