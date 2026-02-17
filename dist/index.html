@@ -42,19 +42,43 @@
  <!-- Optional: Boost lazy loading with low fetch priority (no script required) -->
  <meta name="fetchpriority" content="low" />
 
- <!-- Organization Schema (JSON-LD) -->
+ <!-- Organization Schema (JSON-LD) - Enhanced for branded query ranking -->
  <script type="application/ld+json">
  {
    "@context": "https://schema.org",
    "@type": "Organization",
    "name": "DevHubConnect",
+   "alternateName": "devhubconnect",
    "url": "https://www.devhubconnect.com",
-   "logo": "https://www.devhubconnect.com/logo.png",
-   "description": "Premium n8n automation workflow template marketplace with 580+ ready-to-use templates",
+   "logo": {
+     "@type": "ImageObject",
+     "url": "https://www.devhubconnect.com/logo.png",
+     "width": 512,
+     "height": 512
+   },
+   "description": "DevHubConnect is the leading marketplace for premium n8n automation workflow templates. Browse 580+ ready-to-use integrations for Slack, Gmail, Stripe, and more.",
    "sameAs": [
      "https://twitter.com/devhubconnect",
      "https://github.com/devhubconnect"
-   ]
+   ],
+   "knowsAbout": ["n8n automation", "workflow templates", "no-code automation", "API integrations"],
+   "slogan": "Premium n8n Automation Templates & Workflow Marketplace"
+ }
+ </script>
+
+ <!-- WebSite Schema (JSON-LD) - Helps Google associate brand name with site -->
+ <script type="application/ld+json">
+ {
+   "@context": "https://schema.org",
+   "@type": "WebSite",
+   "name": "DevHubConnect",
+   "alternateName": "devhubconnect",
+   "url": "https://www.devhubconnect.com",
+   "potentialAction": {
+     "@type": "SearchAction",
+     "target": "https://www.devhubconnect.com/?search={search_term_string}",
+     "query-input": "required name=search_term_string"
+   }
  }
  </script>
 
@@ -95,7 +119,7 @@
      }
    };
  </script>
-  <script type="module" crossorigin src="/assets/index-fRkULYOq.js"></script>
+  <script type="module" crossorigin src="/assets/index-MBfA2LHx.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/vendor-BQKrFBik.js">
   <link rel="stylesheet" crossorigin href="/assets/index-DXhb_tWW.css">
 </head>
