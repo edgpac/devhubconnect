@@ -435,9 +435,35 @@ app.get('/templates/:id', async (req, res) => {
     </script>`;
 
     html = html.replace('</title>', `</title>${metaTags}`);
-    
-    console.log(`✅ SEO: Injected dynamic meta tags for: ${template.name}`);
-    
+
+    // ✅ CRITICAL: Inject pre-rendered content into <body> to prevent Soft 404
+    // Googlebot sees empty <div id="root"></div> and classifies it as a soft 404.
+    // Inject real, visible content that React will overwrite on hydration.
+    const escapeHtml = (str) => (str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const escapedName = escapeHtml(template.name);
+    const escapedDesc = escapeHtml(template.description);
+    const appsText = integratedApps.length > 0 ? escapeHtml(integratedApps.join(', ')) : '';
+    const escapedImageUrl = escapeHtml(template.image_url);
+
+    const preRenderedContent = `<div id="ssr-content" style="max-width:800px;margin:0 auto;padding:40px 20px;font-family:system-ui,-apple-system,sans-serif">
+      <nav style="margin-bottom:24px"><a href="/" style="color:#2563eb;text-decoration:none">&larr; Back to All Templates</a></nav>
+      <h1 style="font-size:2rem;font-weight:700;margin-bottom:16px">${escapedName}</h1>
+      <p style="color:#4b5563;font-size:1.1rem;line-height:1.6;margin-bottom:24px">${escapedDesc}</p>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:24px;margin-bottom:24px">
+        <p style="font-size:2rem;font-weight:700;margin-bottom:8px">${priceDisplay}</p>
+        ${stepCount > 0 ? `<p style="color:#4b5563">Workflow steps: ${stepCount}</p>` : ''}
+        ${appsText ? `<p style="color:#4b5563">Integrated apps: ${appsText}</p>` : ''}
+      </div>
+      ${template.image_url ? `<img src="${escapedImageUrl}" alt="${escapedName} preview" style="max-width:100%;border-radius:8px" />` : ''}
+    </div>`;
+
+    html = html.replace(
+      '<div id="root"></div>',
+      `<div id="root">${preRenderedContent}</div>`
+    );
+
+    console.log(`✅ SEO: Injected meta tags + pre-rendered content for: ${template.name}`);
+
     if (!req.isDisconnected() && !res.headersSent) {
       res.setHeader('Content-Type', 'text/html');
       res.send(html);
