@@ -92,8 +92,8 @@ export const TemplateDetail = () => {
     return <div className="text-center p-12 text-red-500">Error: No template ID provided in URL.</div>;
   }
 
-  // ✅ SSR: Use server-injected data as initialData to prevent loading flash
-  // Without this, Google's renderer sees "Loading Marketplace..." → soft 404
+  // ✅ SSR: Use server-injected data to prevent Google WRS soft 404
+  // When SSR data exists, skip the API call entirely (Google's renderer can't reach our API)
   const ssrData = typeof window !== 'undefined' && (window as any).__SSR_TEMPLATE__;
   const ssrInitialData = ssrData && String(ssrData.id) === templateId ? ssrData as Template : undefined;
 
@@ -101,10 +101,13 @@ export const TemplateDetail = () => {
     queryKey: ["template", templateId],
     queryFn: () => fetchTemplateById(templateId),
     initialData: ssrInitialData,
+    staleTime: ssrInitialData ? Infinity : 0,
+    retry: ssrInitialData ? false : 3,
+    enabled: !ssrInitialData,
   });
 
-  if (isLoading) return <div className="text-center p-12">Loading Marketplace...</div>;
-  if (error) return <div className="text-center p-12 text-red-500">Error: {(error as Error).message}</div>;
+  if (isLoading && !ssrInitialData) return <div className="text-center p-12">Loading Marketplace...</div>;
+  if (error && !template) return <div className="text-center p-12 text-red-500">Error: {(error as Error).message}</div>;
   if (!template) return <div className="text-center p-12">Template not found.</div>;
 
   const imageUrl = template.imageUrl || template.image_url;
