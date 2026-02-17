@@ -465,13 +465,15 @@ app.get('/templates/:id', async (req, res) => {
     // ✅ CRITICAL: Inject template data as global variable so React renders immediately
     // Without this, React shows "Loading Marketplace..." while fetching API data,
     // and Google's renderer captures that loading state → classified as soft 404.
+    // NOTE: Exclude workflow_json (15KB+ of noise) — pass computed values instead
     const ssrData = {
       id: template.id,
       name: template.name,
       description: template.description,
       price: template.price,
       image_url: template.image_url,
-      workflow_json: template.workflow_json
+      steps: stepCount,
+      integratedApps: integratedApps
     };
     html = html.replace(
       '</head>',
