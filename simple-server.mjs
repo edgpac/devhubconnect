@@ -2566,11 +2566,29 @@ app.post('/api/studio/customize', authenticateJWT, async (req, res) => {
   }
 
   try {
-    const firstMessage = {
-      role: 'user',
-      content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${JSON.stringify(workflow, null, 2)}\n\`\`\`\n\nMy request: ${userRequest.trim()}`
-    };
-    const claudeMessages = [firstMessage, ...history.slice(-10).map(m => ({ role: m.role, content: m.content }))];
+    // Strip leading assistant messages (UI greeting) and ensure valid alternating pattern
+    const filteredHistory = history
+      .map(m => ({ role: m.role, content: m.content }))
+      .filter(m => m.role === 'user' || m.role === 'assistant');
+    while (filteredHistory.length > 0 && filteredHistory[0].role === 'assistant') {
+      filteredHistory.shift();
+    }
+
+    let claudeMessages;
+    if (filteredHistory.length === 0) {
+      // First turn: embed workflow JSON in the single user message
+      claudeMessages = [{
+        role: 'user',
+        content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${JSON.stringify(workflow, null, 2)}\n\`\`\`\n\nMy request: ${userRequest.trim()}`
+      }];
+    } else {
+      // Multi-turn: embed workflow in the first user message, append current request at end
+      filteredHistory[0] = {
+        ...filteredHistory[0],
+        content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${JSON.stringify(workflow, null, 2)}\n\`\`\`\n\n${filteredHistory[0].content}`
+      };
+      claudeMessages = [...filteredHistory.slice(-10), { role: 'user', content: userRequest.trim() }];
+    }
 
     const rawResponse = await callClaude(N8N_SYSTEM_PROMPT, claudeMessages, 6000);
 
@@ -2627,9 +2645,16 @@ app.post('/api/studio/build', authenticateJWT, async (req, res) => {
     }
 
     const userContent = `Build me an n8n workflow for this use case: ${description.trim()}${seedContext}`;
+    // Strip leading assistant messages (UI greeting) so messages end with a user turn
+    const filteredBuildHistory = history
+      .map(m => ({ role: m.role, content: m.content }))
+      .filter(m => m.role === 'user' || m.role === 'assistant');
+    while (filteredBuildHistory.length > 0 && filteredBuildHistory[0].role === 'assistant') {
+      filteredBuildHistory.shift();
+    }
     const claudeMessages = [
-      { role: 'user', content: userContent },
-      ...history.slice(-10).map(m => ({ role: m.role, content: m.content }))
+      ...filteredBuildHistory.slice(-10),
+      { role: 'user', content: userContent }
     ];
 
     const rawResponse = await callClaude(N8N_SYSTEM_PROMPT, claudeMessages, 6000);
