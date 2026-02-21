@@ -28,8 +28,6 @@ import {
  Filter,
  TrendingUp,
  Zap,
- Users,
- Star,
  ChevronsUpDown,
 } from 'lucide-react';
 import StudioTeaser from '../components/StudioTeaser';
@@ -317,43 +315,64 @@ export const HomePage = () => {
          <Navbar />
 
          {/* Hero Section */}
-         <section className="bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-800 text-white py-20">
+         <section className="bg-gradient-to-br from-gray-950 via-teal-950 to-gray-900 text-white py-20">
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-             <h1 className="text-5xl font-bold mb-6">Premium n8n Automation Templates & Workflows</h1>
-             <p className="text-xl mb-8 text-teal-100 max-w-3xl mx-auto">
-               We won't just hand you a solution, we'll build it for you.<br />
-               Upload your template and get step-by-step assistance from our AI.<br />
-               Save hours of development time with instantly deployable n8n solutions.
+
+             {/* Badge */}
+             <div className="inline-flex items-center gap-2 bg-teal-500 bg-opacity-20 border border-teal-400 border-opacity-30 text-teal-300 text-sm font-medium px-4 py-1.5 rounded-full mb-8">
+               <Zap className="w-3.5 h-3.5" />
+               Powered by Claude AI — Workflow Studio is live
+             </div>
+
+             <h1 className="text-5xl font-bold mb-5 leading-tight">
+               The Smarter Way to Build<br />
+               <span className="text-teal-400">n8n Automations</span>
+             </h1>
+
+             <p className="text-lg mb-4 text-gray-300 max-w-2xl mx-auto">
+               Browse 588+ ready-made templates — or use our AI-powered Workflow Studio to
+               customize, remix, and build n8n workflows from scratch, in plain English.
              </p>
-             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-12">
+
+             {/* Feature pills */}
+             <div className="flex flex-wrap items-center justify-center gap-2 mb-10 text-sm">
+               <span className="bg-white bg-opacity-10 text-gray-200 px-3 py-1 rounded-full">⚡ Customize any template with Claude AI</span>
+               <span className="bg-white bg-opacity-10 text-gray-200 px-3 py-1 rounded-full">🔨 Build new workflows from scratch</span>
+               <span className="bg-white bg-opacity-10 text-gray-200 px-3 py-1 rounded-full">🛍️ Expert prompt packs in the store</span>
+             </div>
+
+             {/* CTAs */}
+             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-14">
                <a href="#templates">
-                 <button className="px-6 py-3 bg-white text-teal-700 font-semibold rounded-lg hover:bg-teal-50 transition-colors">
+                 <button className="px-7 py-3 bg-white text-gray-900 font-semibold rounded-lg hover:bg-gray-100 transition-colors">
                    Browse Templates
                  </button>
                </a>
                <a href="/studio">
-                 <button className="px-6 py-3 bg-teal-500 bg-opacity-40 border border-white border-opacity-40 text-white font-semibold rounded-lg hover:bg-opacity-60 transition-colors">
-                   ✦ Try Workflow Studio
+                 <button className="px-7 py-3 bg-teal-500 text-white font-semibold rounded-lg hover:bg-teal-400 transition-colors flex items-center gap-2">
+                   <Zap className="w-4 h-4" /> Open Workflow Studio
                  </button>
                </a>
              </div>
-             <div className="flex justify-center space-x-8 text-center">
+
+             {/* Stats */}
+             <div className="flex justify-center gap-12 text-center">
                <div className="flex flex-col items-center">
-                 <TrendingUp className="w-8 h-8 mb-2" />
-                 <span className="text-2xl font-bold">588+</span>
-                 <span className="text-teal-100">Templates</span>
+                 <span className="text-3xl font-bold text-white">588+</span>
+                 <span className="text-gray-400 text-sm mt-1">Templates</span>
                </div>
+               <div className="w-px bg-white bg-opacity-10" />
                <div className="flex flex-col items-center">
-                 <Users className="w-8 h-8 mb-2" />
-                 <span className="text-2xl font-bold">7000+</span>
-                 <span className="text-teal-100">Users</span>
+                 <span className="text-3xl font-bold text-white">7,000+</span>
+                 <span className="text-gray-400 text-sm mt-1">Users</span>
                </div>
+               <div className="w-px bg-white bg-opacity-10" />
                <div className="flex flex-col items-center">
-                 <Star className="w-8 h-8 mb-2" />
-                 <span className="text-2xl font-bold">4.9</span>
-                 <span className="text-teal-100">Rating</span>
+                 <span className="text-3xl font-bold text-white">4.9</span>
+                 <span className="text-gray-400 text-sm mt-1">Rating</span>
                </div>
              </div>
+
            </div>
          </section>
 
