@@ -80,20 +80,44 @@ if (process.env.ANTHROPIC_API_KEY) {
 // ✅ SECURE: Rate limiting for AI requests
 const AI_REQUEST_LIMITS = new Map();
 const MAX_AI_REQUESTS_PER_MINUTE = process.env.NODE_ENV === 'production' ? 5 : 10;
+const MAX_AI_REQUESTS_PER_DAY = process.env.MAX_AI_REQUESTS_PER_DAY
+  ? parseInt(process.env.MAX_AI_REQUESTS_PER_DAY, 10)
+  : 30; // default: 30 Studio messages per user per day
 
 function checkAIRateLimit(userId) {
   const now = Date.now();
   const userRequests = AI_REQUEST_LIMITS.get(userId) || [];
-  
+
   const recentRequests = userRequests.filter(time => now - time < 60000);
-  
+
   if (recentRequests.length >= MAX_AI_REQUESTS_PER_MINUTE) {
     return false;
   }
-  
+
   recentRequests.push(now);
   AI_REQUEST_LIMITS.set(userId, recentRequests);
   return true;
+}
+
+// DB-persisted daily cap — survives server restarts/deploys
+async function checkAndIncrementDailyCap(userId) {
+  try {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const result = await pool.query(
+      `INSERT INTO ai_usage (user_id, usage_date, request_count)
+       VALUES ($1, $2, 1)
+       ON CONFLICT (user_id, usage_date)
+       DO UPDATE SET request_count = ai_usage.request_count + 1
+       RETURNING request_count`,
+      [userId, today]
+    );
+    const count = result.rows[0].request_count;
+    return count <= MAX_AI_REQUESTS_PER_DAY;
+  } catch (err) {
+    // If the table doesn't exist yet, fail open (don't block users)
+    console.warn('ai_usage table not found — daily cap skipped:', err.message);
+    return true;
+  }
 }
 
 // ✅ STUDIO: Prompt injection scanner
@@ -2537,6 +2561,9 @@ app.post('/api/studio/customize', authenticateJWT, async (req, res) => {
   if (!checkAIRateLimit(req.user.id)) {
     return res.status(429).json({ error: 'Rate limit exceeded. Please wait 60 seconds.' });
   }
+  if (!await checkAndIncrementDailyCap(req.user.id)) {
+    return res.status(429).json({ error: `Daily limit of ${MAX_AI_REQUESTS_PER_DAY} Studio requests reached. Resets at midnight UTC.` });
+  }
 
   try {
     const firstMessage = {
@@ -2581,6 +2608,9 @@ app.post('/api/studio/build', authenticateJWT, async (req, res) => {
 
   if (!checkAIRateLimit(req.user.id)) {
     return res.status(429).json({ error: 'Rate limit exceeded. Please wait 60 seconds.' });
+  }
+  if (!await checkAndIncrementDailyCap(req.user.id)) {
+    return res.status(429).json({ error: `Daily limit of ${MAX_AI_REQUESTS_PER_DAY} Studio requests reached. Resets at midnight UTC.` });
   }
 
   try {
@@ -2640,6 +2670,9 @@ app.post('/api/studio/chat', authenticateJWT, async (req, res) => {
 
   if (!checkAIRateLimit(req.user.id)) {
     return res.status(429).json({ error: 'Rate limit exceeded. Please wait 60 seconds.' });
+  }
+  if (!await checkAndIncrementDailyCap(req.user.id)) {
+    return res.status(429).json({ error: `Daily limit of ${MAX_AI_REQUESTS_PER_DAY} Studio requests reached. Resets at midnight UTC.` });
   }
 
   try {
