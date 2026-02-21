@@ -2276,7 +2276,12 @@ app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
         description: row.description,
         price: row.price,
         imageUrl: row.imageUrl,
-        workflowJson: row.workflowJson,
+        workflowJson: (() => {
+          // Strip 'content' field so prompt text is never exposed via API
+          if (!row.workflowJson) return null;
+          const { content: _hidden, ...safe } = row.workflowJson;
+          return safe;
+        })(),
         createdAt: row.createdAt,
         downloadCount: row.downloadCount,
         viewCount: row.viewCount,
@@ -2434,7 +2439,12 @@ app.get('/api/purchases', authenticateJWT, async (req, res) => {
         description: row.description,
         price: row.price,
         imageUrl: row.imageUrl,
-        workflowJson: row.workflowJson,
+        workflowJson: (() => {
+          // Strip 'content' field so prompt text is never exposed via API
+          if (!row.workflowJson) return null;
+          const { content: _hidden, ...safe } = row.workflowJson;
+          return safe;
+        })(),
         createdAt: row.createdAt,
         downloadCount: row.downloadCount,
         viewCount: row.viewCount,
@@ -2507,7 +2517,12 @@ app.get('/api/purchases/', authenticateJWT, async (req, res) => {
         description: row.description,
         price: row.price,
         imageUrl: row.imageUrl,
-        workflowJson: row.workflowJson,
+        workflowJson: (() => {
+          // Strip 'content' field so prompt text is never exposed via API
+          if (!row.workflowJson) return null;
+          const { content: _hidden, ...safe } = row.workflowJson;
+          return safe;
+        })(),
         createdAt: row.createdAt,
         downloadCount: row.downloadCount,
         viewCount: row.viewCount,
