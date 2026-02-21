@@ -341,15 +341,10 @@ export const HomePage = () => {
                <span className="bg-white bg-opacity-10 text-gray-200 px-3 py-1 rounded-full">🛍️ Expert prompt packs in the store</span>
              </div>
 
-             {/* CTAs */}
-             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-14">
-               <a href="#templates">
-                 <button className="px-7 py-3 bg-white text-gray-900 font-semibold rounded-lg hover:bg-gray-100 transition-colors">
-                   Browse Templates
-                 </button>
-               </a>
+             {/* CTA */}
+             <div className="flex items-center justify-center mb-14">
                <a href="/studio">
-                 <button className="px-7 py-3 bg-teal-500 text-white font-semibold rounded-lg hover:bg-teal-400 transition-colors flex items-center gap-2">
+                 <button className="px-8 py-3.5 bg-teal-500 text-white font-semibold rounded-lg hover:bg-teal-400 transition-colors flex items-center gap-2 text-base">
                    <Zap className="w-4 h-4" /> Open Workflow Studio
                  </button>
                </a>
