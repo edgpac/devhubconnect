@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, Wand2, Tag, CheckCircle } from 'lucide-react';
+import { ShoppingCart, Wand2, CheckCircle, Lock, FileJson } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { API_ENDPOINTS, apiCall } from '@/config/api';
@@ -81,10 +81,28 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
 
   return (
     <div className="space-y-6">
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
-        <strong>Prompt Store:</strong> Purchase expert-engineered prompts that unlock specialized AI
-        capabilities inside the Studio. Each prompt is a carefully crafted system instruction that
-        makes Claude behave like a domain expert for your specific workflow type.
+      {/* Transparency banner */}
+      <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm text-gray-200 space-y-2">
+        <p className="font-semibold text-white flex items-center gap-2">
+          <Lock className="w-4 h-4 text-teal-400" /> How Prompt + JSON combos work
+        </p>
+        <p className="text-gray-400 leading-relaxed">
+          Each product is a <span className="text-white font-medium">JSON template + expert prompt combo</span>.
+          The prompt runs <span className="text-teal-400 font-medium">invisibly</span> as Claude's system
+          instruction — you interact with the AI result, not the prompt text itself.{' '}
+          <span className="text-gray-500">The actual prompt is never displayed.</span>
+        </p>
+        <div className="flex flex-wrap gap-3 pt-1">
+          <span className="inline-flex items-center gap-1.5 text-xs text-teal-400">
+            <FileJson className="w-3.5 h-3.5" /> Importable n8n JSON included
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-xs text-teal-400">
+            <Wand2 className="w-3.5 h-3.5" /> Expert prompt activates in Studio
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+            <Lock className="w-3.5 h-3.5" /> Prompt text stays private
+          </span>
+        </div>
       </div>
 
       {isLoading && (
@@ -110,7 +128,12 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
           return (
             <div key={prompt.id} className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between gap-2">
-                <h3 className="font-semibold text-gray-900 text-sm leading-snug">{prompt.name}</h3>
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-gray-900 text-sm leading-snug">{prompt.name}</h3>
+                  <span className="inline-flex items-center gap-1 text-xs text-teal-700 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full font-medium">
+                    <FileJson className="w-3 h-3" /> JSON + Prompt combo
+                  </span>
+                </div>
                 {isPurchased && (
                   <span className="flex-shrink-0 inline-flex items-center gap-1 text-xs text-green-600 font-medium">
                     <CheckCircle className="w-3.5 h-3.5" /> Owned
@@ -119,6 +142,10 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
               </div>
 
               <p className="text-xs text-gray-500 leading-relaxed">{prompt.description}</p>
+
+              <p className="text-xs text-gray-400 italic flex items-center gap-1">
+                <Lock className="w-3 h-3" /> Prompt text is never displayed — it runs invisibly in the Studio.
+              </p>
 
               {meta?.useCase && (
                 <p className="text-xs text-blue-700 bg-blue-50 rounded-lg px-2.5 py-1.5">
@@ -152,7 +179,7 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
                     onClick={() => handlePurchase(prompt.id)}
                   >
                     <ShoppingCart className="w-3.5 h-3.5 mr-1.5" />
-                    {isPurchasing === prompt.id ? 'Redirecting…' : 'Purchase'}
+                    {isPurchasing === prompt.id ? 'Redirecting…' : 'Get Combo'}
                   </Button>
                 )}
               </div>
