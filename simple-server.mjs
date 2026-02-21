@@ -1797,7 +1797,7 @@ app.get('/admin/login', (req, res) => {
 });
 
 // ✅ FIXED: Analytics consolidates users by email (like Stripe)
-app.get('/api/admin/analytics-data', async (req, res) => {
+app.get('/api/admin/analytics-data', requireAdminAuth, async (req, res) => {
   try {
     if (req.isDisconnected()) return;
     
@@ -1935,7 +1935,10 @@ app.get('/api/templates/:id', async (req, res) => {
     }
     
     const template = result.rows[0];
-    res.json({ success: true, template: template });
+    // Never expose workflow_json on the public detail endpoint — it is the paid product.
+    // It is only served via /api/templates/:id/download after purchase verification.
+    const { workflow_json: _stripped, ...safeTemplate } = template;
+    res.json({ success: true, template: safeTemplate });
   } catch (error) {
     if (error.code === 'ECONNRESET' || error.code === 'EPIPE' || error.code === 'ECONNABORTED') {
       return;
@@ -2064,11 +2067,19 @@ app.get('/api/templates/:id/download', authenticateJWT, async (req, res) => {
 
     const template = templateResult.rows[0];
 
+    // Block download of prompt-type templates — they are used via Studio only
+    if (template.category === 'prompt') {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'Prompt products are used inside the Workflow Studio, not downloaded directly.',
+      });
+    }
+
     const purchaseResult = await pool.query(`
-      SELECT p.id, p.status, p.purchased_at 
-      FROM purchases p 
+      SELECT p.id, p.status, p.purchased_at
+      FROM purchases p
       WHERE p.user_id = $1 AND p.template_id = $2 AND p.status = 'completed'
-      ORDER BY p.purchased_at DESC 
+      ORDER BY p.purchased_at DESC
       LIMIT 1
     `, [req.user.id, templateId]);
 
@@ -2137,11 +2148,10 @@ app.get('/api/templates/:id/preview', async (req, res) => {
     }
 
     const result = await pool.query(`
-      SELECT 
-        id, name, description, price, image_url, 
-        created_at, download_count, view_count, rating,
-        workflow_json
-      FROM templates 
+      SELECT
+        id, name, description, price, image_url,
+        created_at, download_count, view_count, rating
+      FROM templates
       WHERE id = $1 AND is_public = true
     `, [templateId]);
 
@@ -2168,7 +2178,7 @@ app.get('/api/templates/:id/preview', async (req, res) => {
         description: template.description,
         price: template.price,
         imageUrl: template.image_url,
-        workflowJson: template.workflow_json,
+        // workflow_json intentionally omitted — only available after purchase via /download
         stats: {
           downloads: template.download_count || 0,
           views: template.view_count || 0,

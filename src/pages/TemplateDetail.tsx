@@ -11,7 +11,7 @@ import { API_ENDPOINTS, apiCall } from '../config/api';
 import { getDeterministicRandom } from "@/lib/utils";
 import { loadStripe } from '@stripe/stripe-js';
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'ofFEne');
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
 interface Template {
   id: number;
