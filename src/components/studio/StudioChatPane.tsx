@@ -21,6 +21,7 @@ interface StudioChatPaneProps {
   promptId?: number;
   onWorkflowGenerated?: (workflow: object) => void;
   placeholder?: string;
+  fillHeight?: boolean;
 }
 
 export default function StudioChatPane({
@@ -29,6 +30,7 @@ export default function StudioChatPane({
   promptId,
   onWorkflowGenerated,
   placeholder,
+  fillHeight = false,
 }: StudioChatPaneProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -116,7 +118,7 @@ export default function StudioChatPane({
   };
 
   return (
-    <div className="flex flex-col h-[600px] bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className={`flex flex-col ${fillHeight ? 'h-full' : 'h-[600px]'} bg-white rounded-xl border border-gray-200 overflow-hidden`}>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map(msg => (
