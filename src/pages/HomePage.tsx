@@ -322,13 +322,25 @@ export const HomePage = () => {
              <h1 className="text-5xl font-bold mb-6">Premium n8n Automation Templates & Workflows</h1>
              <p className="text-xl mb-8 text-teal-100 max-w-3xl mx-auto">
                We won't just hand you a solution, we'll build it for you.<br />
-               Upload your template and get step by step assistance from our AI.<br />
+               Upload your template and get step-by-step assistance from our AI.<br />
                Save hours of development time with instantly deployable n8n solutions.
-            </p>
+             </p>
+             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-12">
+               <a href="#templates">
+                 <button className="px-6 py-3 bg-white text-teal-700 font-semibold rounded-lg hover:bg-teal-50 transition-colors">
+                   Browse Templates
+                 </button>
+               </a>
+               <a href="/studio">
+                 <button className="px-6 py-3 bg-teal-500 bg-opacity-40 border border-white border-opacity-40 text-white font-semibold rounded-lg hover:bg-opacity-60 transition-colors">
+                   ✦ Try Workflow Studio
+                 </button>
+               </a>
+             </div>
              <div className="flex justify-center space-x-8 text-center">
                <div className="flex flex-col items-center">
                  <TrendingUp className="w-8 h-8 mb-2" />
-                 <span className="text-2xl font-bold">{templates.length}+</span>
+                 <span className="text-2xl font-bold">588+</span>
                  <span className="text-teal-100">Templates</span>
                </div>
                <div className="flex flex-col items-center">
@@ -393,7 +405,7 @@ export const HomePage = () => {
          </section>
 
          {/* Templates Grid */}
-         <section className="py-12">
+         <section id="templates" className="py-12">
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
              <div className="flex items-center justify-between mb-8">
                <h2 className="text-3xl font-bold text-gray-900">Available Templates</h2>
