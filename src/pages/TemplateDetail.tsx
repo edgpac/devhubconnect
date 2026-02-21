@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Helmet, HelmetProvider } from "react-helmet-async";
 import { Navbar } from "../components/Navbar";
 import { Button } from "../components/ui/button";
-import { ArrowLeft, ShoppingCart, Star, Eye, Edit, SlidersHorizontal, Share2, Download, Copy } from "lucide-react";
+import { ArrowLeft, ShoppingCart, Star, Eye, Edit, SlidersHorizontal, Share2, Download, Copy, Wand2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/context/AuthProvider";
@@ -32,6 +32,7 @@ interface Template {
   purchased?: boolean;
   isOwner?: boolean;
   hasAccess?: boolean;
+  category?: string;
 }
 
 const handleDownloadJson = (template: Template) => {
@@ -267,14 +268,23 @@ export const TemplateDetail = () => {
 
                   {template.purchased ? (
                     <div className="space-y-3">
-                      <Button size="lg" className="w-full bg-primary hover:bg-primary/90" onClick={() => handleDownloadJson(template)}>
-                        <Download className="w-5 h-5 mr-2" />
-                        Download JSON
-                      </Button>
-                      <Button size="lg" variant="secondary" className="w-full" onClick={() => toast.info('Coming soon!')}>
-                        <Copy className="w-5 h-5 mr-2" />
-                        Copy to My Workflows
-                      </Button>
+                      {template.category === 'prompt' ? (
+                        <Button size="lg" className="w-full bg-teal-600 hover:bg-teal-700" onClick={() => navigate(`/studio?tab=prompt-store&promptId=${template.id}`)}>
+                          <Wand2 className="w-5 h-5 mr-2" />
+                          Use in Studio
+                        </Button>
+                      ) : (
+                        <>
+                          <Button size="lg" className="w-full bg-primary hover:bg-primary/90" onClick={() => handleDownloadJson(template)}>
+                            <Download className="w-5 h-5 mr-2" />
+                            Download JSON
+                          </Button>
+                          <Button size="lg" variant="secondary" className="w-full" onClick={() => toast.info('Coming soon!')}>
+                            <Copy className="w-5 h-5 mr-2" />
+                            Copy to My Workflows
+                          </Button>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <Button
@@ -286,7 +296,7 @@ export const TemplateDetail = () => {
                       {isPurchasing ? "Redirecting to Checkout..." : (
                         <>
                           <ShoppingCart className="w-5 h-5 mr-2" />
-                          Purchase JSON Template
+                          {template.category === 'prompt' ? 'Purchase Prompt' : 'Purchase JSON Template'}
                         </>
                       )}
                     </Button>

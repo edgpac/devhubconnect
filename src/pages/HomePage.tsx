@@ -32,7 +32,7 @@ import {
  Star,
  ChevronsUpDown,
 } from 'lucide-react';
-import ChatBox from '../components/ChatBox';
+import StudioTeaser from '../components/StudioTeaser';
 import { API_ENDPOINTS, apiCall } from '../config/api';
 
 interface Template {
@@ -484,18 +484,7 @@ export const HomePage = () => {
              )}
            </div>
          </section>
-         {/* ChatBox Section */}
-         <section className="py-12 bg-white-50">
-           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-             <h2 className="text-3xl font-bold text-gray-900 mb-6">Need Assistance? Ask Our AI!</h2>
-             <p className="text-lg text-gray-600 mb-8">
-               Upload your .json file to get help deploying your n8n template or answering related questions..
-             </p>
-             <div className="max-w-7xl mx-auto">
-               <ChatBox />
-             </div>
-           </div>
-         </section>
+         <StudioTeaser />
          {/* Footer */}
          <footer className="bg-white-800 text-white py-12 border-t-[6px] border-white">
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

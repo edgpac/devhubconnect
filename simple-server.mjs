@@ -19,6 +19,7 @@ import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import cookieParser from 'cookie-parser';
 import Groq from 'groq-sdk';
+import Anthropic from '@anthropic-ai/sdk';
 const pgSession = require('connect-pg-simple');
 
 // Environment Variables and Configuration
@@ -63,6 +64,19 @@ if (process.env.GROQ_API_KEY) {
   console.warn('⚠️ GROQ_API_KEY not configured - AI features will use fallbacks');
 }
 
+// ✅ ANTHROPIC CLAUDE INTEGRATION
+let anthropic = null;
+if (process.env.ANTHROPIC_API_KEY) {
+  try {
+    anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    console.log('✅ Anthropic Claude API initialized successfully');
+  } catch (error) {
+    console.error('❌ Anthropic initialization failed:', error.message);
+  }
+} else {
+  console.warn('⚠️ ANTHROPIC_API_KEY not configured - Studio AI features unavailable');
+}
+
 // ✅ SECURE: Rate limiting for AI requests
 const AI_REQUEST_LIMITS = new Map();
 const MAX_AI_REQUESTS_PER_MINUTE = process.env.NODE_ENV === 'production' ? 5 : 10;
@@ -81,6 +95,146 @@ function checkAIRateLimit(userId) {
   AI_REQUEST_LIMITS.set(userId, recentRequests);
   return true;
 }
+
+// ✅ STUDIO: Prompt injection scanner
+function scanForInjection(text) {
+  if (!text || typeof text !== 'string') return { safe: false, reason: 'Invalid input type' };
+  if (text.length > 8000) return { safe: false, reason: 'Input exceeds maximum length' };
+  const INJECTION_PATTERNS = [
+    /ignore\s+(previous|all|above|prior)\s+(instructions?|prompts?|context)/i,
+    /you\s+are\s+now\s+/i,
+    /forget\s+(everything|your|all|previous)/i,
+    /new\s+system\s+prompt/i,
+    /disregard\s+(your|previous|all)/i,
+    /act\s+as\s+(if\s+you\s+are|a\s+different|an?\s+unrestricted)/i,
+    /jailbreak/i,
+    /DAN\s+mode/i,
+    /pretend\s+(you\s+are|to\s+be)/i,
+    /<\s*system\s*>/i,
+    /\[INST\]/i,
+    /###\s*instruction/i,
+    /reveal\s+(your\s+)?(system\s+)?prompt/i,
+    /what\s+are\s+your\s+(exact\s+)?instructions/i,
+  ];
+  for (const pattern of INJECTION_PATTERNS) {
+    if (pattern.test(text)) return { safe: false, reason: 'Potential prompt injection detected' };
+  }
+  return { safe: true };
+}
+
+// ✅ STUDIO: Core n8n system prompt (the product)
+const N8N_SYSTEM_PROMPT = `You are an expert n8n workflow engineer embedded inside DevHubConnect's Workflow Studio. Your sole purpose is to help users build, modify, and understand n8n automation workflows.
+
+## YOUR CORE RULES
+
+1. **JSON OUTPUT**: When asked to create or modify a workflow, ALWAYS output the complete, valid n8n workflow JSON in a fenced code block tagged \`\`\`json. The JSON must be directly importable into n8n with no manual edits required.
+2. **EXPLANATION**: After every JSON block, write a plain-English explanation section starting with "## What changed:" or "## What this does:" — keep it under 150 words.
+3. **NEVER BREAK JSON**: Every node must have: id (UUID v4 format), name (string), type (fully-qualified e.g. "n8n-nodes-base.webhook"), typeVersion (integer), position ([x, y] array), and parameters (object).
+4. **STAY IN SCOPE**: You ONLY discuss n8n workflows, automation logic, credential setup, and DevHubConnect templates. If asked anything else, reply: "I'm focused on n8n automation. How can I help with your workflow?"
+5. **SECURITY**: Never include actual API keys, passwords, or secrets. Use placeholders like "YOUR_API_KEY_HERE" or credential name references.
+
+## N8N NODE REFERENCE
+
+### Trigger nodes (always first):
+- Webhook: type "n8n-nodes-base.webhook", typeVersion 2, params: {httpMethod, path, responseMode}
+- Schedule: type "n8n-nodes-base.scheduleTrigger", typeVersion 1, params: {rule: {interval: [{field, minutesInterval}]}}
+- ManualTrigger: type "n8n-nodes-base.manualTrigger", typeVersion 1, params: {}
+
+### Logic nodes:
+- If: type "n8n-nodes-base.if", typeVersion 2, params: {conditions: {options: {caseSensitive, leftValue}, conditions: [{leftValue, rightValue, operator}]}}
+- Switch: type "n8n-nodes-base.switch", typeVersion 3, params: {mode, output}
+- Set: type "n8n-nodes-base.set", typeVersion 3, params: {mode: "manual", fields: {values: [{name, value}]}}
+- Code: type "n8n-nodes-base.code", typeVersion 2, params: {mode: "runOnceForAllItems", jsCode: "// code here"}
+- Wait: type "n8n-nodes-base.wait", typeVersion 1, params: {unit, amount}
+
+### HTTP / API nodes:
+- HTTP Request: type "n8n-nodes-base.httpRequest", typeVersion 4, params: {method, url, authentication, sendBody, bodyParameters}
+- Respond to Webhook: type "n8n-nodes-base.respondToWebhook", typeVersion 1, params: {respondWith, responseBody}
+
+### Communication nodes:
+- Gmail: type "n8n-nodes-base.gmail", typeVersion 2, params: {resource, operation, to, subject, message}, credentials: {gmailOAuth2: {id:"1",name:"Gmail account"}}
+- Slack: type "n8n-nodes-base.slack", typeVersion 2, params: {resource, operation, channel, text}, credentials: {slackApi: {id:"1",name:"Slack account"}}
+- Send Email: type "n8n-nodes-base.emailSend", typeVersion 2, params: {fromEmail, toEmail, subject, message}
+- Telegram: type "n8n-nodes-base.telegram", typeVersion 1, params: {resource, operation, chatId, text}
+
+### AI / LLM nodes:
+- OpenAI: type "@n8n/n8n-nodes-langchain.openAi", typeVersion 1, params: {resource, operation, model, prompt}
+- AI Agent: type "@n8n/n8n-nodes-langchain.agent", typeVersion 1, params: {systemMessage, promptType}
+
+### Data / Storage nodes:
+- Google Sheets: type "n8n-nodes-base.googleSheets", typeVersion 4, params: {resource, operation, documentId, sheetName}
+- Airtable: type "n8n-nodes-base.airtable", typeVersion 2, params: {resource, operation, baseId, tableId}
+- Notion: type "n8n-nodes-base.notion", typeVersion 2, params: {resource, operation}
+- Postgres: type "n8n-nodes-base.postgres", typeVersion 2, params: {resource, operation, query}
+- MySQL: type "n8n-nodes-base.mySql", typeVersion 2, params: {operation, query}
+
+### Utility nodes:
+- Merge: type "n8n-nodes-base.merge", typeVersion 3, params: {mode}
+- Split In Batches: type "n8n-nodes-base.splitInBatches", typeVersion 3, params: {batchSize}
+
+## CONNECTIONS FORMAT
+
+Use node NAME (not id) as the key:
+\`\`\`json
+"connections": {
+  "Webhook": {"main": [[{"node": "Process Data", "type": "main", "index": 0}]]},
+  "If Check": {"main": [
+    [{"node": "True Branch", "type": "main", "index": 0}],
+    [{"node": "False Branch", "type": "main", "index": 0}]
+  ]}
+}
+\`\`\`
+
+## FULL WORKFLOW SKELETON
+
+\`\`\`json
+{
+  "meta": {"instanceId": "devhubconnect-studio"},
+  "name": "Workflow Name",
+  "nodes": [],
+  "connections": {},
+  "settings": {"executionOrder": "v1"},
+  "tags": ["devhubconnect"]
+}
+\`\`\`
+
+## POSITIONING
+
+Space nodes 250px apart horizontally. Trigger at [0, 0], flow goes right. Branch nodes: offset vertically by 200px.
+
+## WHEN CUSTOMIZING
+
+1. Read the full workflow JSON the user provides
+2. Make ONLY the changes requested — preserve all other nodes/connections exactly
+3. Output the COMPLETE modified workflow (not just changed parts)
+4. List specifically what changed and why
+
+## WHEN BUILDING FROM SCRATCH
+
+1. Ask for clarification if the trigger type or target service is ambiguous
+2. Start with the simplest working version
+3. Add error handling: set \`"onError": "continueErrorOutput"\` on risky nodes
+4. Suggest next improvements at the end
+
+## FORBIDDEN
+
+- Do not output partial workflows — always output the complete JSON
+- Do not include real secrets or credentials
+- Do not use deprecated nodes (use "n8n-nodes-base.code" not "n8n-nodes-base.function")
+- Do not answer off-topic questions`;
+
+// ✅ STUDIO: Shared Claude caller
+async function callClaude(systemPrompt, messages, maxTokens = 4096) {
+  if (!anthropic) throw new Error('Claude API not configured. Please add ANTHROPIC_API_KEY.');
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
+  });
+  return response.content[0].text;
+}
+
 
 // ✅ NEW: Bot detection helper
 const isBot = (userAgent) => {
@@ -2346,6 +2500,178 @@ app.get('/api/purchases/', authenticateJWT, async (req, res) => {
 app.get('/api/templates/list', async (req, res) => {
   if (!res.headersSent && !req.isDisconnected()) {
     res.redirect('/api/templates');
+  }
+});
+
+// ==================== WORKFLOW STUDIO ENDPOINTS ====================
+
+// POST /api/studio/customize — modify an existing DHC-validated workflow with Claude
+app.post('/api/studio/customize', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+
+  const { workflow, userRequest, history = [] } = req.body;
+
+  if (!workflow || typeof workflow !== 'object' || !Array.isArray(workflow.nodes)) {
+    return res.status(400).json({ error: 'workflow must be a valid n8n JSON object with a nodes array' });
+  }
+  if (!userRequest || typeof userRequest !== 'string' || !userRequest.trim()) {
+    return res.status(400).json({ error: 'userRequest is required' });
+  }
+
+  const reqScan = scanForInjection(userRequest);
+  if (!reqScan.safe) return res.status(400).json({ error: 'Request contains disallowed content', reason: reqScan.reason });
+
+  const wfScan = scanForInjection(JSON.stringify(workflow));
+  if (!wfScan.safe) return res.status(400).json({ error: 'Workflow JSON contains disallowed content' });
+
+  if (!checkAIRateLimit(req.user.id)) {
+    return res.status(429).json({ error: 'Rate limit exceeded. Please wait 60 seconds.' });
+  }
+
+  try {
+    const firstMessage = {
+      role: 'user',
+      content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${JSON.stringify(workflow, null, 2)}\n\`\`\`\n\nMy request: ${userRequest.trim()}`
+    };
+    const claudeMessages = [firstMessage, ...history.slice(-10).map(m => ({ role: m.role, content: m.content }))];
+
+    const rawResponse = await callClaude(N8N_SYSTEM_PROMPT, claudeMessages, 6000);
+
+    const jsonMatch = rawResponse.match(/```json\n([\s\S]*?)\n```/);
+    let modifiedWorkflow = null;
+    let explanation = rawResponse;
+    if (jsonMatch) {
+      try {
+        modifiedWorkflow = JSON.parse(jsonMatch[1]);
+        explanation = rawResponse.replace(/```json[\s\S]*?```/, '').trim();
+      } catch (e) {
+        console.warn('Studio/customize: Claude returned malformed JSON block');
+      }
+    }
+
+    res.json({ success: true, modifiedWorkflow, explanation, rawResponse });
+  } catch (error) {
+    console.error('Studio/customize error:', error.message);
+    if (!res.headersSent) res.status(500).json({ error: 'AI request failed', message: error.message });
+  }
+});
+
+// POST /api/studio/build — generate a new n8n workflow from a description
+app.post('/api/studio/build', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+
+  const { description, templateId, history = [] } = req.body;
+
+  if (!description || typeof description !== 'string' || !description.trim()) {
+    return res.status(400).json({ error: 'description is required' });
+  }
+
+  const scan = scanForInjection(description);
+  if (!scan.safe) return res.status(400).json({ error: 'Description contains disallowed content', reason: scan.reason });
+
+  if (!checkAIRateLimit(req.user.id)) {
+    return res.status(429).json({ error: 'Rate limit exceeded. Please wait 60 seconds.' });
+  }
+
+  try {
+    let seedContext = '';
+    if (templateId) {
+      const seedResult = await pool.query(
+        'SELECT name, description FROM templates WHERE id = $1 AND is_public = true LIMIT 1',
+        [parseInt(templateId, 10)]
+      );
+      if (seedResult.rows.length > 0) {
+        const seed = seedResult.rows[0];
+        seedContext = `\n\nFor inspiration, base your workflow on this existing template: "${seed.name}" — ${seed.description}`;
+      }
+    }
+
+    const userContent = `Build me an n8n workflow for this use case: ${description.trim()}${seedContext}`;
+    const claudeMessages = [
+      { role: 'user', content: userContent },
+      ...history.slice(-10).map(m => ({ role: m.role, content: m.content }))
+    ];
+
+    const rawResponse = await callClaude(N8N_SYSTEM_PROMPT, claudeMessages, 6000);
+
+    const jsonMatch = rawResponse.match(/```json\n([\s\S]*?)\n```/);
+    let workflow = null;
+    let explanation = rawResponse;
+    let nodeCount = 0;
+    if (jsonMatch) {
+      try {
+        workflow = JSON.parse(jsonMatch[1]);
+        nodeCount = workflow.nodes?.length || 0;
+        explanation = rawResponse.replace(/```json[\s\S]*?```/, '').trim();
+      } catch (e) {
+        console.warn('Studio/build: Claude returned malformed JSON block');
+      }
+    }
+
+    res.json({ success: true, workflow, explanation, nodeCount, rawResponse });
+  } catch (error) {
+    console.error('Studio/build error:', error.message);
+    if (!res.headersSent) res.status(500).json({ error: 'AI request failed', message: error.message });
+  }
+});
+
+// POST /api/studio/chat — use a purchased prompt as Claude's system prompt
+app.post('/api/studio/chat', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+
+  const { promptId, userMessage, workflowContext, history = [] } = req.body;
+
+  if (!promptId || !userMessage || typeof userMessage !== 'string') {
+    return res.status(400).json({ error: 'promptId and userMessage are required' });
+  }
+
+  const scan = scanForInjection(userMessage);
+  if (!scan.safe) return res.status(400).json({ error: 'Message contains disallowed content', reason: scan.reason });
+
+  if (!checkAIRateLimit(req.user.id)) {
+    return res.status(429).json({ error: 'Rate limit exceeded. Please wait 60 seconds.' });
+  }
+
+  try {
+    // Verify purchase
+    const purchaseCheck = await pool.query(
+      `SELECT id FROM purchases WHERE user_id = $1 AND template_id = $2 AND status = 'completed' LIMIT 1`,
+      [req.user.id, parseInt(promptId, 10)]
+    );
+    if (purchaseCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied', message: 'Purchase this prompt to use it in the Studio.' });
+    }
+
+    // Fetch prompt content
+    const promptResult = await pool.query(
+      `SELECT workflow_json FROM templates WHERE id = $1 AND category = 'prompt' LIMIT 1`,
+      [parseInt(promptId, 10)]
+    );
+    if (promptResult.rows.length === 0) return res.status(404).json({ error: 'Prompt not found' });
+
+    const promptData = promptResult.rows[0].workflow_json;
+    const purchasedSystemPrompt = promptData?.content;
+    if (!purchasedSystemPrompt) return res.status(500).json({ error: 'Prompt content is missing' });
+
+    // Optionally append workflow context to the user message
+    let finalUserMessage = userMessage.trim();
+    if (workflowContext && typeof workflowContext === 'object') {
+      const ctxScan = scanForInjection(JSON.stringify(workflowContext));
+      if (ctxScan.safe) {
+        finalUserMessage += `\n\n[Current workflow context:\n${JSON.stringify(workflowContext, null, 2)}\n]`;
+      }
+    }
+
+    const claudeMessages = [
+      ...history.slice(-10).map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: finalUserMessage }
+    ];
+
+    const response = await callClaude(purchasedSystemPrompt, claudeMessages, 2048);
+    res.json({ success: true, response });
+  } catch (error) {
+    console.error('Studio/chat error:', error.message);
+    if (!res.headersSent) res.status(500).json({ error: 'AI request failed', message: error.message });
   }
 });
 

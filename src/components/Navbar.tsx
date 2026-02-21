@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, ShoppingBag, HelpCircle, Shield, RefreshCw, Github } from "lucide-react";
+import { LogOut, ShoppingBag, HelpCircle, Shield, RefreshCw, Github, Wand2 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/components/context/AuthProvider";
 
@@ -199,6 +199,12 @@ export const Navbar = ({ user: propUser, onSignOut }: NavbarProps) => {
           </Link>
 
           <div className="flex items-center space-x-4">
+            <Link to="/studio">
+              <Button variant="ghost" className="flex items-center space-x-2">
+                <Wand2 className="w-4 h-4" />
+                <span>Studio</span>
+              </Button>
+            </Link>
             <Link to="/guidance">
               <Button variant="ghost" className="flex items-center space-x-2">
                 <HelpCircle className="w-4 h-4" />

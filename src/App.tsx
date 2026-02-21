@@ -12,6 +12,7 @@ import { AdminDashboard } from "./pages/AdminDashboard";
 import { AuthPage } from "./pages/AuthPage";
 import { Dashboard } from "./pages/Dashboard";
 import { GuidancePage } from "./pages/GuidancePage";
+import StudioPage from "./pages/StudioPage";
 import NotFound from "./pages/NotFound";
 import { SuccessPage } from "./pages/SuccessPage";
 import Analytics from '@/pages/AdminAnalytics';
@@ -74,6 +75,7 @@ const App = () => (
               <Route path="/template/:id" element={<TemplateDetail />} />
               
               <Route path="/guidance" element={<GuidancePage />} />
+              <Route path="/studio" element={<ProtectedRoute><StudioPage /></ProtectedRoute>} />
               <Route path="/success" element={<SuccessPage />} />
               
               {/* Legal Pages */}

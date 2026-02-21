@@ -33,6 +33,11 @@ export const API_ENDPOINTS = {
   
   // Stripe endpoints
   CREATE_CHECKOUT: `${API_BASE_URL}/api/stripe/create-checkout-session`,
+
+  // Studio endpoints
+  STUDIO_CUSTOMIZE: `${API_BASE_URL}/api/studio/customize`,
+  STUDIO_BUILD: `${API_BASE_URL}/api/studio/build`,
+  STUDIO_CHAT: `${API_BASE_URL}/api/studio/chat`,
 };
 
 // Helper function for making API calls with consistent options

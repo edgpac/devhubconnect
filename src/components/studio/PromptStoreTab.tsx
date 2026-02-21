@@ -1,0 +1,165 @@
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { ShoppingCart, Wand2, Tag, CheckCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { API_ENDPOINTS, apiCall } from '@/config/api';
+import { loadStripe } from '@stripe/stripe-js';
+import StudioChatPane from './StudioChatPane';
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
+
+interface PromptProduct {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  purchased?: boolean;
+  workflow_json?: {
+    type?: string;
+    content?: string;
+    useCase?: string;
+    compatibleNodes?: string[];
+  };
+}
+
+export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: number }) {
+  const [activePromptId, setActivePromptId] = useState<number | null>(initialPromptId || null);
+  const [isPurchasing, setIsPurchasing] = useState<number | null>(null);
+  const navigate = useNavigate();
+
+  const { data: prompts = [], isLoading } = useQuery<PromptProduct[]>({
+    queryKey: ['prompts'],
+    queryFn: async () => {
+      const res = await apiCall(`${API_ENDPOINTS.TEMPLATES}?category=prompt`);
+      if (!res.ok) throw new Error('Failed to load prompts');
+      const data = await res.json();
+      return Array.isArray(data) ? data : data.templates || [];
+    },
+  });
+
+  const handlePurchase = async (promptId: number) => {
+    setIsPurchasing(promptId);
+    try {
+      const stripe = await stripePromise;
+      if (!stripe) throw new Error('Payment system unavailable');
+      const res = await apiCall(API_ENDPOINTS.CREATE_CHECKOUT, {
+        method: 'POST',
+        body: JSON.stringify({ templateId: promptId }),
+      });
+      if (!res.ok) throw new Error('Failed to create checkout session');
+      const session = await res.json();
+      window.location.href = session.url;
+    } catch (err) {
+      console.error('Purchase error:', err);
+    } finally {
+      setIsPurchasing(null);
+    }
+  };
+
+  const activePrompt = prompts.find(p => p.id === activePromptId);
+
+  if (activePromptId && activePrompt) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full font-medium">
+              <Wand2 className="w-3.5 h-3.5" /> {activePrompt.name}
+            </span>
+            <span className="text-gray-400">is active</span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setActivePromptId(null)}>
+            ← Browse prompts
+          </Button>
+        </div>
+        <StudioChatPane mode="chat" promptId={activePromptId} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+        <strong>Prompt Store:</strong> Purchase expert-engineered prompts that unlock specialized AI
+        capabilities inside the Studio. Each prompt is a carefully crafted system instruction that
+        makes Claude behave like a domain expert for your specific workflow type.
+      </div>
+
+      {isLoading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-48 bg-gray-100 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && prompts.length === 0 && (
+        <div className="text-center py-16 text-gray-500">
+          <Wand2 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+          <p className="font-medium">Prompts coming soon</p>
+          <p className="text-sm mt-1">Expert n8n prompt packs are being added — check back shortly.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {prompts.map(prompt => {
+          const meta = prompt.workflow_json;
+          const isPurchased = prompt.purchased;
+          return (
+            <div key={prompt.id} className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-semibold text-gray-900 text-sm leading-snug">{prompt.name}</h3>
+                {isPurchased && (
+                  <span className="flex-shrink-0 inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                    <CheckCircle className="w-3.5 h-3.5" /> Owned
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-gray-500 leading-relaxed">{prompt.description}</p>
+
+              {meta?.useCase && (
+                <p className="text-xs text-blue-700 bg-blue-50 rounded-lg px-2.5 py-1.5">
+                  <strong>Use case:</strong> {meta.useCase}
+                </p>
+              )}
+
+              {meta?.compatibleNodes && meta.compatibleNodes.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {meta.compatibleNodes.map(node => (
+                    <Badge key={node} variant="secondary" className="text-xs px-2 py-0.5">
+                      {node}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100">
+                <span className="text-sm font-bold text-gray-900">
+                  ${(prompt.price / 100).toFixed(2)}
+                </span>
+                {isPurchased ? (
+                  <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => setActivePromptId(prompt.id)}>
+                    <Wand2 className="w-3.5 h-3.5 mr-1.5" /> Use in Studio
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isPurchasing === prompt.id}
+                    onClick={() => handlePurchase(prompt.id)}
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5 mr-1.5" />
+                    {isPurchasing === prompt.id ? 'Redirecting…' : 'Purchase'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
