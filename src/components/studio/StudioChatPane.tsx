@@ -53,6 +53,7 @@ export default function StudioChatPane({
     ? ((workflow as any).nodes?.length ?? 0)
     : 0;
   const isLargeWorkflow = nodeCount > 8;
+  const isVeryLargeWorkflow = nodeCount > 14;
 
   useEffect(() => {
     if (!isLoading) { setElapsed(0); return; }
@@ -88,7 +89,8 @@ export default function StudioChatPane({
     },
     {
       label: '🛡️ Add error handling',
-      prompt: 'Add proper error handling to this workflow. On each node that makes an external call (HTTP Request, Gmail, Slack, etc.) set onError to continueErrorOutput and add a path that sends a notification or logs the failure. Output the complete updated workflow JSON.',
+      // Targeted prompt: only top 3 risky nodes + a shared error logger — avoids rewriting the entire workflow
+      prompt: 'Identify the 3 most critical external-call nodes in this workflow (HTTP Request, Gmail, Slack, webhook, or similar service nodes). For each of those 3 nodes only: set onError to "continueErrorOutput" and wire the error output to a single shared Set node named "Log Error" that captures the error message. Leave all other nodes unchanged. Output the complete updated workflow JSON and list exactly which 3 nodes were changed and why.',
     },
   ] as const;
 
@@ -176,6 +178,33 @@ export default function StudioChatPane({
     <div className={`flex flex-col ${fillHeight ? 'h-full' : 'h-[600px]'} bg-white rounded-xl border border-gray-200 overflow-hidden`}>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+        {/* Honest advisory for large / spaghetti workflows */}
+        {mode === 'customize' && isVeryLargeWorkflow && (
+          <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs text-orange-800 space-y-1.5">
+            <p className="font-semibold">⚠️ Large workflow detected ({nodeCount} nodes)</p>
+            <p>
+              This AI works best with workflows under 10 nodes. Workflows with {nodeCount}+ nodes push against hard time and token limits — requests <strong>may time out or produce incomplete JSON</strong>.
+            </p>
+            <p>
+              <strong>Recommended approach:</strong> Use <em>⚡ Simplify to 4–6 nodes</em> first. Once the workflow is compact, apply further changes. Trying to add error handling or rewrite credentials on a large workflow in one shot is likely to fail.
+            </p>
+            <p className="text-orange-600">
+              Building massive "spaghetti" automations in a single workflow is an n8n anti-pattern regardless of AI — complex workflows are harder to debug, maintain, and trigger false errors. Split them into sub-workflows linked by Execute Workflow nodes instead.
+            </p>
+          </div>
+        )}
+
+        {/* Gentle nudge for moderately large workflows */}
+        {mode === 'customize' && isLargeWorkflow && !isVeryLargeWorkflow && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 space-y-1">
+            <p className="font-semibold">📋 {nodeCount}-node workflow loaded</p>
+            <p>
+              The AI can handle this, but complex requests (like adding error handling to every node) may time out. For best results: simplify first, then make targeted changes one at a time.
+            </p>
+          </div>
+        )}
+
         {messages.map(msg => (
           <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${

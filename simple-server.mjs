@@ -2627,13 +2627,27 @@ app.post('/api/studio/customize', authenticateJWT, async (req, res) => {
     // Slim the workflow before embedding — strips cosmetic fields and removes
     // whitespace formatting, significantly reducing token count for large workflows.
     const workflowJson = JSON.stringify(slimWorkflow(workflow));
+    const wfNodeCount = Array.isArray(workflow.nodes) ? workflow.nodes.length : 0;
+
+    // Hard limit: refuse extremely large workflows that will always time out.
+    if (wfNodeCount > 20) {
+      return res.status(400).json({
+        error: `Your workflow has ${wfNodeCount} nodes — too large for the AI to process reliably. Please use ⚡ Compress first to reduce it to under 15 nodes, then retry.`,
+      });
+    }
+
+    // For large-but-allowed workflows, add a conciseness directive so Claude
+    // doesn’t try to rewrite every node and blow the 55s Railway timeout.
+    const conciseNote = wfNodeCount > 12
+      ? `\n\nIMPORTANT: This workflow has ${wfNodeCount} nodes. Make only the minimal targeted changes requested. Do NOT rewrite unrelated nodes. Keep your explanation under 100 words.`
+      : '';
 
     let claudeMessages;
     if (filteredHistory.length === 0) {
       // First turn: embed workflow JSON in the single user message
       claudeMessages = [{
         role: 'user',
-        content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${workflowJson}\n\`\`\`\n\nMy request: ${userRequest.trim()}`
+        content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${workflowJson}\n\`\`\`\n\nMy request: ${userRequest.trim()}${conciseNote}`
       }];
     } else {
       // Multi-turn: embed workflow in the first user message, append current request at end
@@ -2641,10 +2655,13 @@ app.post('/api/studio/customize', authenticateJWT, async (req, res) => {
         ...filteredHistory[0],
         content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${workflowJson}\n\`\`\`\n\n${filteredHistory[0].content}`
       };
-      claudeMessages = [...filteredHistory.slice(-10), { role: 'user', content: userRequest.trim() }];
+      claudeMessages = [...filteredHistory.slice(-10), { role: 'user', content: userRequest.trim() + conciseNote }];
     }
 
-    const rawResponse = await callClaude(N8N_SYSTEM_PROMPT, claudeMessages, 6000);
+    // Reduce max_tokens for large workflows to stay within the 55s timeout.
+    const maxTokens = wfNodeCount > 12 ? 3500 : 6000;
+
+    const rawResponse = await callClaude(N8N_SYSTEM_PROMPT, claudeMessages, maxTokens);
 
     const jsonMatch = rawResponse.match(/```json\n([\s\S]*?)\n```/);
     let modifiedWorkflow = null;
