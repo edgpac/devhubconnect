@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, Wand2, CheckCircle, Lock, FileJson, Download, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Wand2, CheckCircle, Lock, FileJson, Download, AlertCircle, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { API_ENDPOINTS, apiCall } from '@/config/api';
 import { loadStripe } from '@stripe/stripe-js';
 import StudioChatPane from './StudioChatPane';
@@ -49,6 +50,7 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
   const [activePromptId, setActivePromptId] = useState<number | null>(initialPromptId || null);
   const [isPurchasing, setIsPurchasing] = useState<number | null>(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const navigate = useNavigate();
 
   const { data: prompts = [], isLoading } = useQuery<PromptProduct[]>({
@@ -107,6 +109,19 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
   };
 
   const activePrompt = prompts.find(p => p.id === activePromptId);
+
+  const q = search.trim().toLowerCase();
+  const filteredPrompts = q
+    ? prompts.filter(p => {
+        const meta = p.workflow_json;
+        return (
+          p.name.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q) ||
+          (meta?.useCase?.toLowerCase().includes(q) ?? false) ||
+          (meta?.compatibleNodes?.some(n => n.toLowerCase().includes(q)) ?? false)
+        );
+      })
+    : prompts;
 
   if (activePromptId && activePrompt) {
     return (
@@ -188,6 +203,27 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
         </div>
       )}
 
+      {/* Search bar */}
+      {!isLoading && prompts.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name, use case, or service (e.g. Slack, email triage…)"
+            className="pl-9 pr-9 bg-white"
+          />
+          {search && (
+            <button
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              onClick={() => setSearch('')}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      )}
+
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map(i => (
@@ -204,8 +240,19 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
         </div>
       )}
 
+      {!isLoading && prompts.length > 0 && filteredPrompts.length === 0 && (
+        <div className="text-center py-12 text-gray-500">
+          <Search className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+          <p className="font-medium">No prompts match "{search}"</p>
+          <p className="text-sm mt-1">Try a different keyword — service name, use case, or automation type.</p>
+          <Button variant="ghost" size="sm" className="mt-3 text-teal-600" onClick={() => setSearch('')}>
+            Clear search
+          </Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {prompts.map(prompt => {
+        {filteredPrompts.map(prompt => {
           const meta = prompt.workflow_json;
           const isPurchased = prompt.purchased;
           return (
