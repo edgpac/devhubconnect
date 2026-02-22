@@ -72,7 +72,7 @@ function JsonPanel({ workflow, filename }: { workflow: object; filename: string 
   );
 }
 
-export default function CustomizeTab() {
+export default function CustomizeTab({ onJsonLoaded }: { onJsonLoaded?: (workflow: object) => void }) {
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [activeWorkflow, setActiveWorkflow] = useState<object | null>(null);
 
@@ -82,11 +82,13 @@ export default function CustomizeTab() {
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
           <strong>How it works:</strong> Upload your DevHubConnect template (.json), then describe
           what you want to change. Claude will output the complete modified workflow ready to import into n8n.
+          Uploading also unlocks the <strong>Build on This</strong> tab.
         </div>
         <TemplateUpload
           onTemplateValidated={(v) => {
             setValidation(v);
             setActiveWorkflow(v?.workflow ?? null);
+            if (v?.workflow) onJsonLoaded?.(v.workflow);
           }}
         />
       </div>

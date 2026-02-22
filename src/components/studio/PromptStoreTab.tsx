@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, Wand2, CheckCircle, Lock, FileJson } from 'lucide-react';
+import { ShoppingCart, Wand2, CheckCircle, Lock, FileJson, Download, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { API_ENDPOINTS, apiCall } from '@/config/api';
@@ -24,9 +24,31 @@ interface PromptProduct {
   };
 }
 
+/** Generate a user-facing starter prompt the buyer can paste into Claude.ai or n8n AI */
+function buildStarterPrompt(prompt: PromptProduct): string {
+  const meta = prompt.workflow_json;
+  const nodes = meta?.compatibleNodes?.join(', ') || 'relevant services';
+  const useCase = meta?.useCase || 'automation workflow';
+  return `You are an expert n8n workflow engineer.
+
+I need to build an n8n automation for: ${useCase}
+
+The workflow should use these services/nodes: ${nodes}
+
+Please generate a complete, importable n8n workflow JSON. Requirements:
+- Output only valid JSON inside a \`\`\`json code block
+- Include all required node types, connections, and parameters
+- Use placeholder credentials (id: "1") for all credential references
+- Follow the n8n workflow schema: { name, nodes, connections, settings, meta }
+- After the JSON, provide a short explanation of how the workflow operates
+
+Begin the workflow now.`;
+}
+
 export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: number }) {
   const [activePromptId, setActivePromptId] = useState<number | null>(initialPromptId || null);
   const [isPurchasing, setIsPurchasing] = useState<number | null>(null);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const { data: prompts = [], isLoading } = useQuery<PromptProduct[]>({
@@ -40,22 +62,48 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
   });
 
   const handlePurchase = async (promptId: number) => {
+    setPurchaseError(null);
     setIsPurchasing(promptId);
     try {
-      const stripe = await stripePromise;
-      if (!stripe) throw new Error('Payment system unavailable');
       const res = await apiCall(API_ENDPOINTS.CREATE_CHECKOUT, {
         method: 'POST',
         body: JSON.stringify({ templateId: promptId }),
       });
-      if (!res.ok) throw new Error('Failed to create checkout session');
-      const session = await res.json();
-      window.location.href = session.url;
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.alreadyOwned) {
+          setPurchaseError('You already own this combo — click "Use in Studio" to activate it.');
+        } else if (data.redirectToLogin) {
+          navigate('/auth');
+        } else {
+          setPurchaseError(data.message || data.error || 'Checkout failed. Please try again.');
+        }
+        return;
+      }
+      if (!data.url) {
+        setPurchaseError('No checkout URL returned. Please try again.');
+        return;
+      }
+      window.location.href = data.url;
     } catch (err) {
+      setPurchaseError('Network error — please check your connection and try again.');
       console.error('Purchase error:', err);
     } finally {
       setIsPurchasing(null);
     }
+  };
+
+  const handleDownloadStarterPrompt = (prompt: PromptProduct) => {
+    const text = buildStarterPrompt(prompt);
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${prompt.name.replace(/\s+/g, '-').toLowerCase()}-starter-prompt.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const activePrompt = prompts.find(p => p.id === activePromptId);
@@ -70,10 +118,31 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
             </span>
             <span className="text-gray-400">is active</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setActivePromptId(null)}>
-            ← Browse prompts
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-teal-600 hover:text-teal-700"
+              onClick={() => handleDownloadStarterPrompt(activePrompt)}
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" /> Download Starter Prompt
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setActivePromptId(null)}>
+              ← Browse
+            </Button>
+          </div>
         </div>
+
+        {/* Starter prompt info */}
+        <div className="bg-teal-50 border border-teal-200 rounded-xl p-3 text-xs text-teal-800 flex items-start gap-2">
+          <Download className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-teal-600" />
+          <span>
+            <strong>Starter Prompt included:</strong> Download a ready-to-paste prompt you can use directly
+            in <strong>Claude.ai</strong> or <strong>n8n's AI assistant</strong> to generate a working workflow
+            without the Studio. This complements the expert system instruction active below.
+          </span>
+        </div>
+
         <StudioChatPane mode="chat" promptId={activePromptId} />
       </div>
     );
@@ -90,7 +159,9 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
           Each product is a <span className="text-white font-medium">JSON template + expert prompt combo</span>.
           The prompt runs <span className="text-teal-400 font-medium">invisibly</span> as Claude's system
           instruction — you interact with the AI result, not the prompt text itself.{' '}
-          <span className="text-gray-500">The actual prompt is never displayed.</span>
+          <span className="text-gray-500">The actual prompt is never displayed.</span>{' '}
+          You also receive a <span className="text-white font-medium">Starter Prompt</span> you can paste
+          directly into Claude.ai or n8n to generate working workflows outside the Studio.
         </p>
         <div className="flex flex-wrap gap-3 pt-1">
           <span className="inline-flex items-center gap-1.5 text-xs text-teal-400">
@@ -99,11 +170,23 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
           <span className="inline-flex items-center gap-1.5 text-xs text-teal-400">
             <Wand2 className="w-3.5 h-3.5" /> Expert prompt activates in Studio
           </span>
+          <span className="inline-flex items-center gap-1.5 text-xs text-teal-400">
+            <Download className="w-3.5 h-3.5" /> Starter Prompt for Claude.ai / n8n
+          </span>
           <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
-            <Lock className="w-3.5 h-3.5" /> Prompt text stays private
+            <Lock className="w-3.5 h-3.5" /> System prompt text stays private
           </span>
         </div>
       </div>
+
+      {/* Purchase error */}
+      {purchaseError && (
+        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>{purchaseError}</span>
+          <button className="ml-auto text-red-400 hover:text-red-600" onClick={() => setPurchaseError(null)}>✕</button>
+        </div>
+      )}
 
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

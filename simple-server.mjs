@@ -3441,7 +3441,7 @@ app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res
     
     console.log('💳 Creating checkout session for:', templateId, 'by user:', req.user.email || req.user.username);
     
-    const template = await pool.query('SELECT name, price FROM templates WHERE id = $1', [templateId]);
+    const template = await pool.query('SELECT name, price, category FROM templates WHERE id = $1', [templateId]);
     
     if (req.isDisconnected()) return;
     
@@ -3465,14 +3465,21 @@ app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res
       });
     }
 
+    const isPromptProduct = template.rows[0].category === 'prompt';
+    const cancelUrl = isPromptProduct
+      ? `${checkoutFrontendUrl}/studio?tab=prompt-store`
+      : `${checkoutFrontendUrl}/template/${templateId}`;
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [{
         price_data: {
           currency: 'usd',
-          product_data: { 
+          product_data: {
             name: template.rows[0].name,
-            description: `n8n automation template`
+            description: isPromptProduct
+              ? 'n8n JSON template + expert AI prompt combo'
+              : 'n8n automation template'
           },
           unit_amount: template.rows[0].price
         },
@@ -3480,7 +3487,7 @@ app.post('/api/stripe/create-checkout-session', authenticateJWT, async (req, res
       }],
       mode: 'payment',
       success_url: `${checkoutFrontendUrl}/dashboard?purchase=success&template=${templateId}`,
-      cancel_url: `${checkoutFrontendUrl}/template/${templateId}`,
+      cancel_url: cancelUrl,
       metadata: { 
         templateId: templateId.toString(), 
         userId: req.user.id.toString(),
