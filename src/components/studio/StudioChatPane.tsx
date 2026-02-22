@@ -227,38 +227,16 @@ export default function StudioChatPane({
 
       {/* Quick Actions — customize mode, before conversation starts */}
       {mode === 'customize' && messages.length === 1 && !isLoading && (
-        <div className="border-t border-gray-100 bg-gray-50">
-          {/* Compression banner — shown automatically for large workflows */}
-          {isLargeWorkflow && (
-            <div className="mx-3 mt-2 flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              <p className="text-xs text-amber-800 leading-snug">
-                <strong>Large workflow detected</strong> — {nodeCount} nodes.{' '}
-                Consider compressing it to 4–6 nodes for easier maintenance and faster execution.
-              </p>
-              <button
-                onClick={() => sendWithPrompt(QUICK_ACTIONS[0].prompt)}
-                className="flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full bg-amber-500 text-white hover:bg-amber-600 transition-colors"
-              >
-                ⚡ Compress now
-              </button>
-            </div>
-          )}
-          {/* All quick actions */}
-          <div className="px-3 py-2 flex flex-wrap gap-1.5">
-            {QUICK_ACTIONS.map(action => (
-              <button
-                key={action.label}
-                onClick={() => sendWithPrompt(action.prompt)}
-                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                  isLargeWorkflow && action.label.includes('Simplify')
-                    ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
-                    : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-teal-50'
-                }`}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
+        <div className="border-t border-gray-100 bg-gray-50 px-3 py-2 flex flex-wrap gap-1.5">
+          {QUICK_ACTIONS.map(action => (
+            <button
+              key={action.label}
+              onClick={() => sendWithPrompt(action.prompt)}
+              className="text-xs px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-teal-50 transition-colors"
+            >
+              {action.label}
+            </button>
+          ))}
         </div>
       )}
 
@@ -286,7 +264,19 @@ export default function StudioChatPane({
             <Send className="w-4 h-4" />
           </Button>
         </div>
-        <p className="text-xs text-gray-400 mt-1 ml-1">⌘+Enter to send</p>
+        <div className="flex items-center justify-between mt-1 ml-1">
+          <p className="text-xs text-gray-400">⌘+Enter to send</p>
+          {/* Persistent compress button — always visible for large workflows */}
+          {mode === 'customize' && isLargeWorkflow && (
+            <button
+              onClick={() => sendWithPrompt(QUICK_ACTIONS[0].prompt)}
+              disabled={isLoading}
+              className="text-xs font-medium px-3 py-1 rounded-full bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
+            >
+              ⚡ Compress ({nodeCount} nodes)
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
