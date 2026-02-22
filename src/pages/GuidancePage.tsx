@@ -27,19 +27,19 @@ export const GuidancePage = () => {
   return (
     <HelmetProvider>
       <Helmet>
-        <title>How to Use DevHubConnect – Workflow Studio Guide</title>
+        <title>How to Build n8n Workflows with Claude AI — Studio Guide | DevHubConnect</title>
         <meta
           name="description"
-          content="Learn how to use DevHubConnect's Workflow Studio — customize n8n templates, build AI-generated workflows, and unlock expert prompt combos powered by Claude."
+          content="Step-by-step guide: use Claude AI to generate, customize, and download n8n workflow JSON. Learn how to use the Workflow Studio, JSON prompt combos, and import workflows into n8n."
         />
         <link rel="canonical" href="https://www.devhubconnect.com/guidance" />
-        <meta property="og:title" content="How to Use DevHubConnect – Workflow Studio Guide" />
-        <meta property="og:description" content="Complete guide to the Workflow Studio: customize templates, build with AI, and use expert prompt combos." />
+        <meta property="og:title" content="How to Build n8n Workflows with Claude AI | DevHubConnect" />
+        <meta property="og:description" content="Generate and customize n8n workflow JSON using Claude AI. Step-by-step guide to the Workflow Studio and expert JSON prompt combos." />
         <meta property="og:url" content="https://www.devhubconnect.com/guidance" />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary" />
-        <meta name="twitter:title" content="How to Use DevHubConnect – Workflow Studio Guide" />
-        <meta name="twitter:description" content="Complete guide to the Workflow Studio: customize templates, build with AI, and use expert prompt combos." />
+        <meta name="twitter:title" content="How to Build n8n Workflows with Claude AI | DevHubConnect" />
+        <meta name="twitter:description" content="Generate and customize n8n workflow JSON using Claude AI. Step-by-step guide to the Workflow Studio and expert JSON prompt combos." />
       </Helmet>
 
       <div className="min-h-screen bg-gray-50">

@@ -282,24 +282,24 @@ export const HomePage = () => {
    <HelmetProvider>
      <>
        <Helmet>
-         <title>Premium n8n Automation Templates & Workflow Marketplace | DevHubConnect</title>
-         <meta 
-           name="description" 
-           content="Browse 580+ premium n8n automation workflow templates. Save hours of development time with ready-to-use integrations for Slack, Gmail, Stripe, and more. Instant download." 
+         <title>n8n AI Workflow Builder & JSON Prompt Studio | DevHubConnect</title>
+         <meta
+           name="description"
+           content="Build and customize n8n workflows with Claude AI. Get 580+ ready-to-import JSON templates, or describe your automation in plain English and let AI generate the workflow for you."
          />
          <link rel="canonical" href="https://www.devhubconnect.com/" />
-         
+
          {/* Open Graph Tags */}
-         <meta property="og:title" content="Premium n8n Automation Templates | DevHubConnect" />
-         <meta property="og:description" content="Browse 580+ premium n8n automation workflow templates. Save hours with ready-to-use integrations." />
+         <meta property="og:title" content="n8n AI Workflow Builder & JSON Prompt Studio | DevHubConnect" />
+         <meta property="og:description" content="Build and customize n8n workflows with Claude AI. 580+ JSON templates plus an AI studio that generates workflows from plain English." />
          <meta property="og:url" content="https://www.devhubconnect.com/" />
          <meta property="og:type" content="website" />
          <meta property="og:image" content="https://www.devhubconnect.com/og-image.png" />
-         
+
          {/* Twitter Card Tags */}
          <meta name="twitter:card" content="summary_large_image" />
-         <meta name="twitter:title" content="Premium n8n Automation Templates | DevHubConnect" />
-         <meta name="twitter:description" content="Browse 580+ premium n8n automation workflow templates. Save hours with ready-to-use integrations." />
+         <meta name="twitter:title" content="n8n AI Workflow Builder & JSON Prompt Studio | DevHubConnect" />
+         <meta name="twitter:description" content="Build and customize n8n workflows with Claude AI. 580+ JSON templates plus an AI studio that generates workflows from plain English." />
          <meta name="twitter:image" content="https://www.devhubconnect.com/og-image.png" />
        </Helmet>
 
