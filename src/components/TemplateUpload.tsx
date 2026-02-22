@@ -26,16 +26,11 @@ const {
   validatedTemplate 
 } = useTemplateValidation();
 
-const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
-  // Check file type
+const processFile = async (file: File) => {
   if (!file.name.endsWith('.json')) {
     alert('Please upload a .json file');
     return;
   }
-
   try {
     const validation = await validateTemplate(file);
     onTemplateValidated?.(validation);
@@ -44,24 +39,16 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
   }
 };
 
+const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (file) processFile(file);
+};
+
 const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
   event.preventDefault();
   setDragActive(false);
-  
   const file = event.dataTransfer.files[0];
-  if (file && file.name.endsWith('.json')) {
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    if (fileInputRef.current) {
-      fileInputRef.current.files = dt.files;
-      const syntheticEvent = new Event('change', { bubbles: true });
-      Object.defineProperty(syntheticEvent, 'target', {
-        writable: false,
-        value: fileInputRef.current
-      });
-      handleFileChange(syntheticEvent as unknown as React.ChangeEvent<HTMLInputElement>);
-    }
-  }
+  if (file) processFile(file);
 };
 
 const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
@@ -71,7 +58,9 @@ const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
 
 const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
   event.preventDefault();
-  setDragActive(false);
+  if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+    setDragActive(false);
+  }
 };
 
 const resetUpload = () => {
