@@ -72,6 +72,49 @@ export default function StudioChatPane({
     return { promptId, userMessage: input.trim(), workflowContext: workflow, history };
   };
 
+  const QUICK_ACTIONS = [
+    {
+      label: '⚡ Simplify to 4–6 nodes',
+      prompt: 'Simplify this workflow into a clean, compressed version using only 4 to 6 nodes. Combine any redundant Set, Code, or Function nodes into single nodes, remove debug/retry branches that are not essential, and use API key authentication on every node that supports it. Keep the same core trigger → logic → action outcome. Output the complete importable JSON and briefly explain what each new node does and what was removed.',
+    },
+    {
+      label: '🔑 Use API keys only',
+      prompt: 'Rewrite every credential in this workflow to use API key authentication instead of OAuth. Output the complete updated workflow JSON and list each node that was changed.',
+    },
+    {
+      label: '🛡️ Add error handling',
+      prompt: 'Add proper error handling to this workflow. On each node that makes an external call (HTTP Request, Gmail, Slack, etc.) set onError to continueErrorOutput and add a path that sends a notification or logs the failure. Output the complete updated workflow JSON.',
+    },
+  ] as const;
+
+  const sendWithPrompt = async (prompt: string) => {
+    if (isLoading) return;
+    setInput('');
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: prompt, timestamp: new Date() };
+    setMessages(prev => [...prev, userMsg]);
+    setIsLoading(true);
+    try {
+      const history = messages.map(m => ({ role: m.role, content: m.content }));
+      const body = mode === 'customize'
+        ? { workflow, userRequest: prompt, history }
+        : { description: prompt, history };
+      const res = await apiCall(getEndpoint(), { method: 'POST', body: JSON.stringify(body) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.message || err.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const content = data.explanation || data.response || data.rawResponse || 'No response received.';
+      const returnedWorkflow = data.modifiedWorkflow || data.workflow || null;
+      if (returnedWorkflow && onWorkflowGenerated) onWorkflowGenerated(returnedWorkflow);
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content, workflow: returnedWorkflow, timestamp: new Date() }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: `⚠️ Error: ${err instanceof Error ? err.message : String(err)}`, timestamp: new Date() }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -176,6 +219,21 @@ export default function StudioChatPane({
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Quick Actions — customize mode, before conversation starts */}
+      {mode === 'customize' && messages.length === 1 && !isLoading && (
+        <div className="border-t border-gray-100 px-3 py-2 bg-gray-50 flex flex-wrap gap-1.5">
+          {QUICK_ACTIONS.map(action => (
+            <button
+              key={action.label}
+              onClick={() => sendWithPrompt(action.prompt)}
+              className="text-xs px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-teal-50 transition-colors"
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t border-gray-200 p-3 bg-gray-50">
