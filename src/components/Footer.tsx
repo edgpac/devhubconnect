@@ -10,7 +10,7 @@ const Footer = () => {
         </div>
         <div className="max-w-xl">
           <p className="mb-4">
-            <strong>Disclaimer:</strong> DevHubConnect provides n8n workflow templates, AI-assisted customization tools, and expert prompt products ("Prompt + JSON combos") for informational and productivity purposes only. All AI-generated workflows and modifications are produced by Claude (Anthropic) and are provided "as-is" without warranties of any kind. DevHubConnect does not guarantee the accuracy, reliability, completeness, or fitness for any particular purpose of any template, generated workflow, or prompt output. Users are solely responsible for reviewing, testing, and validating all workflows before deployment in any environment. Use of our tools and templates is at your own risk. DevHubConnect is not liable for any damages, data loss, security breaches, or business disruption resulting from their use. Purchased prompt products activate as invisible AI system instructions — the underlying prompt text is not displayed or transferred to users.
+            <strong>Disclaimer:</strong> DevHubConnect provides n8n workflow templates and AI-assisted tools for productivity purposes only. AI-generated content is produced by Claude (Anthropic) and provided "as-is" without warranties. Users are solely responsible for reviewing and testing all workflows before deployment. DevHubConnect is not liable for any damages or disruption resulting from their use.
           </p>
           
           {/* Legal Links */}
