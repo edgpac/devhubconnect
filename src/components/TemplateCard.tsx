@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Star, Download, ShoppingCart, Eye, Trash2, Loader2 } from "lucide-react";
+import { Star, Download, ShoppingCart, Eye, Trash2, Loader2, Settings2 } from "lucide-react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { getDeterministicRandom } from "@/lib/utils";
 import { useState } from "react";
@@ -280,9 +280,9 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
          </Button>
          
          <div className="flex space-x-2">
-           <Button 
-             variant="outline" 
-             size="sm" 
+           <Button
+             variant="outline"
+             size="sm"
              className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50"
              onClick={(e) => {
                e.preventDefault();
@@ -293,10 +293,26 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
              <Eye className="h-4 w-4 mr-2" />
              Preview
            </Button>
-           
+
            {template.purchased && (
-             <Button 
-               variant="outline" 
+             <Button
+               variant="outline"
+               size="sm"
+               className="flex-1 border-teal-200 text-teal-700 hover:bg-teal-50 hover:border-teal-300"
+               onClick={(e) => {
+                 e.preventDefault();
+                 navigate('/studio?tab=customize');
+               }}
+               title="Open in Workflow Studio to customize with Claude AI"
+             >
+               <Settings2 className="h-4 w-4 mr-2" />
+               Customise
+             </Button>
+           )}
+
+           {template.purchased && (
+             <Button
+               variant="outline"
                size="sm"
                onClick={(e) => {
                  e.preventDefault();
