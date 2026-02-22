@@ -278,18 +278,6 @@ export const HomePage = () => {
    navigate(`/template/${templateId}`);
  };
 
- if (isLoading) {
-   return <div className="text-center p-10">Loading Marketplace...</div>;
- }
-
- if (error) {
-   return (
-     <div className="text-center p-10 text-red-500">
-       Error: Failed to load templates. Is the backend server running?
-     </div>
-   );
- }
-
  return (
    <HelmetProvider>
      <>
@@ -427,22 +415,41 @@ export const HomePage = () => {
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
              <div className="flex items-center justify-between mb-8">
                <h2 className="text-3xl font-bold text-gray-900">Available Templates</h2>
-               <div className="flex items-center text-gray-600">
-                 <Zap className="w-5 h-5 mr-2" />
-                 <span>{processedTemplates.length} templates found</span>
+               {!isLoading && !error && (
+                 <div className="flex items-center text-gray-600">
+                   <Zap className="w-5 h-5 mr-2" />
+                   <span>{processedTemplates.length} templates found</span>
+                 </div>
+               )}
+             </div>
+
+             {isLoading && (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {Array.from({ length: 6 }).map((_, i) => (
+                   <div key={i} className="h-72 bg-gray-100 rounded-xl animate-pulse" />
+                 ))}
                </div>
-             </div>
+             )}
 
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               {currentTemplates.map((template) => (
-                 <TemplateCard
-                   key={template.id}
-                   template={template}
-                 />
-               ))}
-             </div>
+             {error && !isLoading && (
+               <div className="text-center py-16 text-gray-500">
+                 <p className="text-lg font-medium mb-2">Templates are loading…</p>
+                 <p className="text-sm">Please refresh the page in a moment.</p>
+               </div>
+             )}
 
-             {processedTemplates.length === 0 && (
+             {!isLoading && !error && (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {currentTemplates.map((template) => (
+                   <TemplateCard
+                     key={template.id}
+                     template={template}
+                   />
+                 ))}
+               </div>
+             )}
+
+             {!isLoading && !error && processedTemplates.length === 0 && (
                <div className="text-center py-16">
                  <div className="text-gray-400 text-6xl mb-4">🔍</div>
                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No templates found</h3>

@@ -29,7 +29,8 @@ import { AuthProvider } from "./components/context/AuthProvider";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: false,
+      retry: 3,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
       refetchOnWindowFocus: false,
     },
   },
