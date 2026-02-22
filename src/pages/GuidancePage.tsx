@@ -63,6 +63,41 @@ export const GuidancePage = () => {
         <section className="py-12">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
+            {/* Access Requirements — prominent first */}
+            <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 space-y-4">
+              <p className="text-white font-semibold text-base flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+                Two things are required before you can use the Studio
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-gray-800 rounded-xl p-4 flex items-start gap-3">
+                  <Github className="w-5 h-5 text-white mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-white font-semibold text-sm">1. GitHub sign-in</p>
+                    <p className="text-gray-400 text-xs mt-1">
+                      The Studio is <span className="text-yellow-400 font-medium">completely inaccessible</span> without a GitHub account.
+                      Clicking "Open Workflow Studio" without being logged in redirects you to the sign-in page.
+                      No guest or anonymous access is allowed.
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-4 flex items-start gap-3">
+                  <Upload className="w-5 h-5 text-teal-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-white font-semibold text-sm">2. Upload a valid DevHubConnect JSON</p>
+                    <p className="text-gray-400 text-xs mt-1">
+                      Once logged in, the Studio opens with <span className="text-teal-400 font-medium">Customize</span> and <span className="text-teal-400 font-medium">Prompt Store</span> tabs only.
+                      The <strong className="text-white">Build on This</strong> tab stays locked until you upload and validate
+                      a JSON template purchased from DevHubConnect. Third-party n8n files are rejected.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <p className="text-gray-500 text-xs">
+                These restrictions prevent API abuse and ensure the AI tools are only available to paying customers.
+              </p>
+            </div>
+
             {/* Quick Start */}
             <Card>
               <CardHeader>
