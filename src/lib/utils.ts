@@ -19,6 +19,34 @@ export function cn(...inputs: ClassValue[]) {
  * @param {number} max - The maximum number in the range.
  * @returns {number} A consistent random number for the given seed.
  */
+/**
+ * Returns (or creates) a stable numeric seed for the current browser session.
+ * A new seed is generated on each fresh session, so template order changes on every login.
+ */
+export function getSessionSeed(): number {
+  const key = 'dhc_session_seed';
+  const existing = sessionStorage.getItem(key);
+  if (existing) return Number(existing);
+  const seed = Math.floor(Math.random() * 1_000_000);
+  sessionStorage.setItem(key, String(seed));
+  return seed;
+}
+
+/**
+ * Deterministic Fisher-Yates shuffle driven by a numeric seed.
+ * Returns a new array — does not mutate the original.
+ */
+export function seededShuffle<T>(array: T[], seed: number): T[] {
+  const arr = [...array];
+  let s = seed;
+  for (let i = arr.length - 1; i > 0; i--) {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    const j = Math.abs(s) % (i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 export const getDeterministicRandom = (seed: string, min: number, max: number): number => {
   let hash = 0;
   // Simple hash function

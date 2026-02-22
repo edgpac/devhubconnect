@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { getSessionSeed, seededShuffle } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Wand2, CheckCircle, Lock, FileJson, Download, AlertCircle, Search, X } from 'lucide-react';
@@ -52,6 +53,7 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+  const sessionSeed = useMemo(() => getSessionSeed(), []);
 
   const { data: prompts = [], isLoading } = useQuery<PromptProduct[]>({
     queryKey: ['prompts'],
@@ -110,9 +112,11 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
 
   const activePrompt = prompts.find(p => p.id === activePromptId);
 
+  const shuffledPrompts = useMemo(() => seededShuffle(prompts, sessionSeed), [prompts, sessionSeed]);
+
   const q = search.trim().toLowerCase();
   const filteredPrompts = q
-    ? prompts.filter(p => {
+    ? shuffledPrompts.filter(p => {
         const meta = p.workflow_json;
         return (
           p.name.toLowerCase().includes(q) ||
@@ -121,7 +125,7 @@ export default function PromptStoreTab({ initialPromptId }: { initialPromptId?: 
           (meta?.compatibleNodes?.some(n => n.toLowerCase().includes(q)) ?? false)
         );
       })
-    : prompts;
+    : shuffledPrompts;
 
   if (activePromptId && activePrompt) {
     return (

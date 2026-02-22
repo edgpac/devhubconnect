@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import StudioTeaser from '../components/StudioTeaser';
 import { API_ENDPOINTS, apiCall } from '../config/api';
+import { getSessionSeed, seededShuffle } from '@/lib/utils';
 
 interface Template {
  id: number;
@@ -140,6 +141,8 @@ export const HomePage = () => {
  const [searchParams] = useSearchParams();
  const navigate = useNavigate();
 
+ const sessionSeed = useMemo(() => getSessionSeed(), []);
+
  const [searchTerm, setSearchTerm] = useState('');
  const [selectedCategory, setSelectedCategory] = useState('all');
  const [sortOrder, setSortOrder] = useState('all');
@@ -181,7 +184,8 @@ export const HomePage = () => {
  ];
 
  const processedTemplates = useMemo(() => {
- let filtered: Template[] = Array.isArray(templates) ? templates : [];
+ // Shuffle base order once per session so users see different templates each visit
+ let filtered: Template[] = seededShuffle(Array.isArray(templates) ? templates : [], sessionSeed);
 
  if (selectedCategory === 'popular') {
    filtered = filtered.filter((template) =>
