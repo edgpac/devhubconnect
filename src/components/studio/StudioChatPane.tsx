@@ -46,7 +46,14 @@ export default function StudioChatPane({
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isLoading) { setElapsed(0); return; }
+    const t = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [isLoading]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -155,12 +162,15 @@ export default function StudioChatPane({
             <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
               <Bot className="w-4 h-4 text-gray-600" />
             </div>
-            <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3">
+            <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 flex flex-col gap-1.5">
               <div className="flex gap-1 items-center h-4">
                 <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
                 <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
                 <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
               </div>
+              <span className="text-xs text-gray-400">
+                {elapsed < 5 ? 'Generating…' : elapsed < 20 ? `Generating… ${elapsed}s` : `Still working… ${elapsed}s — complex requests can take up to 55s`}
+              </span>
             </div>
           </div>
         )}

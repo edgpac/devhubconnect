@@ -247,11 +247,26 @@ Space nodes 250px apart horizontally. Trigger at [0, 0], flow goes right. Branch
 - Do not use deprecated nodes (use "n8n-nodes-base.code" not "n8n-nodes-base.function")
 - Do not answer off-topic questions`;
 
+// ✅ STUDIO: Strip cosmetic-only n8n node fields before sending to Claude.
+// Removes position, notes, and execution flags that waste tokens without
+// helping Claude understand or modify the workflow logic.
+function slimWorkflow(wf) {
+  if (!wf || typeof wf !== 'object') return wf;
+  const slimNode = (node) => {
+    const { position, notes, executeOnce, alwaysOutputData, ...rest } = node;
+    return rest;
+  };
+  return {
+    ...wf,
+    nodes: Array.isArray(wf.nodes) ? wf.nodes.map(slimNode) : wf.nodes,
+  };
+}
+
 // ✅ STUDIO: Shared Claude caller
 async function callClaude(systemPrompt, messages, maxTokens = 4096) {
   if (!anthropic) throw new Error('Claude API not configured. Please add ANTHROPIC_API_KEY.');
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => controller.abort(), 55000);
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -261,7 +276,7 @@ async function callClaude(systemPrompt, messages, maxTokens = 4096) {
     }, { signal: controller.signal });
     return response.content[0].text;
   } catch (err) {
-    if (err.name === 'AbortError') throw new Error('AI response timed out — try a shorter request or break it into smaller steps.');
+    if (err.name === 'AbortError') throw new Error('Request timed out. Try a simpler change — e.g. one node at a time — or rephrase your request.');
     throw err;
   } finally {
     clearTimeout(timeout);
@@ -2600,18 +2615,22 @@ app.post('/api/studio/customize', authenticateJWT, async (req, res) => {
       filteredHistory.shift();
     }
 
+    // Slim the workflow before embedding — strips cosmetic fields and removes
+    // whitespace formatting, significantly reducing token count for large workflows.
+    const workflowJson = JSON.stringify(slimWorkflow(workflow));
+
     let claudeMessages;
     if (filteredHistory.length === 0) {
       // First turn: embed workflow JSON in the single user message
       claudeMessages = [{
         role: 'user',
-        content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${JSON.stringify(workflow, null, 2)}\n\`\`\`\n\nMy request: ${userRequest.trim()}`
+        content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${workflowJson}\n\`\`\`\n\nMy request: ${userRequest.trim()}`
       }];
     } else {
       // Multi-turn: embed workflow in the first user message, append current request at end
       filteredHistory[0] = {
         ...filteredHistory[0],
-        content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${JSON.stringify(workflow, null, 2)}\n\`\`\`\n\n${filteredHistory[0].content}`
+        content: `Here is the current n8n workflow JSON:\n\`\`\`json\n${workflowJson}\n\`\`\`\n\n${filteredHistory[0].content}`
       };
       claudeMessages = [...filteredHistory.slice(-10), { role: 'user', content: userRequest.trim() }];
     }
