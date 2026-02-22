@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Helmet, HelmetProvider } from "react-helmet-async";
 import { Navbar } from "../components/Navbar";
 import { Button } from "../components/ui/button";
-import { ArrowLeft, ShoppingCart, Star, Eye, Edit, SlidersHorizontal, Share2, Download, Copy, Wand2 } from "lucide-react";
+import { ArrowLeft, ShoppingCart, Star, Eye, Edit, SlidersHorizontal, Share2, Download, Wand2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/context/AuthProvider";
@@ -38,13 +38,45 @@ interface Template {
 const handleDownloadJson = (template: Template) => {
     if (!template.workflowJson && !template.workflow_json) return;
     const downloadUrl = `/api/templates/${template.id}/download-workflow`;
-    
     const a = document.createElement("a");
     a.href = downloadUrl;
     a.download = `${template.name.toLowerCase().replace(/\s+/g, '_')}_workflow.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+};
+
+const handleDownloadStarterPrompt = (template: Template) => {
+  const wj = template.workflowJson || template.workflow_json;
+  const nodes = wj?.nodes as any[] | undefined;
+  const nodeTypes = nodes && nodes.length > 0
+    ? [...new Set(nodes.map(n => (n.type as string)?.split('.').pop() || n.type).filter(Boolean))].join(', ')
+    : 'relevant automation services';
+  const text = `You are an expert n8n workflow engineer.
+
+I need to build an n8n automation for: ${template.name}
+
+Description: ${template.description}
+
+The workflow should incorporate these services/node types: ${nodeTypes}
+
+Please generate a complete, importable n8n workflow JSON. Requirements:
+- Output only valid JSON inside a \`\`\`json code block
+- Include all required node types, connections, and parameters
+- Use placeholder credentials (id: "1") for all credential references
+- Follow the n8n workflow schema: { name, nodes, connections, settings, meta }
+- After the JSON, provide a short explanation of how the workflow operates
+
+Begin the workflow now.`;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${template.name.replace(/\s+/g, '-').toLowerCase()}-starter-prompt.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 };
 
 const getIntegratedApps = (nodes: { type: string }[] | undefined): string[] => {
@@ -279,9 +311,9 @@ export const TemplateDetail = () => {
                             <Download className="w-5 h-5 mr-2" />
                             Download JSON
                           </Button>
-                          <Button size="lg" variant="secondary" className="w-full" onClick={() => toast.info('Coming soon!')}>
-                            <Copy className="w-5 h-5 mr-2" />
-                            Copy to My Workflows
+                          <Button size="lg" variant="outline" className="w-full border-teal-200 text-teal-700 hover:bg-teal-50" onClick={() => handleDownloadStarterPrompt(template)}>
+                            <Download className="w-5 h-5 mr-2" />
+                            Download Starter Prompt
                           </Button>
                         </>
                       )}
@@ -296,7 +328,7 @@ export const TemplateDetail = () => {
                       {isPurchasing ? "Redirecting to Checkout..." : (
                         <>
                           <ShoppingCart className="w-5 h-5 mr-2" />
-                          {template.category === 'prompt' ? 'Purchase Prompt' : 'Purchase JSON Template'}
+                          {template.category === 'prompt' ? 'Get Combo' : 'Purchase Workflow + Prompt'}
                         </>
                       )}
                     </Button>

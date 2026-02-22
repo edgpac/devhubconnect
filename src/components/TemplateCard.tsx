@@ -12,6 +12,7 @@ interface Template {
  name: string;
  description: string;
  price: number;
+ category?: string;
  imageUrl?: string;
  image_url?: string;
  workflowJson?: any;
@@ -24,6 +25,29 @@ interface Template {
  _rating?: number;
  _reviewCount?: number;
  _tags?: string[];
+}
+
+function buildStarterPrompt(name: string, description: string, workflowJson?: any): string {
+  const nodes = workflowJson?.nodes as any[] | undefined;
+  const nodeTypes = nodes && nodes.length > 0
+    ? [...new Set(nodes.map(n => (n.type as string)?.split('.').pop() || n.type).filter(Boolean))].join(', ')
+    : 'relevant automation services';
+  return `You are an expert n8n workflow engineer.
+
+I need to build an n8n automation for: ${name}
+
+Description: ${description}
+
+The workflow should incorporate these services/node types: ${nodeTypes}
+
+Please generate a complete, importable n8n workflow JSON. Requirements:
+- Output only valid JSON inside a \`\`\`json code block
+- Include all required node types, connections, and parameters
+- Use placeholder credentials (id: "1") for all credential references
+- Follow the n8n workflow schema: { name, nodes, connections, settings, meta }
+- After the JSON, provide a short explanation of how the workflow operates
+
+Begin the workflow now.`;
 }
 
 interface TemplateCardProps {
@@ -48,6 +72,22 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
  
  const reviewCount = template._reviewCount || 
    getDeterministicRandom(String(template.id) + "-reviews", 8, 120);
+
+ const isPrompt = template.category === 'prompt';
+
+ const handleDownloadPrompt = () => {
+   const wj = template.workflowJson || template.workflow_json;
+   const text = buildStarterPrompt(template.name, template.description, wj);
+   const blob = new Blob([text], { type: 'text/plain' });
+   const url = URL.createObjectURL(blob);
+   const a = document.createElement('a');
+   a.href = url;
+   a.download = `${template.name.replace(/\s+/g, '-').toLowerCase()}-starter-prompt.txt`;
+   document.body.appendChild(a);
+   a.click();
+   document.body.removeChild(a);
+   URL.revokeObjectURL(url);
+ };
 
  // ✅ YOUR FIX: Save current page before navigating
  const handlePreview = () => {
@@ -274,11 +314,24 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
            ) : (
              <>
                <ShoppingCart className="h-4 w-4 mr-2" />
-               Purchase JSON Template
+               {isPrompt ? 'Get Combo' : 'Purchase Workflow + Prompt'}
              </>
            )}
          </Button>
-         
+
+         {/* Starter Prompt download — purchased non-prompt templates */}
+         {template.purchased && !isPrompt && (
+           <Button
+             variant="outline"
+             size="sm"
+             className="w-full border-teal-200 text-teal-700 hover:bg-teal-50 hover:border-teal-300"
+             onClick={(e) => { e.preventDefault(); handleDownloadPrompt(); }}
+           >
+             <Download className="h-4 w-4 mr-2" />
+             Download Starter Prompt
+           </Button>
+         )}
+
          <div className="flex space-x-2">
            <Button
              variant="outline"
@@ -294,7 +347,7 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
              Preview
            </Button>
 
-           {template.purchased && (
+           {template.purchased && !isPrompt && (
              <Button
                variant="outline"
                size="sm"

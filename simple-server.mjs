@@ -2253,7 +2253,8 @@ app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
         t.created_at as "createdAt",
         t.download_count as "downloadCount",
         t.view_count as "viewCount",
-        t.rating
+        t.rating,
+        t.category
       FROM purchases p
       JOIN templates t ON p.template_id = t.id
       WHERE p.user_id = $1 AND p.status = 'completed'
@@ -2286,6 +2287,7 @@ app.get('/api/user/purchases', authenticateJWT, async (req, res) => {
         downloadCount: row.downloadCount,
         viewCount: row.viewCount,
         rating: row.rating,
+        category: row.category,
         purchased: true
       }
     }));
