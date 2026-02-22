@@ -49,6 +49,11 @@ export default function StudioChatPane({
   const [elapsed, setElapsed] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const nodeCount = mode === 'customize' && workflow
+    ? ((workflow as any).nodes?.length ?? 0)
+    : 0;
+  const isLargeWorkflow = nodeCount > 8;
+
   useEffect(() => {
     if (!isLoading) { setElapsed(0); return; }
     const t = setInterval(() => setElapsed(s => s + 1), 1000);
@@ -222,16 +227,38 @@ export default function StudioChatPane({
 
       {/* Quick Actions — customize mode, before conversation starts */}
       {mode === 'customize' && messages.length === 1 && !isLoading && (
-        <div className="border-t border-gray-100 px-3 py-2 bg-gray-50 flex flex-wrap gap-1.5">
-          {QUICK_ACTIONS.map(action => (
-            <button
-              key={action.label}
-              onClick={() => sendWithPrompt(action.prompt)}
-              className="text-xs px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-teal-50 transition-colors"
-            >
-              {action.label}
-            </button>
-          ))}
+        <div className="border-t border-gray-100 bg-gray-50">
+          {/* Compression banner — shown automatically for large workflows */}
+          {isLargeWorkflow && (
+            <div className="mx-3 mt-2 flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <p className="text-xs text-amber-800 leading-snug">
+                <strong>Large workflow detected</strong> — {nodeCount} nodes.{' '}
+                Consider compressing it to 4–6 nodes for easier maintenance and faster execution.
+              </p>
+              <button
+                onClick={() => sendWithPrompt(QUICK_ACTIONS[0].prompt)}
+                className="flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+              >
+                ⚡ Compress now
+              </button>
+            </div>
+          )}
+          {/* All quick actions */}
+          <div className="px-3 py-2 flex flex-wrap gap-1.5">
+            {QUICK_ACTIONS.map(action => (
+              <button
+                key={action.label}
+                onClick={() => sendWithPrompt(action.prompt)}
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                  isLargeWorkflow && action.label.includes('Simplify')
+                    ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                    : 'border-gray-300 bg-white text-gray-700 hover:border-teal-400 hover:text-teal-700 hover:bg-teal-50'
+                }`}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
