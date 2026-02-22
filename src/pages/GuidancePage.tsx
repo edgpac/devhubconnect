@@ -1,25 +1,25 @@
-import { Helmet, HelmetProvider } from "react-helmet-async";
+import { HelmetProvider, Helmet } from "react-helmet-async";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Search,
-  Filter,
-  ShoppingCart,
-  User,
-  CreditCard,
+  Wand2,
+  Settings2,
+  ShoppingBag,
+  Upload,
   Download,
-  Eye,
-  MousePointer,
-  ArrowRight,
+  Lock,
+  Bot,
+  Github,
+  Shield,
+  CreditCard,
   CheckCircle,
   AlertCircle,
   Info,
-  Github,
-  Shield,
-  Lock,
-  Bot
+  ArrowRight,
+  FileJson,
+  Sparkles,
+  User,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -27,453 +27,433 @@ export const GuidancePage = () => {
   return (
     <HelmetProvider>
       <Helmet>
-        <title>How to Use DevHubConnect - n8n Template Marketplace Guide | DevHubConnect</title>
+        <title>How to Use DevHubConnect – Workflow Studio Guide</title>
         <meta
           name="description"
-          content="Complete guide to buying, downloading, and using n8n automation workflow templates from DevHubConnect. Learn how to browse templates, make secure purchases with GitHub authentication, and deploy workflows with AI assistance."
+          content="Learn how to use DevHubConnect's Workflow Studio — customize n8n templates, build AI-generated workflows, and unlock expert prompt combos powered by Claude."
         />
         <link rel="canonical" href="https://www.devhubconnect.com/guidance" />
-
-        {/* Open Graph Tags */}
-        <meta property="og:title" content="How to Use DevHubConnect - n8n Template Guide" />
-        <meta property="og:description" content="Complete guide to using n8n automation templates with AI assistance." />
+        <meta property="og:title" content="How to Use DevHubConnect – Workflow Studio Guide" />
+        <meta property="og:description" content="Complete guide to the Workflow Studio: customize templates, build with AI, and use expert prompt combos." />
         <meta property="og:url" content="https://www.devhubconnect.com/guidance" />
         <meta property="og:type" content="website" />
-
-        {/* Twitter Card Tags */}
         <meta name="twitter:card" content="summary" />
-        <meta name="twitter:title" content="How to Use DevHubConnect - n8n Template Guide" />
-        <meta name="twitter:description" content="Complete guide to using n8n automation templates with AI assistance." />
+        <meta name="twitter:title" content="How to Use DevHubConnect – Workflow Studio Guide" />
+        <meta name="twitter:description" content="Complete guide to the Workflow Studio: customize templates, build with AI, and use expert prompt combos." />
       </Helmet>
 
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-      
-      {/* Header */}
-      <section className="bg-primary text-white py-16">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl font-bold mb-4">
-            How to Use DevHubConnect
-          </h1>
-          <p className="text-xl text-blue-100">
-            Your complete guide to discovering, purchasing, and using automation templates securely with AI assistance
-          </p>
-        </div>
-      </section>
 
-      {/* Main Content */}
-      <section className="py-12">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          
-          {/* Quick Start */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <CheckCircle className="w-6 h-6 mr-2 text-green-600" />
-                Quick Start Guide
-              </CardTitle>
-              <CardDescription>
-                Get started in 3 simple steps with secure GitHub authentication
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="text-blue-600 font-bold text-lg">1</span>
+        {/* Header */}
+        <section className="bg-gradient-to-br from-gray-950 via-teal-950 to-gray-900 text-white py-16">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <div className="inline-flex items-center gap-2 bg-teal-500/20 border border-teal-500/30 rounded-full px-4 py-1.5 text-teal-300 text-sm font-medium mb-6">
+              <Sparkles className="w-4 h-4" /> Powered by Claude AI
+            </div>
+            <h1 className="text-4xl font-bold mb-4">How to Use DevHubConnect</h1>
+            <p className="text-xl text-gray-300 max-w-2xl mx-auto">
+              Your complete guide to the Workflow Studio — purchase n8n templates, customize them with Claude AI,
+              and unlock expert prompt combos that generate real working automations.
+            </p>
+          </div>
+        </section>
+
+        {/* Main Content */}
+        <section className="py-12">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+
+            {/* Quick Start */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle className="w-6 h-6 text-green-600" /> Quick Start
+                </CardTitle>
+                <CardDescription>Get from sign-in to working workflow in 4 steps</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                  {[
+                    { num: "1", color: "blue", icon: <Github className="w-5 h-5 text-blue-600" />, title: "Sign In", desc: "Sign in with GitHub — one click, no registration needed." },
+                    { num: "2", color: "purple", icon: <CreditCard className="w-5 h-5 text-purple-600" />, title: "Purchase", desc: "Buy an n8n template or a JSON + Prompt combo from the Prompt Store." },
+                    { num: "3", color: "teal", icon: <Upload className="w-5 h-5 text-teal-600" />, title: "Upload JSON", desc: "Open Workflow Studio and upload your purchased template to unlock all AI tools." },
+                    { num: "4", color: "green", icon: <Wand2 className="w-5 h-5 text-green-600" />, title: "Build & Deploy", desc: "Customize with Claude, build variations, and download your ready-to-import workflow." },
+                  ].map(s => (
+                    <div key={s.num} className="text-center">
+                      <div className={`w-12 h-12 bg-${s.color}-100 rounded-full flex items-center justify-center mx-auto mb-3`}>
+                        {s.icon}
+                      </div>
+                      <h3 className="font-semibold mb-1 text-sm">{s.title}</h3>
+                      <p className="text-xs text-gray-500">{s.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Workflow Studio */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wand2 className="w-6 h-6 text-teal-600" /> Workflow Studio
+                </CardTitle>
+                <CardDescription>
+                  The Studio is DevHubConnect's AI workspace — all three tools live here, powered by Claude.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+
+                {/* Upload gate */}
+                <div className="flex items-start gap-3">
+                  <Upload className="w-5 h-5 mt-0.5 text-gray-400 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Start with a JSON upload</h4>
+                    <p className="text-gray-600 text-sm">
+                      When you first open the Studio you'll see two tabs: <strong>Customize</strong> and <strong>Prompt Store</strong>.
+                      Uploading a DevHubConnect template JSON in the Customize tab validates your purchase and unlocks
+                      the <strong>Build on This</strong> tab. This keeps AI usage fair for everyone.
+                    </p>
                   </div>
-                  <h3 className="font-semibold mb-2">Browse Templates</h3>
-                  <p className="text-sm text-gray-600">Explore our collection of automation templates on the homepage</p>
                 </div>
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="text-purple-600 font-bold text-lg">2</span>
+
+                {/* Customize */}
+                <div className="flex items-start gap-3">
+                  <Settings2 className="w-5 h-5 mt-0.5 text-teal-600 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Customize tab — modify your template</h4>
+                    <p className="text-gray-600 text-sm">
+                      After uploading, the left panel shows your workflow JSON and the right panel is a Claude chat.
+                      Describe what you want to change ("swap Google Sheets for Airtable", "add a Slack notification on failure")
+                      and Claude returns the complete modified JSON, ready to import into n8n. The panel updates live
+                      and the download button always reflects the latest version.
+                    </p>
                   </div>
-                  <h3 className="font-semibold mb-2">Sign In & Purchase</h3>
-                  <p className="text-sm text-gray-600">Sign in with GitHub to securely purchase templates - authentication required</p>
                 </div>
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="text-green-600 font-bold text-lg">3</span>
+
+                {/* Build on This */}
+                <div className="flex items-start gap-3">
+                  <Wand2 className="w-5 h-5 mt-0.5 text-emerald-600 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Build on This tab — generate variations</h4>
+                    <p className="text-gray-600 text-sm">
+                      Unlocked after a valid upload, this tab uses your template's structure as a base.
+                      Describe a new variation in plain English and Claude generates a complete, importable
+                      n8n workflow JSON. Great for extending an existing automation or creating a related workflow
+                      without starting from scratch.
+                    </p>
                   </div>
-                  <h3 className="font-semibold mb-2">Access & Use</h3>
-                  <p className="text-sm text-gray-600">View your purchased templates in your personal dashboard with AI helper support</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* AI Helper */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Bot className="w-6 h-6 mr-2 text-emerald-600" />
-                AI Helper & Setup Assistance
-              </CardTitle>
-              <CardDescription>
-                Intelligent assistance powered by Groq AI for template setup and customization
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <Bot className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Interactive AI Chat</h4>
-                  <p className="text-gray-600">Each purchased template includes an AI chat assistant that can answer questions about setup, configuration, and troubleshooting specific to your template.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <ArrowRight className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Automated Setup Instructions</h4>
-                  <p className="text-gray-600">Click "Generate Setup Instructions" to get AI-powered, step-by-step guidance tailored to your specific template and workflow requirements.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <Info className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Smart Configuration Help</h4>
-                  <p className="text-gray-600">Ask the AI helper about API keys, webhook URLs, credential setup, testing procedures, and troubleshooting common issues with your automation.</p>
-                </div>
-              </div>
-              
-              <div className="bg-emerald-50 p-4 rounded-lg">
-                <div className="flex items-center mb-2">
-                  <Bot className="w-5 h-5 mr-2 text-emerald-600" />
-                  <span className="font-semibold text-emerald-900">AI Helper Examples</span>
-                </div>
-                <p className="text-emerald-800">Try asking: "How do I add Gmail credentials?", "Where do I find my webhook URL?", or "How do I test this workflow in n8n?"</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Browsing Templates */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Search className="w-6 h-6 mr-2 text-blue-600" />
-                Browsing & Finding Templates
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <MousePointer className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Homepage Navigation</h4>
-                  <p className="text-gray-600">The homepage displays all available templates in a clean grid layout. Each template card shows the name, description, price, and app icons.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <Search className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Search Function</h4>
-                  <p className="text-gray-600">Use the search bar at the top to find templates by name or description. Type keywords related to what you're looking for.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <Filter className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Category Filters</h4>
-                  <p className="text-gray-600">Click on category badges (email, database, webhooks, etc.) to filter templates by type. Click "all" to reset filters.</p>
-                </div>
-              </div>
-              
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="flex items-center mb-2">
-                  <Info className="w-5 h-5 mr-2 text-blue-600" />
-                  <span className="font-semibold text-blue-900">Pro Tip</span>
-                </div>
-                <p className="text-blue-800">Look for the app icons on each template card to quickly identify which services the automation works with (Gmail, Slack, Stripe, etc.).</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Template Details */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Eye className="w-6 h-6 mr-2 text-purple-600" />
-                Understanding Template Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <MousePointer className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Clicking on Templates</h4>
-                  <p className="text-gray-600">Click anywhere on a template card to open the detailed view page where you can see more information and the workflow diagram.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <ArrowRight className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Workflow Visualization</h4>
-                  <p className="text-gray-600">The template detail page shows a visual diagram of how the automation works, with connected boxes representing each step in the process.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <Info className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Template Information</h4>
-                  <p className="text-gray-600">Each template page includes the full description, pricing, and all technical details you need to understand what the automation does.</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Account & Authentication */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Github className="w-6 h-6 mr-2 text-gray-900" />
-                GitHub Authentication
-              </CardTitle>
-              <CardDescription>
-                Secure, one-click authentication powered by GitHub
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <Github className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Sign In with GitHub</h4>
-                  <p className="text-gray-600">Click "Continue with GitHub" to sign in securely. Your GitHub account is used to create and access your DevHubConnect profile automatically.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <Shield className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Automatic Account Creation</h4>
-                  <p className="text-gray-600">No separate registration needed! Your account is created automatically when you first sign in with GitHub, using your GitHub profile information.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <User className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Profile & Dashboard Access</h4>
-                  <p className="text-gray-600">After signing in, you'll see your GitHub username in the top-right corner. Click it to access "My Templates" and view your purchases.</p>
-                </div>
-              </div>
-
-              <div className="bg-green-50 p-4 rounded-lg">
-                <div className="flex items-center mb-2">
-                  <CheckCircle className="w-5 h-5 mr-2 text-green-600" />
-                  <span className="font-semibold text-green-900">Why GitHub?</span>
-                </div>
-                <p className="text-green-800">GitHub authentication ensures your purchases are securely linked to your account and prevents any payment/access issues. It's the most reliable way to protect your investment.</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Secure Purchasing */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Lock className="w-6 h-6 mr-2 text-red-600" />
-                Secure Template Purchasing
-              </CardTitle>
-              <CardDescription>
-                Protected checkout process with authentication verification
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <Lock className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Authentication Required</h4>
-                  <p className="text-gray-600">You MUST be signed in with GitHub to purchase templates. This ensures your purchase is properly linked to your account and prevents any loss of access.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <Shield className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Duplicate Purchase Prevention</h4>
-                  <p className="text-gray-600">Our system automatically prevents you from purchasing the same template twice, protecting you from accidental duplicate charges.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <CreditCard className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Secure Payment Processing</h4>
-                  <p className="text-gray-600">All payments are processed securely through Stripe with end-to-end encryption. Your payment information is never stored on our servers.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <Download className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Instant Secure Access</h4>
-                  <p className="text-gray-600">After successful payment, templates are immediately available in your dashboard, securely linked to your GitHub account for lifetime access.</p>
-                </div>
-              </div>
-              
-              <div className="bg-red-50 p-4 rounded-lg">
-                <div className="flex items-center mb-2">
-                  <AlertCircle className="w-5 h-5 mr-2 text-red-600" />
-                  <span className="font-semibold text-red-900">Critical Security Notice</span>
-                </div>
-                <p className="text-red-800">Purchasing without being signed in is not possible. This security measure protects your money and ensures you can always access your purchased templates.</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Dashboard */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <ShoppingCart className="w-6 h-6 mr-2 text-indigo-600" />
-                Your Secure Dashboard
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <Github className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">GitHub-Linked Templates</h4>
-                  <p className="text-gray-600">Your dashboard shows all templates purchased with your GitHub account. Each purchase is securely linked to prevent any access issues.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <Download className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Download & Use Templates</h4>
-                  <p className="text-gray-600">From your dashboard, you can download template files, view detailed workflow information, and access setup instructions for your automation tools.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <Bot className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">AI Helper Access</h4>
-                  <p className="text-gray-600">Each purchased template includes access to an AI chat assistant and automated setup instruction generator to help you implement your automations quickly.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <CheckCircle className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Permanent Access</h4>
-                  <p className="text-gray-600">Once purchased, templates remain in your dashboard forever. As long as you can access your GitHub account, you can access your templates.</p>
-                </div>
-              </div>
-
-              <div className="bg-indigo-50 p-4 rounded-lg">
-                <div className="flex items-center mb-2">
-                  <Info className="w-5 h-5 mr-2 text-indigo-600" />
-                  <span className="font-semibold text-indigo-900">Access Your Dashboard</span>
-                </div>
-                <p className="text-indigo-800">After signing in with GitHub, look for your username/avatar in the top-right corner and click "My Templates" to view your purchased automation templates.</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Troubleshooting */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <AlertCircle className="w-6 h-6 mr-2 text-yellow-600" />
-                Troubleshooting & Common Issues
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <Lock className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Can't Purchase Templates</h4>
-                  <p className="text-gray-600">If purchase buttons don't work, make sure you're signed in with GitHub first. Unauthenticated users cannot make purchases for security reasons.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <Search className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">Don't See Your Templates</h4>
-                  <p className="text-gray-600">Templates are linked to your GitHub account. Make sure you're signed in with the same GitHub account you used to make the purchase.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <Bot className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">AI Helper Not Responding</h4>
-                  <p className="text-gray-600">If the AI chat isn't working, try refreshing the page or asking simpler, more specific questions about your template setup or configuration.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <Github className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">GitHub Sign-In Issues</h4>
-                  <p className="text-gray-600">If GitHub authentication fails, try clearing your browser cache or using an incognito/private browsing window.</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Getting Help */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Info className="w-6 h-6 mr-2 text-blue-600" />
-                Need More Help?
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 mb-4">
-                If you're still having trouble or have questions not covered in this guide, here are ways to get additional support:
-              </p>
-              
-              <div className="space-y-3">
-                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <Github className="w-5 h-5 text-gray-500" />
-                  <span className="text-gray-700">Ensure you're signed in with GitHub before attempting any purchases</span>
-                </div>
-                
-                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <Shield className="w-5 h-5 text-gray-500" />
-                  <span className="text-gray-700">Check that your GitHub account email matches your purchase email</span>
                 </div>
 
-                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <Bot className="w-5 h-5 text-gray-500" />
-                  <span className="text-gray-700">Use the AI helper in your dashboard for template-specific setup questions</span>
+                {/* Prompt Store */}
+                <div className="flex items-start gap-3">
+                  <ShoppingBag className="w-5 h-5 mt-0.5 text-blue-600 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Prompt Store tab — expert AI combos</h4>
+                    <p className="text-gray-600 text-sm">
+                      Browse and purchase <strong>JSON + Prompt combos</strong>. Each combo includes an importable n8n template
+                      <em> and</em> an expert system instruction that makes Claude behave like a domain specialist for that
+                      workflow type. The system prompt runs invisibly — you chat with the AI result, not the raw prompt.
+                      After purchase you also get a <strong>Starter Prompt</strong> (see below) you can paste directly into Claude.ai or n8n.
+                    </p>
+                  </div>
                 </div>
-                
-                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <Eye className="w-5 h-5 text-gray-500" />
-                  <span className="text-gray-700">Preview templates thoroughly before purchasing to ensure they meet your needs</span>
+
+                <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 text-sm text-teal-800">
+                  <span className="font-semibold flex items-center gap-1 mb-1"><Bot className="w-4 h-4" /> AI model</span>
+                  All Studio AI features are powered by <strong>Claude Sonnet</strong> (Anthropic), not Groq or GPT.
+                  Claude is the model responsible for generating, modifying, and explaining your n8n workflows.
                 </div>
-              </div>
-              
-              <div className="mt-6 text-center">
-                <Link to="/">
-                  <Button className="mr-4">
-                    <ArrowRight className="w-4 h-4 mr-2" />
-                    Start Browsing Templates
-                  </Button>
-                </Link>
-                <Link to="/auth">
-                  <Button variant="outline">
-                    <Github className="w-4 h-4 mr-2" />
-                    Sign In with GitHub
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
+              </CardContent>
+            </Card>
+
+            {/* Prompt Combos */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="w-6 h-6 text-gray-700" /> How JSON + Prompt Combos Work
+                </CardTitle>
+                <CardDescription>What you get, what stays private, and why</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <FileJson className="w-5 h-5 mt-0.5 text-teal-600 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Importable n8n JSON template</h4>
+                    <p className="text-gray-600 text-sm">
+                      Every combo includes a ready-to-use n8n workflow JSON you can download from your dashboard
+                      and import directly into n8n. It serves as the working base for the automation.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Lock className="w-5 h-5 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Expert system prompt (invisible)</h4>
+                    <p className="text-gray-600 text-sm">
+                      The expert prompt is a carefully engineered system instruction sent to Claude as the
+                      AI's role definition — it is <em>never displayed</em> to users and is never transferred to your device.
+                      It stays server-side so you interact with the AI result, not the raw prompt.
+                      This protects the product's IP while giving you a significantly smarter AI assistant for that domain.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Download className="w-5 h-5 mt-0.5 text-teal-600 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Starter Prompt (downloadable, yours to keep)</h4>
+                    <p className="text-gray-600 text-sm">
+                      This is separate from the hidden system prompt. After purchase, click <strong>"Download Starter Prompt"</strong> in the
+                      Studio to get a plain-text prompt you can paste directly into <strong>Claude.ai</strong>, <strong>ChatGPT</strong>, or
+                      <strong> n8n's built-in AI assistant</strong> to generate a working workflow — even outside DevHubConnect.
+                      Think of it as a bonus portable tool that complements the Studio experience.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm text-gray-300">
+                  <p className="font-semibold text-white mb-1">Summary: what you get per combo</p>
+                  <ul className="space-y-1 text-gray-400">
+                    <li>✅ Importable n8n workflow JSON (downloadable)</li>
+                    <li>✅ Expert AI assistant in Studio (system prompt active, never shown)</li>
+                    <li>✅ Starter Prompt text file (paste into any AI tool)</li>
+                    <li>🔒 System prompt source code — private, stays on our servers</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Purchasing */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="w-6 h-6 text-red-600" /> Purchasing Templates & Combos
+                </CardTitle>
+                <CardDescription>Secure checkout, same process for both product types</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <Github className="w-5 h-5 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Sign in first</h4>
+                    <p className="text-gray-600 text-sm">You must be signed in with GitHub to purchase. This links your payment to your account and ensures permanent access.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Shield className="w-5 h-5 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Stripe checkout</h4>
+                    <p className="text-gray-600 text-sm">
+                      Clicking <strong>"Get Combo"</strong> or <strong>"Purchase JSON Template"</strong> routes you through Stripe's
+                      secure checkout. Your payment info is never stored on DevHubConnect servers.
+                      Both product types use the same Stripe flow.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Instant access after payment</h4>
+                    <p className="text-gray-600 text-sm">
+                      Once Stripe confirms payment, your purchase appears in your dashboard immediately.
+                      For templates: download the JSON from your dashboard. For combos: activate the prompt
+                      in the Studio's Prompt Store tab.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Shield className="w-5 h-5 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Duplicate purchase prevention</h4>
+                    <p className="text-gray-600 text-sm">The system blocks accidental double-purchases. If you already own an item you'll see an error before reaching Stripe.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* GitHub Auth */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Github className="w-6 h-6" /> GitHub Authentication
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <Github className="w-5 h-5 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Sign In with GitHub</h4>
+                    <p className="text-gray-600 text-sm">Click "Continue with GitHub" to sign in. Your GitHub account creates your DevHubConnect profile automatically — no password needed.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <User className="w-5 h-5 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">All purchases tied to your GitHub account</h4>
+                    <p className="text-gray-600 text-sm">Templates, combos, and Studio access are permanently linked to your GitHub ID — not your email. Always sign in with the same GitHub account you purchased with.</p>
+                  </div>
+                </div>
+
+                <div className="bg-green-50 p-4 rounded-lg text-sm">
+                  <span className="font-semibold text-green-900 flex items-center gap-1 mb-1"><CheckCircle className="w-4 h-4" /> Permanent access</span>
+                  <p className="text-green-800">Once purchased, templates and combos stay in your dashboard forever. Access your GitHub account → access your purchases.</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Dashboard */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="w-6 h-6 text-indigo-600" /> Your Dashboard
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <Download className="w-5 h-5 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Download purchased templates</h4>
+                    <p className="text-gray-600 text-sm">Find all your purchased items in the dashboard. Click "Download JSON" to get the workflow file, then import it into n8n via <em>Settings → Import Workflow</em>.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Wand2 className="w-5 h-5 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Activate prompt combos in the Studio</h4>
+                    <p className="text-gray-600 text-sm">For purchased combos, go to <strong>Workflow Studio → Prompt Store</strong>, find your combo marked "Owned", and click <strong>"Use in Studio"</strong> to activate the expert prompt.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Download className="w-5 h-5 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-semibold">Download your Starter Prompt</h4>
+                    <p className="text-gray-600 text-sm">Once a prompt combo is active in the Studio, click <strong>"Download Starter Prompt"</strong> at the top of the chat. The .txt file is yours to keep and paste into any AI tool.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Importing into n8n */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileJson className="w-6 h-6 text-orange-500" /> Importing Workflows into n8n
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ol className="space-y-3 text-sm text-gray-700">
+                  <li className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs flex items-center justify-center font-bold">1</span>
+                    <span>Download the workflow JSON from your DevHubConnect dashboard or from the Studio's download button.</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs flex items-center justify-center font-bold">2</span>
+                    <span>Open n8n and go to <strong>Settings → Import workflow</strong> (or press <kbd className="bg-gray-100 px-1 rounded">Ctrl+I</kbd>).</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs flex items-center justify-center font-bold">3</span>
+                    <span>Select the downloaded .json file. The workflow loads with all nodes and connections pre-built.</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs flex items-center justify-center font-bold">4</span>
+                    <span>Add your own credentials (API keys, OAuth) where placeholder credentials appear — each node will show a yellow warning until credentials are set.</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs flex items-center justify-center font-bold">5</span>
+                    <span>Run a test execution to verify the workflow works end-to-end before activating it.</span>
+                  </li>
+                </ol>
+              </CardContent>
+            </Card>
+
+            {/* Troubleshooting */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertCircle className="w-6 h-6 text-yellow-600" /> Troubleshooting
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[
+                  {
+                    icon: <Lock className="w-4 h-4" />,
+                    title: "\"Get Combo\" or purchase button does nothing",
+                    text: "You must be signed in with GitHub. If you are signed in and still see an error message under the button, read it — it will tell you exactly what went wrong (not logged in, already owned, etc.).",
+                  },
+                  {
+                    icon: <Upload className="w-4 h-4" />,
+                    title: "\"Build on This\" tab not showing",
+                    text: "Upload a valid DevHubConnect JSON template in the Customize tab first. The tab only appears after a successful validation.",
+                  },
+                  {
+                    icon: <Bot className="w-4 h-4" />,
+                    title: "Claude isn't responding in the Studio",
+                    text: "There is a daily AI request limit (30 per day) to prevent abuse. If you've hit it, try again tomorrow. If you haven't reached the limit, try refreshing the page.",
+                  },
+                  {
+                    icon: <FileJson className="w-4 h-4" />,
+                    title: "Uploaded JSON fails validation",
+                    text: "Only templates purchased and downloaded from DevHubConnect.com are accepted. Third-party n8n workflows will not pass the DHC validator.",
+                  },
+                  {
+                    icon: <Github className="w-4 h-4" />,
+                    title: "Can't see purchased items in dashboard",
+                    text: "Make sure you're signed in with the same GitHub account you used to purchase. Purchases are tied to your GitHub ID, not your email.",
+                  },
+                ].map((item, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="mt-0.5 text-gray-400 flex-shrink-0">{item.icon}</span>
+                    <div>
+                      <h4 className="font-semibold text-sm">{item.title}</h4>
+                      <p className="text-gray-600 text-sm">{item.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* CTA */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Info className="w-6 h-6 text-blue-600" /> Need More Help?
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 text-sm mb-5">
+                  If you're still stuck, email us at{" "}
+                  <a href="mailto:devhub.partners@gmail.com" className="text-teal-600 underline">devhub.partners@gmail.com</a>.
+                  Include your GitHub username and a description of the issue.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Link to="/studio">
+                    <Button>
+                      <Wand2 className="w-4 h-4 mr-2" /> Open Workflow Studio
+                    </Button>
+                  </Link>
+                  <Link to="/auth">
+                    <Button variant="outline">
+                      <Github className="w-4 h-4 mr-2" /> Sign In with GitHub
+                    </Button>
+                  </Link>
+                  <Link to="/dashboard">
+                    <Button variant="outline">
+                      <ArrowRight className="w-4 h-4 mr-2" /> My Dashboard
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+
+          </div>
+        </section>
       </div>
     </HelmetProvider>
   );
