@@ -250,13 +250,22 @@ Space nodes 250px apart horizontally. Trigger at [0, 0], flow goes right. Branch
 // ✅ STUDIO: Shared Claude caller
 async function callClaude(systemPrompt, messages, maxTokens = 4096) {
   if (!anthropic) throw new Error('Claude API not configured. Please add ANTHROPIC_API_KEY.');
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: maxTokens,
-    system: systemPrompt,
-    messages: messages.map(m => ({ role: m.role, content: m.content })),
-  });
-  return response.content[0].text;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+    }, { signal: controller.signal });
+    return response.content[0].text;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('AI response timed out — try a shorter request or break it into smaller steps.');
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 
