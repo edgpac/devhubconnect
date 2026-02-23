@@ -28,13 +28,12 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
-          // React core — tiny, always needed, cached independently
-          if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react';
-          // Radix UI + Lucide icons — large, changes rarely
+          // Radix UI + Lucide — large UI lib, changes rarely, safe to split
           if (id.includes('@radix-ui/') || id.includes('lucide-react')) return 'ui';
-          // TanStack Query + Router
+          // TanStack Query + Router — data layer, changes independently
           if (id.includes('@tanstack/')) return 'query';
-          // Everything else
+          // React + all other deps stay together in vendor so React is
+          // guaranteed to initialise before any library that calls createContext
           return 'vendor';
         },
       },
