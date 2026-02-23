@@ -71,7 +71,7 @@ async function uploadToGitHub(filename, pngBuffer) {
     body: JSON.stringify({ message: `wf screenshot ${filename}`, content: base64, ...(sha ? { sha } : {}) }),
   });
   if (!res.ok) throw new Error(`GitHub: ${res.status} ${await res.text()}`);
-  return `https://raw.githubusercontent.com/${GH_REPO}/main/${filePath}`;
+  return `https://cdn.jsdelivr.net/gh/${GH_REPO}@main/${filePath}`;
 }
 
 // ─── n8n REST API (uses API key) ─────────────────────────────────────────────
