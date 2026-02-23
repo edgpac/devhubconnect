@@ -325,7 +325,7 @@ export const HomePage = () => {
              <p className="text-lg mb-4 text-gray-300 max-w-2xl mx-auto">
                Getting Claude to output valid, importable n8n JSON is harder than it looks.
                We solved it — with expert system prompts, 588 tested workflow templates, and
-               an AI Studio that understands n8n's schema so you don't have to.
+               a Claude AI Studio that understands n8n's schema so you don't have to.
              </p>
 
              {/* Feature pills */}
