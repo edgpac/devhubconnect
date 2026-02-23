@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Workflow Image Uploader — DevHubConnect</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f0f0;color:#1e293b;height:100vh;display:flex;flex-direction:column}
+    header{background:#fff;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;align-items:center;gap:12px}
+    header h1{font-size:15px;font-weight:700;color:#0f172a}
+    header h1 span{color:#FF6D5A}
+    .main{display:grid;grid-template-columns:300px 1fr;flex:1;overflow:hidden}
+
+    /* LEFT PANEL */
+    .panel{background:#fff;border-right:1px solid #e2e8f0;padding:18px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+    .field{display:flex;flex-direction:column;gap:5px}
+    label{font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.05em}
+    input[type=text],input[type=password]{width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none}
+    input:focus{border-color:#FF6D5A;box-shadow:0 0 0 3px rgba(255,109,90,.1)}
+    select{width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:7px;font-size:13px;background:#fff;outline:none}
+    hr{border:none;border-top:1px solid #f1f5f9}
+    .btn{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+    .btn-primary{background:#FF6D5A;color:#fff}
+    .btn-primary:hover{background:#e85d4a}
+    .btn-primary:disabled{opacity:.4;cursor:not-allowed}
+    .btn-green{background:#16a34a;color:#fff}
+    .btn-green:hover{background:#15803d}
+    .btn-outline{background:#fff;color:#0f172a;border:1px solid #e2e8f0}
+    .btn-outline:hover{background:#f8fafc}
+    .btn-copy{background:#0ea5e9;color:#fff}
+    .btn-copy:hover{background:#0284c7}
+    .info{font-size:11px;color:#64748b;line-height:1.6}
+    .result-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;display:none;flex-direction:column;gap:8px}
+    .result-url{font-size:11px;font-family:monospace;color:#166534;word-break:break-all;background:#dcfce7;padding:6px 8px;border-radius:5px}
+    .error-box{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;font-size:12px;color:#991b1b;display:none}
+    .status{font-size:12px;color:#64748b;text-align:center;min-height:18px}
+
+    /* RIGHT PANEL */
+    .workspace{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;background:#e8e8e8;overflow:auto}
+
+    /* DROP ZONE */
+    .dropzone{width:100%;max-width:900px;min-height:320px;border:2px dashed #cbd5e1;border-radius:12px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;transition:all .2s;position:relative}
+    .dropzone.drag-over{border-color:#FF6D5A;background:#fff7f5}
+    .dropzone:hover{border-color:#94a3b8}
+    .dropzone svg{opacity:.3;width:52px}
+    .dropzone p{font-size:14px;color:#94a3b8}
+    .dropzone small{font-size:11px;color:#b0bec5}
+    #fileInput{display:none}
+
+    /* PREVIEW */
+    .preview-wrap{width:100%;max-width:900px;display:none;flex-direction:column;gap:10px}
+    .canvas-outer{border-radius:8px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.15);align-self:center}
+    canvas{display:block}
+    .preview-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+    .preview-controls label{font-size:11px;font-weight:600;color:#64748b;white-space:nowrap}
+    .size-btn{padding:5px 12px;border-radius:6px;border:1px solid #e2e8f0;font-size:12px;font-weight:600;cursor:pointer;background:#fff;transition:all .15s}
+    .size-btn.active{background:#FF6D5A;color:#fff;border-color:#FF6D5A}
+    .fit-btn{padding:5px 10px;border-radius:6px;border:1px solid #e2e8f0;font-size:11px;cursor:pointer;background:#fff;transition:all .15s}
+    .fit-btn.active{background:#0ea5e9;color:#fff;border-color:#0ea5e9}
+    .canvas-info{font-size:11px;color:#94a3b8}
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF6D5A" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+  <h1>Workflow Image Uploader — <span>DevHubConnect</span></h1>
+</header>
+
+<div class="main">
+
+  <!-- LEFT PANEL -->
+  <div class="panel">
+
+    <div class="field">
+      <label>GitHub Token</label>
+      <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx"
+             title="Personal Access Token with 'repo' or 'contents' write scope"/>
+      <span class="info">Stored locally in browser. <a href="https://github.com/settings/tokens/new?scopes=repo&description=DHC+Image+Uploader" target="_blank" style="color:#FF6D5A">Create token ↗</a></span>
+    </div>
+
+    <div class="field">
+      <label>GitHub Repo</label>
+      <input type="text" id="ghRepo" value="edgpac/devhubconnect-images"/>
+    </div>
+
+    <hr/>
+
+    <div class="field">
+      <label>Image Filename</label>
+      <input type="text" id="imgFilename" placeholder="template-383.png"/>
+      <span class="info">Will be saved as <code style="font-size:10px;color:#FF6D5A">images/{filename}</code> in the repo.</span>
+    </div>
+
+    <hr/>
+
+    <div class="field">
+      <label>Export Size</label>
+      <select id="exportSize">
+        <option value="card">Card — 800×384 px (template cards)</option>
+        <option value="og">OG Image — 1200×630 px (social/SEO)</option>
+        <option value="original">Original (no resize)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Fit Mode</label>
+      <select id="fitMode">
+        <option value="cover">Cover (crop to fill)</option>
+        <option value="contain">Contain (letterbox)</option>
+        <option value="stretch">Stretch</option>
+      </select>
+    </div>
+
+    <hr/>
+
+    <button class="btn btn-green" id="uploadBtn" onclick="uploadToGitHub()" disabled>
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload to GitHub
+    </button>
+
+    <div class="status" id="statusMsg"></div>
+    <div class="error-box" id="errorBox"></div>
+
+    <div class="result-box" id="resultBox">
+      <div style="font-size:12px;font-weight:600;color:#166534">✅ Uploaded! Copy this URL:</div>
+      <div class="result-url" id="resultUrl"></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-copy" style="flex:1" onclick="copyUrl()">Copy URL</button>
+        <button class="btn btn-outline" style="flex:1" onclick="resetForNext()">↺ New Image</button>
+      </div>
+      <span class="info">Paste this into the Image URL field in the Edit template form.</span>
+    </div>
+
+    <hr/>
+    <div class="info">
+      <strong>Workflow:</strong><br/>
+      1. Take screenshot in n8n (Cmd+Shift+4)<br/>
+      2. Drag it here<br/>
+      3. Set filename (e.g. <code>template-383.png</code>)<br/>
+      4. Click Upload<br/>
+      5. Copy URL → paste in Edit form
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="workspace">
+
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" accept="image/*" onchange="loadFile(event)"/>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>
+      <p>Drop your n8n screenshot here</p>
+      <small>or click to choose a file — PNG, JPG, WEBP</small>
+    </div>
+
+    <div class="preview-wrap" id="previewWrap">
+      <div class="preview-controls">
+        <label>Size:</label>
+        <button class="size-btn active" onclick="setSize('card')"  id="sBtn-card">Card 800×384</button>
+        <button class="size-btn"        onclick="setSize('og')"    id="sBtn-og">OG 1200×630</button>
+        <button class="size-btn"        onclick="setSize('orig')"  id="sBtn-orig">Original</button>
+        &nbsp;
+        <label>Fit:</label>
+        <button class="fit-btn active"  onclick="setFit('cover')"   id="fBtn-cover">Cover</button>
+        <button class="fit-btn"         onclick="setFit('contain')" id="fBtn-contain">Contain</button>
+        <button class="fit-btn"         onclick="setFit('stretch')" id="fBtn-stretch">Stretch</button>
+        <span class="canvas-info" id="canvasInfo"></span>
+      </div>
+      <div class="canvas-outer" id="canvasOuter">
+        <canvas id="previewCanvas"></canvas>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let originalImage = null;
+let currentSize   = 'card';
+let currentFit    = 'cover';
+
+const SIZES = {
+  card: { w: 800,  h: 384  },
+  og:   { w: 1200, h: 630  },
+  orig: null,
+};
+
+// ── Restore saved token/repo ──────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  const tok  = localStorage.getItem('ghToken');
+  const repo = localStorage.getItem('ghRepo');
+  if (tok)  document.getElementById('ghToken').value = tok;
+  if (repo) document.getElementById('ghRepo').value  = repo;
+
+  document.getElementById('ghToken').addEventListener('change', e => localStorage.setItem('ghToken', e.target.value));
+  document.getElementById('ghRepo').addEventListener('change',  e => localStorage.setItem('ghRepo',  e.target.value));
+
+  // Keep selects in sync with buttons
+  document.getElementById('exportSize').addEventListener('change', e => setSize(e.target.value === 'original' ? 'orig' : e.target.value));
+  document.getElementById('fitMode').addEventListener('change',    e => setFit(e.target.value));
+});
+
+// ── Drag & drop ───────────────────────────────────────────────────────────────
+const dz = document.getElementById('dropzone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', ()  => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) processFile(file);
+});
+
+function loadFile(ev) {
+  const file = ev.target.files[0];
+  if (file) processFile(file);
+}
+
+function processFile(file) {
+  // Auto-fill filename from file name
+  const fn = document.getElementById('imgFilename');
+  if (!fn.value) fn.value = file.name.replace(/\s+/g, '-').toLowerCase();
+
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      originalImage = img;
+      renderPreview();
+      document.getElementById('dropzone').style.display   = 'none';
+      document.getElementById('previewWrap').style.display = 'flex';
+      document.getElementById('uploadBtn').disabled = false;
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Size / fit controls ───────────────────────────────────────────────────────
+function setSize(s) {
+  currentSize = s;
+  document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('sBtn-' + s);
+  if (btn) btn.classList.add('active');
+  // sync select
+  const map = { card:'card', og:'og', orig:'original' };
+  document.getElementById('exportSize').value = map[s] || 'card';
+  if (originalImage) renderPreview();
+}
+
+function setFit(f) {
+  currentFit = f;
+  document.querySelectorAll('.fit-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('fBtn-' + f).classList.add('active');
+  document.getElementById('fitMode').value = f;
+  if (originalImage) renderPreview();
+}
+
+// ── Render preview ────────────────────────────────────────────────────────────
+function renderPreview() {
+  const canvas = document.getElementById('previewCanvas');
+  const ctx    = canvas.getContext('2d');
+  const img    = originalImage;
+
+  let cw, ch;
+  if (currentSize === 'orig' || !SIZES[currentSize]) {
+    cw = img.naturalWidth;
+    ch = img.naturalHeight;
+  } else {
+    cw = SIZES[currentSize].w;
+    ch = SIZES[currentSize].h;
+  }
+
+  canvas.width  = cw;
+  canvas.height = ch;
+
+  // Display scale so it fits on screen
+  const maxDisp = 860;
+  const dScale  = Math.min(1, maxDisp / cw);
+  canvas.style.width  = Math.round(cw * dScale) + 'px';
+  canvas.style.height = Math.round(ch * dScale) + 'px';
+
+  ctx.fillStyle = '#f5f5f5';
+  ctx.fillRect(0, 0, cw, ch);
+
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+
+  if (currentFit === 'stretch') {
+    ctx.drawImage(img, 0, 0, cw, ch);
+  } else if (currentFit === 'contain') {
+    const s = Math.min(cw / iw, ch / ih);
+    const x = (cw - iw * s) / 2, y = (ch - ih * s) / 2;
+    ctx.drawImage(img, x, y, iw * s, ih * s);
+  } else { // cover
+    const s = Math.max(cw / iw, ch / ih);
+    const x = (cw - iw * s) / 2, y = (ch - ih * s) / 2;
+    ctx.drawImage(img, x, y, iw * s, ih * s);
+  }
+
+  document.getElementById('canvasInfo').textContent = `${cw}×${ch}px`;
+}
+
+// ── Upload to GitHub ──────────────────────────────────────────────────────────
+async function uploadToGitHub() {
+  const token    = document.getElementById('ghToken').value.trim();
+  const repo     = document.getElementById('ghRepo').value.trim();
+  const filename = document.getElementById('imgFilename').value.trim();
+  const errBox   = document.getElementById('errorBox');
+  const resultBox= document.getElementById('resultBox');
+  const statusEl = document.getElementById('statusMsg');
+  const btn      = document.getElementById('uploadBtn');
+
+  errBox.style.display    = 'none';
+  resultBox.style.display = 'none';
+
+  if (!token)    return showError('Enter your GitHub token first.');
+  if (!repo)     return showError('Enter the GitHub repo (e.g. edgpac/devhubconnect-images).');
+  if (!filename) return showError('Enter a filename (e.g. template-383.png).');
+  if (!originalImage) return showError('No image loaded.');
+
+  btn.disabled = true;
+  statusEl.textContent = 'Preparing image…';
+
+  // Get canvas data as base64
+  const canvas = document.getElementById('previewCanvas');
+  const dataUrl = canvas.toDataURL('image/png');
+  const base64  = dataUrl.replace(/^data:image\/png;base64,/, '');
+
+  const path    = `images/${filename.replace(/^images\//, '')}`;
+  const apiUrl  = `https://api.github.com/repos/${repo}/contents/${path}`;
+
+  statusEl.textContent = 'Checking for existing file…';
+
+  // Check if file already exists (need its SHA to update)
+  let sha = null;
+  try {
+    const check = await fetch(apiUrl, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
+    if (check.ok) {
+      const data = await check.json();
+      sha = data.sha;
+    }
+  } catch(_) {}
+
+  statusEl.textContent = sha ? 'Updating existing file…' : 'Uploading new file…';
+
+  const body = {
+    message: `Add template image: ${filename}`,
+    content: base64,
+    ...(sha ? { sha } : {})
+  };
+
+  try {
+    const res = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || `GitHub API error ${res.status}`);
+    }
+
+    const result = await res.json();
+    const rawUrl = result.content.download_url;
+
+    document.getElementById('resultUrl').textContent = rawUrl;
+    resultBox.style.display = 'flex';
+    statusEl.textContent    = '';
+  } catch (e) {
+    showError(e.message);
+    statusEl.textContent = '';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function showError(msg) {
+  const b = document.getElementById('errorBox');
+  b.textContent = '⚠ ' + msg;
+  b.style.display = 'block';
+}
+
+async function copyUrl() {
+  const url = document.getElementById('resultUrl').textContent;
+  await navigator.clipboard.writeText(url);
+  const btn = document.querySelector('.btn-copy');
+  btn.textContent = '✓ Copied!';
+  setTimeout(() => btn.textContent = 'Copy URL', 1800);
+}
+
+function resetForNext() {
+  document.getElementById('dropzone').style.display    = 'flex';
+  document.getElementById('previewWrap').style.display = 'none';
+  document.getElementById('uploadBtn').disabled = true;
+  document.getElementById('imgFilename').value  = '';
+  document.getElementById('fileInput').value    = '';
+  document.getElementById('errorBox').style.display = 'none';
+  // resultBox stays visible so the last URL is still copyable
+  originalImage = null;
+}
+</script>
+</body>
+</html>
