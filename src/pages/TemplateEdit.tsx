@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { ArrowLeft, Save, Trash2, Eye } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Eye, Download } from 'lucide-react';
 
 async function fetchTemplateForEdit(id: string | undefined) {
   if (!id) throw new Error("No template ID provided");
@@ -181,6 +181,18 @@ export const TemplateEdit = () => {
     }
   };
 
+  const handleDownloadJson = () => {
+    const blob = new Blob([workflowJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name.replace(/[^a-zA-Z0-9]/g, '_') || `template_${id}`}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   if (isLoading) return <div>Loading editor...</div>;
   if (error) return <div>Error loading template data.</div>;
 
@@ -193,15 +205,26 @@ export const TemplateEdit = () => {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Template
           </Button>
-          <Button 
-            variant="destructive" 
-            onClick={handleDelete} 
-            disabled={deleteMutation.isPending}
-            type="button"
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            {deleteMutation.isPending ? 'Deleting...' : 'Delete Template'}
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              type="button"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete Template'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDownloadJson}
+              type="button"
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download JSON
+            </Button>
+          </div>
         </div>
         <Card className="max-w-3xl mx-auto">
           <CardHeader>
