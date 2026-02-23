@@ -13,7 +13,7 @@ async function fetchTemplateForEdit(id: string | undefined) {
   if (!id) throw new Error("No template ID provided");
   
   // ✅ FIXED: Use session cookies instead of JWT tokens
-  const response = await fetch(`/api/templates/${id}`, {
+  const response = await fetch(`/api/admin/templates/${id}`, {
     method: 'GET',
     credentials: 'include',
     headers: {
