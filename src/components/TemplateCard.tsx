@@ -228,9 +228,12 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
      >
        <div className="relative overflow-hidden rounded-t-lg">
          {(template.imageUrl || template.image_url) ? (
-           <img 
-             src={template.imageUrl || template.image_url} 
+           <img
+             src={template.imageUrl || template.image_url}
              alt={template.name}
+             width={400}
+             height={192}
+             loading="lazy"
              className="w-full h-48 object-cover transition-transform duration-300 ease-in-out hover:scale-110"
              onError={(e) => {
                e.currentTarget.style.display = 'none';

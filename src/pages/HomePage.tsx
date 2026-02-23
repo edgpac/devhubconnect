@@ -305,6 +305,7 @@ export const HomePage = () => {
 
        <div className="min-h-screen bg-gray-50">
          <Navbar />
+        <main id="main-content">
 
          {/* Hero Section */}
          <section className="bg-gradient-to-br from-gray-950 via-teal-950 to-gray-900 text-white py-20">
@@ -395,7 +396,7 @@ export const HomePage = () => {
                <div className="flex items-center space-x-2">
                  <ChevronsUpDown className="h-4 w-4 text-gray-500" />
                  <Select value={sortOrder} onValueChange={handleSortChange}>
-                   <SelectTrigger className="w-[180px]">
+                   <SelectTrigger className="w-[180px]" aria-label="Sort templates by">
                      <SelectValue placeholder="Sort by" />
                    </SelectTrigger>
                    <SelectContent>
@@ -521,6 +522,7 @@ export const HomePage = () => {
              )}
            </div>
          </section>
+        </main>
          <StudioTeaser />
          {/* Footer */}
          <footer className="bg-white-800 text-white py-12 border-t-[6px] border-white">

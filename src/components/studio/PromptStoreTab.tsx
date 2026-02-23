@@ -7,10 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { API_ENDPOINTS, apiCall } from '@/config/api';
-import { loadStripe } from '@stripe/stripe-js';
 import StudioChatPane from './StudioChatPane';
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
 interface PromptProduct {
   id: number;

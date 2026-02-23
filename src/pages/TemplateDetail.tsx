@@ -9,9 +9,6 @@ import { toast } from "sonner";
 import { useAuth } from "@/components/context/AuthProvider";
 import { API_ENDPOINTS, apiCall } from '../config/api';
 import { getDeterministicRandom } from "@/lib/utils";
-import { loadStripe } from '@stripe/stripe-js';
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
 interface Template {
   id: number;
@@ -158,12 +155,6 @@ export const TemplateDetail = () => {
   const handlePurchase = async () => {
     setIsPurchasing(true);
     try {
-      const stripe = await stripePromise;
-      if (!stripe) {
-        toast.error("Payment system not available. Please try again later.");
-        return;
-      }
-
       const response = await apiCall(API_ENDPOINTS.CREATE_CHECKOUT, {
         method: 'POST',
         body: JSON.stringify({ templateId: template.id }),

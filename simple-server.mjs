@@ -2056,20 +2056,25 @@ app.get('/api/templates', async (req, res) => {
       SELECT * FROM templates 
       WHERE is_public = true 
       ORDER BY rating DESC, download_count DESC 
-      LIMIT 1000
+      LIMIT 700
     `);
     
     if (req.isDisconnected() || res.headersSent) return;
     
     const templatesWithDetails = result.rows.map(template => {
       const converted = convertFieldNames(template);
-      const workflowDetails = parseWorkflowDetails(template.workflow_json);
-      
+
+      // Truncate description for the listing — saves ~70% of payload size.
+      // Full description is available at /api/templates/:id.
+      const desc = converted.description;
+      const shortDescription = typeof desc === 'string' && desc.length > 300
+        ? desc.slice(0, 297) + '…'
+        : desc;
+
       return {
         ...converted,
-        workflowDetails,
-        steps: workflowDetails.steps,
-        integratedApps: workflowDetails.apps
+        description: shortDescription,
+        // workflowDetails / steps / integratedApps removed — not used by TemplateCard
       };
     });
     

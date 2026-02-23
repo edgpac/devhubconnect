@@ -27,13 +27,18 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes("node_modules")) {
-            return "vendor"; // Separate node_modules into a vendor chunk
-          }
+          if (!id.includes('node_modules')) return;
+          // React core — tiny, always needed, cached independently
+          if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react';
+          // Radix UI + Lucide icons — large, changes rarely
+          if (id.includes('@radix-ui/') || id.includes('lucide-react')) return 'ui';
+          // TanStack Query + Router
+          if (id.includes('@tanstack/')) return 'query';
+          // Everything else
+          return 'vendor';
         },
       },
     },
-    // --- FIX: Adjust chunk size warning limit to avoid noise for the 579 KB chunk ---
-    chunkSizeWarningLimit: 600, // Set to 600 KB to suppress warning for now
+    chunkSizeWarningLimit: 600,
   },
 });
