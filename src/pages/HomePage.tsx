@@ -314,31 +314,32 @@ export const HomePage = () => {
              {/* Badge */}
              <div className="inline-flex items-center gap-2 bg-teal-500 bg-opacity-20 border border-teal-400 border-opacity-30 text-teal-300 text-sm font-medium px-4 py-1.5 rounded-full mb-8">
                <Zap className="w-3.5 h-3.5" />
-               Powered by Claude AI — Workflow Studio is live
+               Claude AI — trained on n8n’s exact JSON schema
              </div>
 
              <h1 className="text-5xl font-bold mb-5 leading-tight">
-               The Smarter Way to Build<br />
-               <span className="text-teal-400">n8n Automations</span>
+               The Prompts That Make Claude<br />
+               <span className="text-teal-400">Build Real n8n Workflows</span>
              </h1>
 
              <p className="text-lg mb-4 text-gray-300 max-w-2xl mx-auto">
-               Browse 588+ ready-made templates — or use our AI-powered Workflow Studio to
-               customize, remix, and build n8n workflows from scratch, in plain English.
+               Getting Claude to output valid, importable n8n JSON is harder than it looks.
+               We solved it — with expert system prompts, 588 tested workflow templates, and
+               an AI Studio that understands n8n's schema so you don't have to.
              </p>
 
              {/* Feature pills */}
              <div className="flex flex-wrap items-center justify-center gap-2 mb-10 text-sm">
-               <span className="bg-white bg-opacity-10 text-gray-200 px-3 py-1 rounded-full">⚡ Customize any template with Claude AI</span>
-               <span className="bg-white bg-opacity-10 text-gray-200 px-3 py-1 rounded-full">🔨 Build new workflows from scratch</span>
-               <span className="bg-white bg-opacity-10 text-gray-200 px-3 py-1 rounded-full">🛍️ Expert prompt packs in the store</span>
+               <span className="bg-white bg-opacity-10 text-gray-200 px-3 py-1 rounded-full">🧠 Expert system prompts for n8n + Claude</span>
+               <span className="bg-white bg-opacity-10 text-gray-200 px-3 py-1 rounded-full">⚡ AI Studio that outputs clean, working JSON</span>
+               <span className="bg-white bg-opacity-10 text-gray-200 px-3 py-1 rounded-full">📦 588 tested templates — import in one click</span>
              </div>
 
              {/* CTA */}
              <div className="flex items-center justify-center mb-14">
                <a href="/studio">
                  <button className="px-8 py-3.5 bg-teal-500 text-white font-semibold rounded-lg hover:bg-teal-400 transition-colors flex items-center gap-2 text-base">
-                   <Zap className="w-4 h-4" /> Open Workflow Studio
+                   <Zap className="w-4 h-4" /> Try the Workflow Studio Free
                  </button>
                </a>
              </div>
