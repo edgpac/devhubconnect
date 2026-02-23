@@ -1992,8 +1992,11 @@ app.get('/api/templates/:id', async (req, res) => {
     }
     
     const template = result.rows[0];
-    // Never expose workflow_json on the public detail endpoint — it is the paid product.
-    // It is only served via /api/templates/:id/download after purchase verification.
+    // Admins get the full template including workflow_json (needed for the edit form).
+    // Public users never see workflow_json — it's the paid product.
+    if (req.user && (req.user.role === 'admin' || req.user.isAdmin)) {
+      return res.json({ success: true, template });
+    }
     const { workflow_json: _stripped, ...safeTemplate } = template;
     res.json({ success: true, template: safeTemplate });
   } catch (error) {
