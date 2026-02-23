@@ -129,7 +129,8 @@ async function main() {
 
   // ── Launch browser and log in ──
   const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext({ viewport: { width: 1600, height: 900 }, colorScheme: 'dark' });
+  // 800×450 = 2× card display size (400×192 → 400×225 aspect) — good retina quality, small file
+  const context = await browser.newContext({ viewport: { width: 800, height: 450 }, colorScheme: 'dark' });
   const page = await context.newPage();
 
   console.log('🔐 Logging into n8n...');
@@ -220,16 +221,15 @@ async function main() {
       await page.waitForTimeout(800);
 
       // Screenshot only the vue-flow canvas element (pure workflow, no chrome)
-      const screenshotPath = `/tmp/wf-${id}-${Date.now()}.png`;
+      const screenshotPath = `/tmp/wf-${id}-${Date.now()}.webp`;
       const canvasEl = await page.$('.vue-flow__pane') ||
                        await page.$('[data-test-id="canvas"]') ||
                        await page.$('#workflow-canvas') ||
                        await page.$('.vue-flow');
 
       if (canvasEl) {
-        await canvasEl.screenshot({ path: screenshotPath });
+        await canvasEl.screenshot({ path: screenshotPath, type: 'webp', quality: 85 });
       } else {
-        // Fallback: hide UI chrome via CSS and full-page screenshot
         await page.addStyleTag({ content: `
           header, aside, [class*="mainHeader"], [class*="bannerStack"],
           [data-test-id="main-header"], [data-test-id="banner-stack"] {
@@ -237,7 +237,7 @@ async function main() {
           }
           body { overflow: hidden; }
         ` });
-        await page.screenshot({ path: screenshotPath, fullPage: false });
+        await page.screenshot({ path: screenshotPath, type: 'webp', quality: 85, fullPage: false });
       }
 
       const pngBuffer = fs.readFileSync(screenshotPath);
@@ -246,7 +246,7 @@ async function main() {
       if (DRY_RUN) {
         console.log(`🔵 DRY_RUN ${label}`);
       } else {
-        const imageUrl = await uploadToGitHub(`wf-${id}.png`, pngBuffer);
+        const imageUrl = await uploadToGitHub(`wf-${id}.webp`, pngBuffer);
         await DB.query('UPDATE templates SET image_url = $1 WHERE id = $2', [imageUrl, id]);
         console.log(`✅ ${label}\n   → ${imageUrl}`);
       }

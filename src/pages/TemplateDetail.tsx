@@ -274,10 +274,14 @@ export const TemplateDetail = () => {
                   <h2 className="text-xl font-semibold mb-4">Visual Preview</h2>
                   <div className="p-4 border rounded-lg bg-gray-100 flex justify-center items-center">
                     {imageUrl ? (
-                      <img 
-                        src={imageUrl} 
-                        alt={`${template.name} preview`} 
+                      <img
+                        src={imageUrl}
+                        alt={`${template.name} preview`}
                         className="max-w-full h-auto rounded-md"
+                        width={800}
+                        height={450}
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <p className="text-gray-500">No visual preview available.</p>
