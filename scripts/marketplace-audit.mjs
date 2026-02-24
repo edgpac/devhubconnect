@@ -277,8 +277,33 @@ function scanForSecrets(str) {
   return found;
 }
 
-function scanForLocalhost(str) {
-  return LOCALHOST_PATTERNS.some(p => p.test(str));
+function scanForLocalhost(wfStr) {
+  // Extract only URL-like contexts to avoid false positives from:
+  //  - regex/validation code that checks FOR localhost to block it
+  //  - $env.VAR || 'http://localhost:...' fallback patterns (intentional for local dev services)
+  //  - code that does string.includes('localhost') for detection
+  for (const pat of LOCALHOST_PATTERNS) {
+    let match;
+    const re = new RegExp(pat.source, 'gi');
+    while ((match = re.exec(wfStr)) !== null) {
+      const idx = match.index;
+      const ctx = wfStr.slice(Math.max(0, idx - 100), idx + 60);
+      // Skip: appears inside a regex-like pattern (preceded by | or \\b or \\.)
+      if (/[|\\]/.test(ctx.slice(0, ctx.indexOf(match[0])))) continue;
+      // Skip: appears after || (env var fallback pattern)
+      if (/\|\|\s*['"`]?\s*http/.test(ctx)) continue;
+      // Skip: appears in .includes( or .test( context (code checking for localhost)
+      if (/[.\s](includes|test)\(/.test(ctx)) continue;
+      // Skip: appears in a block/deny-list array (security code that rejects localhost)
+      if (/block|deny|reject|disallow|banned|invalid|forbidden|blacklist/i.test(ctx)) continue;
+      // Skip: appears in CORS allowedOrigins (wildcard dev config, not a real endpoint)
+      if (/allowedOrigins/i.test(ctx)) continue;
+      // Skip: 0.0.0.0 used as null/default IP placeholder in data fields
+      if (match[0] === '0.0.0.0') continue;
+      return true;
+    }
+  }
+  return false;
 }
 
 function checkSuspiciousUrl(url) {
@@ -304,7 +329,9 @@ function auditWorkflow(wf) {
   );
   if (automatedTriggers.length > 1) {
     findings.push({
-      sev: 'HIGH', check: '1.1',
+      // MEDIUM: multiple entry points are a common intentional design (webhook + schedule,
+      // multi-channel bots, etc.). Flag for review but not as a hard FAIL.
+      sev: 'MEDIUM', check: '1.1',
       msg: `Multiple automated triggers (${automatedTriggers.map(n => n.name).join(', ')})`,
       nodes: automatedTriggers.map(n => n.id),
     });
@@ -434,7 +461,7 @@ function auditWorkflow(wf) {
   // Build a map of which nodes are connected to what via ai_* ports
   const connections = wf.connections || {};
   const connectedViaAiPort = new Set();
-  for (const [src, outputs] of Object.entries(connections)) {
+  for (const [, outputs] of Object.entries(connections)) {
     for (const [portType, branches] of Object.entries(outputs)) {
       if (!portType.startsWith('ai_')) continue;
       if (!Array.isArray(branches)) continue;
