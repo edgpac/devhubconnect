@@ -285,13 +285,13 @@ export const HomePage = () => {
          <title>n8n AI Workflow Builder & JSON Prompt Studio | DevHubConnect</title>
          <meta
            name="description"
-           content="Build and customize n8n workflows with Claude AI. Get 580+ ready-to-import JSON templates, or describe your automation in plain English and let AI generate the workflow for you."
+           content="Build and customize n8n workflows with Claude AI. Get 588+ ready-to-import JSON templates, or describe your automation in plain English and let AI generate the workflow for you."
          />
          <link rel="canonical" href="https://www.devhubconnect.com/" />
 
          {/* Open Graph Tags */}
          <meta property="og:title" content="n8n AI Workflow Builder & JSON Prompt Studio | DevHubConnect" />
-         <meta property="og:description" content="Build and customize n8n workflows with Claude AI. 580+ JSON templates plus an AI studio that generates workflows from plain English." />
+         <meta property="og:description" content="Build and customize n8n workflows with Claude AI. 588+ JSON templates plus an AI studio that generates workflows from plain English." />
          <meta property="og:url" content="https://www.devhubconnect.com/" />
          <meta property="og:type" content="website" />
          <meta property="og:image" content="https://www.devhubconnect.com/og-image.png" />
@@ -299,7 +299,7 @@ export const HomePage = () => {
          {/* Twitter Card Tags */}
          <meta name="twitter:card" content="summary_large_image" />
          <meta name="twitter:title" content="n8n AI Workflow Builder & JSON Prompt Studio | DevHubConnect" />
-         <meta name="twitter:description" content="Build and customize n8n workflows with Claude AI. 580+ JSON templates plus an AI studio that generates workflows from plain English." />
+         <meta name="twitter:description" content="Build and customize n8n workflows with Claude AI. 588+ JSON templates plus an AI studio that generates workflows from plain English." />
          <meta name="twitter:image" content="https://www.devhubconnect.com/og-image.png" />
        </Helmet>
 
