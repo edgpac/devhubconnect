@@ -88,7 +88,7 @@
 
     <div class="field">
       <label>Image Filename</label>
-      <input type="text" id="imgFilename" placeholder="template-383.png"/>
+      <input type="text" id="imgFilename" placeholder="template-383.jpg"/>
       <span class="info">Will be saved as <code style="font-size:10px;color:#FF6D5A">images/{filename}</code> in the repo.</span>
     </div>
 
@@ -137,7 +137,7 @@
       <strong>Workflow:</strong><br/>
       1. Take screenshot in n8n (Cmd+Shift+4)<br/>
       2. Drag it here<br/>
-      3. Set filename (e.g. <code>template-383.png</code>)<br/>
+      3. Set filename (e.g. <code>template-383.jpg</code>)<br/>
       4. Click Upload<br/>
       5. Copy URL → paste in Edit form
     </div>
@@ -225,7 +225,7 @@ function loadFile(ev) {
 function processFile(file) {
   // Auto-fill filename from file name
   const fn = document.getElementById('imgFilename');
-  if (!fn.value) fn.value = file.name.replace(/\s+/g, '-').toLowerCase();
+  if (!fn.value) fn.value = file.name.replace(/\s+/g, '-').toLowerCase().replace(/\.(png|webp)$/, '.jpg');
 
   const reader = new FileReader();
   reader.onload = ev => {
@@ -329,8 +329,8 @@ async function uploadToGitHub() {
 
   // Get canvas data as base64
   const canvas = document.getElementById('previewCanvas');
-  const dataUrl = canvas.toDataURL('image/png');
-  const base64  = dataUrl.replace(/^data:image\/png;base64,/, '');
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  const base64  = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
 
   const path    = `images/${filename.replace(/^images\//, '')}`;
   const apiUrl  = `https://api.github.com/repos/${repo}/contents/${path}`;
@@ -374,9 +374,9 @@ async function uploadToGitHub() {
     }
 
     const result = await res.json();
-    const rawUrl = result.content.download_url;
+    const cdnUrl = `https://cdn.jsdelivr.net/gh/${repo}@main/${path}`;
 
-    document.getElementById('resultUrl').textContent = rawUrl;
+    document.getElementById('resultUrl').textContent = cdnUrl;
     resultBox.style.display = 'flex';
     statusEl.textContent    = '';
   } catch (e) {
