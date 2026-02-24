@@ -323,12 +323,11 @@ export const HomePage = () => {
              </h1>
 
              <p className="text-lg mb-4 text-gray-300 max-w-2xl mx-auto">
-               Getting Claude to output valid, importable n8n JSON is harder than it looks.
-               We solved it — with expert system prompts, 588 MCP-audited workflow templates, and
-               a Claude AI Studio that understands n8n's schema so you don't have to.
+               Claude can write workflows. DevHubConnect makes them production-safe.<br />
+               Powered by expert prompt architecture and 588 MCP-audited templates, our Claude AI Studio understands n8n structurally — from an MCP perspective, not just syntactically.
              </p>
              <p className="text-sm mb-10 text-teal-400/60 max-w-xl mx-auto font-mono tracking-wide">
-               MCP-audited — every trigger connects, every credential is portable, every AI chain routes correctly.
+               No broken triggers. No orphan graphs. No fragile AI wiring.
              </p>
              {/* CTA */}
              <div className="flex items-center justify-center mb-14">
