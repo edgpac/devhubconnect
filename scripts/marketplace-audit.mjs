@@ -78,8 +78,6 @@ const TRIGGER_TYPES = new Set([
   'n8n-nodes-base.invoiceNinjaTrigger', 'n8n-nodes-base.webflowTrigger',
   '@n8n/n8n-nodes-langchain.chatTrigger',
   '@n8n/n8n-nodes-langchain.mcpTrigger',
-  // Respond node is often the end of a webhook workflow
-  'n8n-nodes-base.respondToWebhook',
 ]);
 
 const ANNOTATION_TYPES = new Set([
@@ -318,6 +316,7 @@ function checkSuspiciousUrl(url) {
 function auditWorkflow(wf) {
   const findings = [];
   const wfStr = JSON.stringify(wf);
+  const connections = wf.connections || {};
 
   // ── §1 Structural Integrity ────────────────────────────────────────────────
 
@@ -346,8 +345,8 @@ function auditWorkflow(wf) {
 
   // §1.2 Orphaned / unreachable nodes
   const { nodes, outgoing, incoming } = buildGraph(wf);
+  const allReachable = new Set();
   if (triggerNodes.length > 0) {
-    const allReachable = new Set();
     for (const t of triggerNodes) {
       for (const n of reachableFrom(t.name, outgoing)) allReachable.add(n);
       allReachable.add(t.name);
@@ -367,13 +366,56 @@ function auditWorkflow(wf) {
     }
   }
 
-  // §1.3 SplitInBatches infinite loop
+  // §1.3 SplitInBatches: loop detection + completion port check
   if (hasSplitInBatchesLoop(wf)) {
     findings.push({
       sev: 'MEDIUM', check: '1.3',
       msg: 'Potential infinite SplitInBatches loop detected',
       nodes: [],
     });
+  }
+  const sibNodes = (wf.nodes || []).filter(n => n.type === 'n8n-nodes-base.splitInBatches');
+  for (const sib of sibNodes) {
+    const mainConns = connections[sib.name]?.main || [];
+    const completionPort = mainConns[0];
+    if (!Array.isArray(completionPort) || completionPort.length === 0) {
+      findings.push({
+        sev: 'HIGH', check: '1.3',
+        msg: `SplitInBatches '${sib.name}' completion port (output 0) is unconnected — loop has no clean exit path`,
+        nodes: [sib.id],
+      });
+    }
+  }
+
+  // §1.4 Webhook responseMode=responseNode without reachable respondToWebhook
+  const responseNodeWebhooks = nodes.filter(n =>
+    (n.type === 'n8n-nodes-base.webhook' || n.type === 'n8n-nodes-base.webhookTrigger') &&
+    n.parameters?.responseMode === 'responseNode'
+  );
+  if (responseNodeWebhooks.length > 0) {
+    const hasReachableRespond = nodes.some(n =>
+      n.type === 'n8n-nodes-base.respondToWebhook' && allReachable.has(n.name)
+    );
+    if (!hasReachableRespond) {
+      findings.push({
+        sev: 'CRITICAL', check: '1.4',
+        msg: 'Webhook responseMode=responseNode but no reachable respondToWebhook on success path — webhook will never resolve',
+        nodes: responseNodeWebhooks.map(n => n.id),
+      });
+    }
+  }
+
+  // §1.5 Expression references to non-existent nodes
+  const nodeNames = new Set(nodes.map(n => n.name));
+  const exprNodeRefs = [...new Set([...wfStr.matchAll(/\$\('([^']+)'\)/g)].map(m => m[1]))];
+  for (const ref of exprNodeRefs) {
+    if (!nodeNames.has(ref)) {
+      findings.push({
+        sev: 'CRITICAL', check: '1.5',
+        msg: `Expression references non-existent node: $('${ref}') — will fail at runtime`,
+        nodes: [],
+      });
+    }
   }
 
   // ── §2 Marketplace Safety ──────────────────────────────────────────────────
@@ -426,6 +468,20 @@ function auditWorkflow(wf) {
     }
   }
 
+  // §2.3 Hardcoded tenant/instance-specific IDs (Outlook, Exchange, etc.)
+  // AQMk... is the Microsoft Graph folder ID prefix; 80+ char base64 blobs are tenant-specific
+  const TENANT_ID_RE = /AQMk[A-Za-z0-9+/=_-]{20,}|[A-Za-z0-9+/=]{80,}/;
+  for (const node of (wf.nodes || [])) {
+    const pStr = JSON.stringify(node.parameters || {});
+    if (TENANT_ID_RE.test(pStr)) {
+      findings.push({
+        sev: 'HIGH', check: '2.3',
+        msg: `Node '${node.name}' contains hardcoded tenant/instance ID — not portable across accounts`,
+        nodes: [node.id],
+      });
+    }
+  }
+
   // ── §3 Node Configuration ──────────────────────────────────────────────────
 
   // §3.1 HTTP nodes missing timeout
@@ -459,7 +515,6 @@ function auditWorkflow(wf) {
 
   // §4.1 Embeddings nodes connected via ai_* port check
   // Build a map of which nodes are connected to what via ai_* ports
-  const connections = wf.connections || {};
   const connectedViaAiPort = new Set();
   for (const [, outputs] of Object.entries(connections)) {
     for (const [portType, branches] of Object.entries(outputs)) {
