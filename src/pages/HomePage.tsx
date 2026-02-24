@@ -322,10 +322,13 @@ export const HomePage = () => {
                <span className="text-teal-400">Build Real n8n Workflows</span>
              </h1>
 
-             <p className="text-lg mb-10 text-gray-300 max-w-2xl mx-auto">
+             <p className="text-lg mb-4 text-gray-300 max-w-2xl mx-auto">
                Getting Claude to output valid, importable n8n JSON is harder than it looks.
-               We solved it — with expert system prompts, 588 tested workflow templates, and
+               We solved it — with expert system prompts, 588 MCP-audited workflow templates, and
                a Claude AI Studio that understands n8n's schema so you don't have to.
+             </p>
+             <p className="text-sm mb-10 text-teal-400/60 max-w-xl mx-auto font-mono tracking-wide">
+               MCP-audited — every trigger connects, every credential is portable, every AI chain routes correctly.
              </p>
              {/* CTA */}
              <div className="flex items-center justify-center mb-14">
