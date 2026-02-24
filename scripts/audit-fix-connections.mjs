@@ -1,14 +1,17 @@
 /**
  * audit-fix-connections.mjs
- * Audits all 588 workflow JSONs in the DB for broken node connections
- * (where connection source/target names don't match any node.name in the workflow)
- * and automatically fixes them using fuzzy name matching.
+ * Audits all workflow JSONs in the DB for structural issues and auto-fixes:
+ *   Pass 1: broken node name references (fuzzy match)
+ *   Pass 2: invalid connection types (e.g. "error" port → main[1])
+ *   Pass 3: missing node IDs (generate UUID v4)
+ *   Pass 4: isolated nodes (zero connections) — reported only, not auto-removed
  *
  * Run: node scripts/audit-fix-connections.mjs
  * Run dry-run: node scripts/audit-fix-connections.mjs --dry-run
  */
 
 import pg from 'pg';
+import { randomUUID } from 'crypto';
 const { Pool } = pg;
 
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -230,6 +233,111 @@ function fixInvalidConnectionTypes(wf) {
   return { changed: true, newWf, fixed };
 }
 
+// ---------- fix missing node IDs ----------
+
+/**
+ * Pass 3: Any node without an `id` field gets a fresh UUID v4.
+ * n8n requires every node to have a unique id for internal references.
+ */
+function fixMissingIds(wf) {
+  const nodes = wf.nodes || [];
+  const fixed = [];
+
+  const newNodes = nodes.map((node) => {
+    if (node.id) return node;
+    const newId = randomUUID();
+    fixed.push({ name: node.name, type: node.type, newId });
+    return { ...node, id: newId };
+  });
+
+  if (fixed.length === 0) return { changed: false, fixed };
+
+  const newWf = { ...wf, nodes: newNodes };
+  return { changed: true, newWf, fixed };
+}
+
+// ---------- detect isolated nodes (zero connections) ----------
+
+/**
+ * Pass 4: Detect nodes that have no connections at all (neither as source
+ * nor as target). LangChain sub-nodes that attach via ai_* ports are excluded.
+ * Returns a list of { name, type } — no auto-fix applied.
+ */
+function detectIsolatedNodes(wf) {
+  const nodes = wf.nodes || [];
+  const connections = wf.connections || {};
+
+  // Build set of names that appear in any connection (source or target)
+  const connected = new Set();
+  for (const [srcName, outputs] of Object.entries(connections)) {
+    connected.add(srcName);
+    for (const branches of Object.values(outputs)) {
+      if (!Array.isArray(branches)) continue;
+      for (const branch of branches) {
+        if (!Array.isArray(branch)) continue;
+        for (const conn of branch) {
+          if (conn?.node) connected.add(conn.node);
+        }
+      }
+    }
+  }
+
+  // LangChain sub-node types that legitimately have no main connections
+  const langchainSubTypes = new Set([
+    'n8n-nodes-langchain.embeddingsOpenAi',
+    'n8n-nodes-langchain.embeddingsAzureOpenAi',
+    'n8n-nodes-langchain.embeddingsCohere',
+    'n8n-nodes-langchain.embeddingsHuggingFaceInferenceApi',
+    'n8n-nodes-langchain.embeddingsOllama',
+    'n8n-nodes-langchain.memoryBufferWindow',
+    'n8n-nodes-langchain.memoryMotorhead',
+    'n8n-nodes-langchain.memoryPostgresChat',
+    'n8n-nodes-langchain.memoryRedisChat',
+    'n8n-nodes-langchain.memoryXata',
+    'n8n-nodes-langchain.lmChatOpenAi',
+    'n8n-nodes-langchain.lmChatAzureOpenAi',
+    'n8n-nodes-langchain.lmChatAnthropic',
+    'n8n-nodes-langchain.lmChatMistralCloud',
+    'n8n-nodes-langchain.lmChatOllama',
+    'n8n-nodes-langchain.lmChatGroq',
+    'n8n-nodes-langchain.lmOpenAi',
+    'n8n-nodes-langchain.lmCohere',
+    'n8n-nodes-langchain.toolCalculator',
+    'n8n-nodes-langchain.toolCode',
+    'n8n-nodes-langchain.toolHttpRequest',
+    'n8n-nodes-langchain.toolSerpApi',
+    'n8n-nodes-langchain.toolWikipedia',
+    'n8n-nodes-langchain.toolWolframAlpha',
+    'n8n-nodes-langchain.toolWorkflow',
+    'n8n-nodes-langchain.outputParserStructured',
+    'n8n-nodes-langchain.outputParserAutofixing',
+    'n8n-nodes-langchain.textSplitterCharacterTextSplitter',
+    'n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter',
+    'n8n-nodes-langchain.textSplitterTokenSplitter',
+    'n8n-nodes-langchain.retrieverVectorStore',
+    'n8n-nodes-langchain.documentDefaultDataLoader',
+    'n8n-nodes-langchain.documentBinaryInputLoader',
+    'n8n-nodes-langchain.vectorStoreInMemory',
+    'n8n-nodes-langchain.vectorStorePinecone',
+    'n8n-nodes-langchain.vectorStoreQdrant',
+    'n8n-nodes-langchain.vectorStoreSupabase',
+  ]);
+
+  // stickyNote nodes are documentation annotations — always standalone, never connected
+  const ANNOTATION_TYPES = new Set(['n8n-nodes-base.stickyNote']);
+
+  // Match both "n8n-nodes-langchain.*" and "@n8n/n8n-nodes-langchain.*" prefixes
+  const isLangchainSub = (type) =>
+    langchainSubTypes.has(type) ||
+    langchainSubTypes.has(type.replace(/^@n8n\//, ''));
+
+  const isolated = nodes
+    .filter((n) => !connected.has(n.name) && !isLangchainSub(n.type) && !ANNOTATION_TYPES.has(n.type))
+    .map((n) => ({ name: n.name, type: n.type }));
+
+  return isolated;
+}
+
 // ---------- main ----------
 
 async function main() {
@@ -245,8 +353,11 @@ async function main() {
     let totalFixed = 0;
     let totalUnfixable = 0;
     let totalErrorPortFixed = 0;
+    let totalMissingIdFixed = 0;
+    let totalIsolated = 0;
     let workflowsUpdated = 0;
     const unfixableReport = [];
+    const isolatedReport = [];
 
     for (const row of rows) {
       const { id, name, workflow_json: wf } = row;
@@ -256,15 +367,26 @@ async function main() {
       const nameResult = auditAndFix(wf);
       // Pass 2: fix invalid connection types (e.g. "error" port → main[1])
       const errorPortResult = fixInvalidConnectionTypes(nameResult.newWf ?? wf);
+      // Pass 3: fix missing node IDs
+      const missingIdResult = fixMissingIds(errorPortResult.newWf ?? nameResult.newWf ?? wf);
+      // Pass 4: detect isolated nodes (report only)
+      const isolated = detectIsolatedNodes(missingIdResult.newWf ?? errorPortResult.newWf ?? nameResult.newWf ?? wf);
 
-      const anyChange = nameResult.changed || errorPortResult.changed;
-      const issueCount = (nameResult.fixed?.length ?? 0) + (nameResult.unfixable?.length ?? 0) + (errorPortResult.fixed?.length ?? 0);
+      const anyChange = nameResult.changed || errorPortResult.changed || missingIdResult.changed;
+      const issueCount =
+        (nameResult.fixed?.length ?? 0) +
+        (nameResult.unfixable?.length ?? 0) +
+        (errorPortResult.fixed?.length ?? 0) +
+        (missingIdResult.fixed?.length ?? 0) +
+        isolated.length;
       if (issueCount === 0) continue;
 
       totalIssues += issueCount;
       totalFixed += nameResult.fixed?.length ?? 0;
       totalUnfixable += nameResult.unfixable?.length ?? 0;
       totalErrorPortFixed += errorPortResult.fixed?.length ?? 0;
+      totalMissingIdFixed += missingIdResult.fixed?.length ?? 0;
+      totalIsolated += isolated.length;
 
       console.log(`[${id}] ${name}`);
       for (const f of nameResult.fixed ?? []) {
@@ -277,9 +399,16 @@ async function main() {
       for (const f of errorPortResult.fixed ?? []) {
         console.log(`  FIXED (error port): node '${f.node}' — '${f.movedType}' → main[1] + onError`);
       }
+      for (const f of missingIdResult.fixed ?? []) {
+        console.log(`  FIXED (missing id): node '${f.name}' (${f.type}) → id: ${f.newId}`);
+      }
+      for (const iso of isolated) {
+        console.log(`  ISOLATED NODE     : '${iso.name}' (${iso.type}) — no connections`);
+        isolatedReport.push({ id, name, node: iso.name, type: iso.type });
+      }
 
       if (anyChange && !DRY_RUN) {
-        const finalWf = errorPortResult.newWf ?? nameResult.newWf ?? wf;
+        const finalWf = missingIdResult.newWf ?? errorPortResult.newWf ?? nameResult.newWf ?? wf;
         await client.query('UPDATE templates SET workflow_json = $1 WHERE id = $2', [
           JSON.stringify(finalWf),
           id,
@@ -292,6 +421,8 @@ async function main() {
     console.log(`Total issues found                  : ${totalIssues}`);
     console.log(`Auto-fixed broken names             : ${totalFixed}`);
     console.log(`Auto-fixed invalid error ports      : ${totalErrorPortFixed}`);
+    console.log(`Auto-fixed missing node IDs         : ${totalMissingIdFixed}`);
+    console.log(`Isolated nodes (no connections)     : ${totalIsolated} (reported, not removed)`);
     console.log(`Unfixable (no close match)          : ${totalUnfixable}`);
     console.log(`Workflows updated in DB             : ${DRY_RUN ? '(dry-run, 0)' : workflowsUpdated}`);
 
@@ -299,6 +430,13 @@ async function main() {
       console.log('\n--- Unfixable connections ---');
       for (const u of unfixableReport) {
         console.log(`  [${u.id}] ${u.name}: '${u.unfixable}'`);
+      }
+    }
+
+    if (isolatedReport.length > 0) {
+      console.log('\n--- Isolated nodes (manual review recommended) ---');
+      for (const iso of isolatedReport) {
+        console.log(`  [${iso.id}] ${iso.name}: node '${iso.node}' (${iso.type})`);
       }
     }
 
