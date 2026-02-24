@@ -90,12 +90,23 @@ async function n8nRequest(path, options = {}) {
   return { ok: res.ok, status: res.status, data };
 }
 
+function sanitizeNode(node) {
+  // n8n API v1 only accepts these node fields — strip everything else
+  const allowed = ['id','name','type','typeVersion','position','parameters',
+    'credentials','disabled','notes','notesInFlow','executeOnce',
+    'alwaysOutputData','retryOnFail','maxTries','waitBetweenTries',
+    'onError','continueOnFail'];
+  return Object.fromEntries(
+    Object.entries(node).filter(([k]) => allowed.includes(k))
+  );
+}
+
 async function createWorkflow(workflowJson) {
   const res = await n8nRequest('/api/v1/workflows', {
     method: 'POST',
     body: JSON.stringify({
       name: workflowJson.name || 'DHC Screenshot',
-      nodes: workflowJson.nodes || [],
+      nodes: (workflowJson.nodes || []).map(sanitizeNode),
       connections: workflowJson.connections || {},
       settings: { executionOrder: 'v1' },
       staticData: null,
@@ -216,19 +227,35 @@ async function main() {
         .catch(() => {});
       await page.waitForTimeout(1500);
 
-      // Fit all nodes in view
+      // Click "Tidy Up" (sweep icon) to auto-arrange nodes so they aren't bunched up
+      try {
+        const tidyBtn = page.locator('[data-test-id="tidy-up-button"], [title="Tidy Up"], button[aria-label*="Tidy" i]');
+        if (await tidyBtn.count() > 0) {
+          await tidyBtn.first().click();
+          await page.waitForTimeout(600);
+          // Click twice — first click selects all, second arranges
+          await tidyBtn.first().click();
+          await page.waitForTimeout(800);
+          // Click the canvas center to deselect/blur the button (removes red active state)
+          await page.mouse.click(400, 225);
+          await page.waitForTimeout(400);
+        }
+      } catch (_) {} // non-fatal — screenshot still happens
+
+      // Fit all nodes in view after arrangement
       await page.keyboard.press('Shift+1');
       await page.waitForTimeout(800);
 
       // Screenshot only the vue-flow canvas element (pure workflow, no chrome)
-      const screenshotPath = `/tmp/wf-${id}-${Date.now()}.webp`;
+      const screenshotPath = `/tmp/wf-${id}-${Date.now()}.jpg`;
       const canvasEl = await page.$('.vue-flow__pane') ||
                        await page.$('[data-test-id="canvas"]') ||
                        await page.$('#workflow-canvas') ||
                        await page.$('.vue-flow');
 
       if (canvasEl) {
-        await canvasEl.screenshot({ path: screenshotPath, type: 'webp', quality: 85 });
+        const box = await canvasEl.boundingBox();
+        await page.screenshot({ path: screenshotPath, type: 'jpeg', quality: 85, clip: box || undefined, fullPage: false });
       } else {
         await page.addStyleTag({ content: `
           header, aside, [class*="mainHeader"], [class*="bannerStack"],
@@ -237,7 +264,7 @@ async function main() {
           }
           body { overflow: hidden; }
         ` });
-        await page.screenshot({ path: screenshotPath, type: 'webp', quality: 85, fullPage: false });
+        await page.screenshot({ path: screenshotPath, type: 'jpeg', quality: 85, fullPage: false });
       }
 
       const pngBuffer = fs.readFileSync(screenshotPath);
@@ -246,7 +273,7 @@ async function main() {
       if (DRY_RUN) {
         console.log(`🔵 DRY_RUN ${label}`);
       } else {
-        const imageUrl = await uploadToGitHub(`wf-${id}.webp`, pngBuffer);
+        const imageUrl = await uploadToGitHub(`wf-${id}.jpg`, pngBuffer);
         await DB.query('UPDATE templates SET image_url = $1 WHERE id = $2', [imageUrl, id]);
         console.log(`✅ ${label}\n   → ${imageUrl}`);
       }
