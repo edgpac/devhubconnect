@@ -140,8 +140,8 @@ async function main() {
 
   // ── Launch browser and log in ──
   const browser = await chromium.launch({ headless: false });
-  // 800×450 = 2× card display size (400×192 → 400×225 aspect) — good retina quality, small file
-  const context = await browser.newContext({ viewport: { width: 800, height: 450 }, colorScheme: 'dark' });
+  // 1280×720 viewport + deviceScaleFactor 2 = 2560×1440 output (2K) — nodes are readable
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, colorScheme: 'dark' });
   const page = await context.newPage();
 
   console.log('🔐 Logging into n8n...');
@@ -237,7 +237,7 @@ async function main() {
           await tidyBtn.first().click();
           await page.waitForTimeout(800);
           // Click the canvas center to deselect/blur the button (removes red active state)
-          await page.mouse.click(400, 225);
+          await page.mouse.click(640, 360);
           await page.waitForTimeout(400);
         }
       } catch (_) {} // non-fatal — screenshot still happens
