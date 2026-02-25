@@ -322,9 +322,10 @@ export const HomePage = () => {
                <span className="text-teal-400">Build Real n8n Workflows</span>
              </h1>
 
-             <p className="text-lg mb-4 text-gray-300 max-w-2xl mx-auto">
-               Claude writes the workflows. DevHubConnect makes them production safe.<br />
-               Powered by expert prompt architecture and {templates.length > 0 ? `${templates.length}+` : ''} MCP audited templates. Claude<br />AI Studio understands n8n syntactically.
+             <p className="text-lg mb-4 text-gray-300 max-w-2xl mx-auto leading-relaxed">
+               Claude writes the workflows.<br />
+               DevHubConnect makes them production safe.<br />
+               Powered by expert prompt architecture and {templates.length > 0 ? `${templates.length}+` : ''} MCP-audited templates, Claude AI Studio understands n8n structurally.
              </p>
              <p className="text-sm mb-10 text-teal-400/60 max-w-xl mx-auto font-mono tracking-wide">
                No broken triggers. No orphan graphs. No fragile AI wiring.
