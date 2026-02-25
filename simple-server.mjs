@@ -2848,9 +2848,27 @@ app.post('/api/ask-ai', authenticateJWT, async (req, res) => {
     return res.status(400).json({ error: 'Prompt is required in the request body.' });
   }
 
+  // ── Security guards ───────────────────────────────────────────────────────
+  if (typeof prompt !== 'string' || prompt.length > 2000) {
+    return res.status(400).json({ error: 'Prompt must be a string under 2000 characters.' });
+  }
+  const injectionCheck = scanForInjection(prompt);
+  if (!injectionCheck.safe) {
+    console.warn('⚠️  Injection attempt on /api/ask-ai by:', req.user.email, '—', injectionCheck.reason);
+    return res.status(400).json({ error: 'Invalid input detected.', reason: injectionCheck.reason });
+  }
+  if (!checkAIRateLimit(req.user.id)) {
+    return res.status(429).json({ error: 'Too many requests', message: 'Please wait before asking another question.', retryAfter: 60 });
+  }
+  const withinDailyCap = await checkAndIncrementDailyCap(req.user.id);
+  if (!withinDailyCap) {
+    return res.status(429).json({ error: 'Daily limit reached', message: 'You have reached your daily AI request limit. Please try again tomorrow.' });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   try {
     if (req.isDisconnected()) return;
-    
+
     console.log('🧠 AI chat request by:', req.user.email || req.user.username);
     
     if (templateContext && templateContext.hasValidTemplate) {
@@ -2905,9 +2923,29 @@ app.post('/api/generate-setup-instructions', authenticateJWT, async (req, res) =
     return res.status(400).json({ error: 'Workflow and templateId are required.' });
   }
 
+  // ── Security guards ───────────────────────────────────────────────────────
+  if (!checkAIRateLimit(req.user.id)) {
+    return res.status(429).json({ error: 'Too many requests', message: 'Please wait before generating instructions.', retryAfter: 60 });
+  }
+  const withinDailyCap2 = await checkAndIncrementDailyCap(req.user.id);
+  if (!withinDailyCap2) {
+    return res.status(429).json({ error: 'Daily limit reached', message: 'You have reached your daily AI request limit. Please try again tomorrow.' });
+  }
+  // Scan workflow node names/descriptions for injected instructions embedded in template content
+  const nodeTextSample = (workflow.nodes || [])
+    .flatMap(n => [n.name, n.parameters?.description, n.notes].filter(Boolean))
+    .join(' ')
+    .slice(0, 4000);
+  const workflowScan = scanForInjection(nodeTextSample);
+  if (!workflowScan.safe) {
+    console.warn('⚠️  Injection content detected in workflow for /api/generate-setup-instructions, user:', req.user.email);
+    return res.status(400).json({ error: 'Workflow contains invalid content.', reason: workflowScan.reason });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   try {
     if (req.isDisconnected()) return;
-    
+
     console.log('📋 Generating setup instructions for:', templateId);
     
     const nodeTypes = workflow.nodes?.map((node) => node.type).filter(Boolean) || [];
