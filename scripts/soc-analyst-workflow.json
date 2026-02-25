@@ -1,0 +1,204 @@
+{
+  "name": "DevHubConnect - Claude AI SOC Analyst: Automated Threat Detection & Incident Response",
+  "nodes": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "SOC Alert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "path": "soc-alert",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Normalize Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "// Normalize incoming alert to a standard format.\n// Supports: Splunk, Elastic/Kibana, AWS GuardDuty, Wazuh, Suricata, generic.\nconst body = $input.first().json;\n\nconst alert = {\n  alert_id:     body.id || body.alert_id || body.event_id || `alert-${Date.now()}`,\n  alert_type:   body.type || body.alert_type || body.rule?.name || body.name || 'Unknown Alert',\n  severity_raw: String(body.severity || body.priority || body.level || body.risk_score || 'medium').toLowerCase(),\n  source_ip:    body.src_ip || body.source?.ip || body.srcIp || body.remote_ip || '',\n  dest_ip:      body.dest_ip || body.destination?.ip || body.destIp || body.local_ip || '',\n  hostname:     body.hostname || body.host?.name || body.agent?.name || body.computer || 'unknown-host',\n  username:     body.user || body.username || body.user?.name || '',\n  process_name: body.process || body.process_name || body.Image || '',\n  description:  body.description || body.message || body.summary || body.rule?.description || '',\n  raw_event:    JSON.stringify(body).slice(0, 2000),\n  timestamp:    body.timestamp || body['@timestamp'] || new Date().toISOString(),\n  source_system: body.source_system || body.manager?.name || 'Unknown SIEM',\n};\n\nreturn [{ json: alert }];"
+      }
+    },
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "VirusTotal IP Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.virustotal.com/api/v3/ip_addresses/{{ $json.source_ip }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-apikey", "value": "={{ $vars.VIRUSTOTAL_API_KEY }}" }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "Claude AI Threat Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $vars.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'claude-sonnet-4-6',\n  max_tokens: 1024,\n  system: 'You are an elite SOC analyst with deep expertise in threat detection, incident response, and the MITRE ATT&CK framework. Analyze security alerts and produce structured, actionable assessments. Always respond with valid JSON only — no markdown, no explanation outside the JSON object.',\n  messages: [{\n    role: 'user',\n    content: 'Analyze this security alert. Respond with a single JSON object containing exactly: severity (CRITICAL|HIGH|MEDIUM|LOW), confidence_score (0-100 integer), threat_type (short label), mitre_technique (e.g. T1059), mitre_tactic (e.g. Execution), threat_summary (2-3 sentences), immediate_actions (array of 3-5 specific steps), false_positive_likelihood (LOW|MEDIUM|HIGH), recommended_escalation (boolean).\\n\\nAlert:\\n' + JSON.stringify({\n      alert_type: $('Normalize Alert').first().json.alert_type,\n      severity_raw: $('Normalize Alert').first().json.severity_raw,\n      source_ip: $('Normalize Alert').first().json.source_ip,\n      dest_ip: $('Normalize Alert').first().json.dest_ip,\n      hostname: $('Normalize Alert').first().json.hostname,\n      username: $('Normalize Alert').first().json.username,\n      process_name: $('Normalize Alert').first().json.process_name,\n      description: $('Normalize Alert').first().json.description,\n      source_system: $('Normalize Alert').first().json.source_system,\n      virustotal_malicious: $json.data?.attributes?.last_analysis_stats?.malicious ?? 0,\n      virustotal_reputation: $json.data?.attributes?.reputation ?? 0,\n      virustotal_country: $json.data?.attributes?.country ?? 'Unknown'\n    }, null, 2)\n  }]\n}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "parameters": {
+        "jsCode": "const claudeRaw = $input.first().json;\nconst alert = $('Normalize Alert').first().json;\n\nconst rawText = claudeRaw.content?.[0]?.text || '{}';\n\nlet analysis;\ntry {\n  const jsonMatch = rawText.match(/```json\\n?([\\s\\S]*?)\\n?```/) || rawText.match(/(\\{[\\s\\S]*\\})/);\n  analysis = JSON.parse(jsonMatch ? jsonMatch[1].trim() : rawText.trim());\n} catch (e) {\n  analysis = {\n    severity: 'MEDIUM',\n    confidence_score: 50,\n    threat_type: 'Undetermined',\n    mitre_technique: 'T0000',\n    mitre_tactic: 'Unknown',\n    threat_summary: 'Claude could not parse the alert. Manual review required. Raw: ' + rawText.slice(0, 200),\n    immediate_actions: ['Review alert manually', 'Check source IP in threat intel', 'Escalate to senior analyst'],\n    false_positive_likelihood: 'MEDIUM',\n    recommended_escalation: true\n  };\n}\n\nconst severity = (analysis.severity || 'MEDIUM').toUpperCase();\n\nreturn [{\n  json: {\n    ...alert,\n    ...analysis,\n    severity,\n    incident_id: `INC-${Date.now()}`,\n    analyzed_at: new Date().toISOString(),\n    is_high_priority: ['CRITICAL', 'HIGH'].includes(severity),\n    slack_color: severity === 'CRITICAL' ? 'danger' : severity === 'HIGH' ? 'warning' : 'good',\n    jira_priority: severity === 'CRITICAL' ? 'Highest' : 'High'\n  }\n}];"
+      }
+    },
+    {
+      "id": "66666666-6666-6666-6666-666666666666",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  text: ($json.severity === 'CRITICAL' ? '🚨' : $json.severity === 'HIGH' ? '⚠️' : 'ℹ️') + ' *' + $json.severity + ' Security Alert — ' + $json.incident_id + '*',\n  attachments: [{\n    color: $json.slack_color,\n    fields: [\n      { title: 'Threat Type', value: $json.threat_type, short: true },\n      { title: 'Confidence', value: $json.confidence_score + '%', short: true },\n      { title: 'MITRE Technique', value: $json.mitre_technique, short: true },\n      { title: 'MITRE Tactic', value: $json.mitre_tactic, short: true },\n      { title: 'Asset', value: $json.hostname + ($json.username ? ' / ' + $json.username : ''), short: true },\n      { title: 'Source IP', value: $json.source_ip || 'N/A', short: true },\n      { title: 'Summary', value: $json.threat_summary, short: false },\n      { title: 'Immediate Actions', value: '• ' + ($json.immediate_actions || []).join('\\n• '), short: false },\n      { title: 'False Positive Risk', value: $json.false_positive_likelihood, short: true },\n      { title: 'Escalate?', value: $json.recommended_escalation ? 'YES' : 'No', short: true }\n    ],\n    footer: 'DevHubConnect SOC Analyst • Claude claude-sonnet-4-6 • ' + $json.source_system,\n    ts: Math.floor(Date.now() / 1000)\n  }]\n}) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "77777777-7777-7777-7777-777777777777",
+      "name": "High Priority?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-hp-1",
+              "leftValue": "={{ $json.is_high_priority }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "88888888-8888-8888-8888-888888888888",
+      "name": "Create Jira Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $vars.JIRA_DOMAIN }}.atlassian.net/rest/api/3/issue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Basic {{ Buffer.from($vars.JIRA_EMAIL + ':' + $vars.JIRA_API_TOKEN).toString('base64') }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  fields: {\n    project: { key: $vars.JIRA_PROJECT_KEY || 'SEC' },\n    issuetype: { name: 'Incident' },\n    priority: { name: $json.jira_priority },\n    summary: '[' + $json.severity + '] ' + $json.threat_type + ' — ' + $json.alert_type + ' on ' + $json.hostname,\n    description: {\n      type: 'doc',\n      version: 1,\n      content: [{\n        type: 'paragraph',\n        content: [{\n          type: 'text',\n          text: [\n            'Incident ID: ' + $json.incident_id,\n            'Severity: ' + $json.severity + ' (' + $json.confidence_score + '% confidence)',\n            'MITRE: ' + $json.mitre_technique + ' | ' + $json.mitre_tactic,\n            '',\n            'Summary:',\n            $json.threat_summary,\n            '',\n            'Asset: ' + $json.hostname + ($json.username ? ' (' + $json.username + ')' : ''),\n            'Source IP: ' + ($json.source_ip || 'N/A'),\n            'Source System: ' + $json.source_system,\n            '',\n            'Immediate Actions:',\n            ($json.immediate_actions || []).map((a, i) => (i+1) + '. ' + a).join('\\n'),\n            '',\n            'Analyzed at: ' + $json.analyzed_at\n          ].join('\\n')\n        }]\n      }]\n    },\n    labels: ['soc-automated', 'claude-ai', 'devhubconnect']\n  }\n}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "99999999-9999-9999-9999-999999999999",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2000, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  incident_id: $('Parse AI Response').first().json.incident_id,\n  severity: $('Parse AI Response').first().json.severity,\n  threat_type: $('Parse AI Response').first().json.threat_type,\n  message: 'Alert analyzed by Claude AI SOC Analyst'\n}) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "SOC Alert Webhook": {
+      "main": [[{ "node": "Normalize Alert", "type": "main", "index": 0 }]]
+    },
+    "Normalize Alert": {
+      "main": [[{ "node": "VirusTotal IP Lookup", "type": "main", "index": 0 }]]
+    },
+    "VirusTotal IP Lookup": {
+      "main": [[{ "node": "Claude AI Threat Analysis", "type": "main", "index": 0 }]]
+    },
+    "Claude AI Threat Analysis": {
+      "main": [[{ "node": "Parse AI Response", "type": "main", "index": 0 }]]
+    },
+    "Parse AI Response": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    },
+    "Notify Slack": {
+      "main": [[{ "node": "High Priority?", "type": "main", "index": 0 }]]
+    },
+    "High Priority?": {
+      "main": [
+        [{ "node": "Create Jira Incident", "type": "main", "index": 0 }],
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Jira Incident": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
