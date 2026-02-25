@@ -62,6 +62,7 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
  const [isDownloading, setIsDownloading] = useState(false);
  const [isRemoving, setIsRemoving] = useState(false);
  const [isPurchasing, setPurchasing] = useState(false);
+ const [imageLoaded, setImageLoaded] = useState(false);
  
  const imageUrl = template.imageUrl || template.image_url || null;
  
@@ -228,18 +229,25 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
      >
        <div className="relative overflow-hidden rounded-t-lg">
          {(template.imageUrl || template.image_url) ? (
-           <img
-             src={template.imageUrl || template.image_url}
-             alt={template.name}
-             width={400}
-             height={192}
-             loading="lazy"
-             className="w-full h-48 object-cover transition-transform duration-300 ease-in-out hover:scale-110"
-             onError={(e) => {
-               e.currentTarget.style.display = 'none';
-               e.currentTarget.parentElement?.querySelector('.image-fallback')?.classList.remove('hidden');
-             }}
-           />
+           <>
+             {!imageLoaded && (
+               <div className="w-full h-48 bg-gray-200 animate-pulse rounded-t-lg" />
+             )}
+             <img
+               src={template.imageUrl || template.image_url}
+               alt={template.name}
+               width={400}
+               height={192}
+               loading="lazy"
+               className={`w-full h-48 object-cover transition-all duration-300 ease-in-out hover:scale-110 ${imageLoaded ? 'opacity-100' : 'opacity-0 absolute inset-0'}`}
+               onLoad={() => setImageLoaded(true)}
+               onError={(e) => {
+                 setImageLoaded(true);
+                 e.currentTarget.style.display = 'none';
+                 e.currentTarget.parentElement?.querySelector('.image-fallback')?.classList.remove('hidden');
+               }}
+             />
+           </>
          ) : null}
          
          <div className={`w-full h-48 bg-gray-100 flex items-center justify-center transition-transform duration-300 ease-in-out hover:scale-110 image-fallback ${(template.imageUrl || template.image_url) ? 'hidden' : ''}`}>
