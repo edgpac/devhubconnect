@@ -71,7 +71,13 @@ async function uploadToGitHub(filename, pngBuffer) {
     body: JSON.stringify({ message: `wf screenshot ${filename}`, content: base64, ...(sha ? { sha } : {}) }),
   });
   if (!res.ok) throw new Error(`GitHub: ${res.status} ${await res.text()}`);
-  return `https://cdn.jsdelivr.net/gh/${GH_REPO}@main/${filePath}`;
+
+  // Purge jsDelivr CDN cache so the new image is immediately visible
+  const cdnUrl = `https://cdn.jsdelivr.net/gh/${GH_REPO}@main/${filePath}`;
+  try {
+    await fetch(`https://purge.jsdelivr.net/gh/${GH_REPO}@main/${filePath}`);
+  } catch { /* purge failure is non-fatal */ }
+  return cdnUrl;
 }
 
 // ─── n8n REST API (uses API key) ─────────────────────────────────────────────
