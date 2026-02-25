@@ -485,7 +485,9 @@ function auditWorkflow(wf) {
   // §2.4 Hardcoded credential IDs (non-portable — real n8n-generated IDs instead of "1")
   // Real IDs look like "r1DVmNxwkIL8JO17" (8–32 alphanumeric chars). Portable credentials
   // use "1" as a placeholder; the user maps them to real credentials on import.
-  const REAL_CRED_ID_RE = /^[A-Za-z0-9]{8,32}$/;
+  // Matches both random n8n IDs (alphanumeric, e.g. "r1DVmNxwkIL8JO17")
+  // AND hyphenated slugs used as fake IDs (e.g. "email-service-credentials")
+  const REAL_CRED_ID_RE = /^[A-Za-z0-9]{8,32}$|^[a-z][a-z0-9-]{4,}-[a-z][a-z0-9-]{2,}$/;
   const SAFE_CRED_IDS = new Set(['1', '0', '']);
   for (const node of (wf.nodes || [])) {
     const creds = node.credentials || {};
