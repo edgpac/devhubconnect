@@ -343,11 +343,20 @@ async function uploadToGitHub() {
     const check = await fetch(apiUrl, {
       headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
     });
+    if (check.status === 401 || check.status === 403) {
+      btn.disabled = false;
+      statusEl.textContent = '';
+      return showError('GitHub token is invalid or expired. Create a new one with "repo" scope.');
+    }
     if (check.ok) {
       const data = await check.json();
       sha = data.sha;
     }
-  } catch(_) {}
+  } catch(e) {
+    btn.disabled = false;
+    statusEl.textContent = '';
+    return showError('Network error checking file: ' + e.message);
+  }
 
   statusEl.textContent = sha ? 'Updating existing file…' : 'Uploading new file…';
 
