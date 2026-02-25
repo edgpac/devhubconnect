@@ -3232,27 +3232,27 @@ app.post('/api/templates', requireAdminAuth, async (req, res) => {
   try {
     if (req.isDisconnected()) return;
     
-    const { name, description, price, workflowJson, imageUrl } = req.body;
-    
+    const { name, description, metaDescription, price, workflowJson, imageUrl } = req.body;
+
     console.log('📤 Creating new template:', name, 'by admin:', req.user.email);
-    
+
     if (!name || !description || price === undefined || !workflowJson) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: 'Missing required fields: name, description, price, and workflowJson are required' 
+        error: 'Missing required fields: name, description, price, and workflowJson are required'
       });
     }
-    
+
     const numericPrice = parseFloat(price);
     if (isNaN(numericPrice) || numericPrice < 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: 'Price must be a valid positive number' 
+        error: 'Price must be a valid positive number'
       });
     }
-    
+
     const priceInCents = Math.round(numericPrice * 100);
-    
+
     let parsedWorkflow;
     try {
       parsedWorkflow = typeof workflowJson === 'string' ? JSON.parse(workflowJson) : workflowJson;
@@ -3260,24 +3260,31 @@ app.post('/api/templates', requireAdminAuth, async (req, res) => {
         throw new Error('Workflow must contain a nodes array');
       }
     } catch (error) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         error: 'Invalid workflow JSON format',
         details: error.message
       });
     }
 
+    // Inject meta.instanceId and devhubconnect tag so the Studio validator accepts it
+    if (!parsedWorkflow.meta?.instanceId) {
+      parsedWorkflow.meta = { ...(parsedWorkflow.meta || {}), instanceId: 'devhubconnect' };
+    }
+    parsedWorkflow.tags = [...new Set([...(parsedWorkflow.tags || []), 'devhubconnect'])];
+
     if (req.isDisconnected()) return;
 
     const result = await pool.query(`
       INSERT INTO templates (
-        name, description, price, workflow_json, image_url, 
+        name, description, meta_description, price, workflow_json, image_url,
         creator_id, currency, status, is_public, download_count, view_count
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `, [
       name.trim(),
-      description.trim(), 
+      description.trim(),
+      metaDescription?.trim() || null,
       priceInCents,
       parsedWorkflow,
       imageUrl || null,
