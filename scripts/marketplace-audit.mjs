@@ -482,6 +482,71 @@ function auditWorkflow(wf) {
     }
   }
 
+  // §2.4 Hardcoded credential IDs (non-portable — real n8n-generated IDs instead of "1")
+  // Real IDs look like "r1DVmNxwkIL8JO17" (8–32 alphanumeric chars). Portable credentials
+  // use "1" as a placeholder; the user maps them to real credentials on import.
+  const REAL_CRED_ID_RE = /^[A-Za-z0-9]{8,32}$/;
+  const SAFE_CRED_IDS = new Set(['1', '0', '']);
+  for (const node of (wf.nodes || [])) {
+    const creds = node.credentials || {};
+    for (const [credType, credVal] of Object.entries(creds)) {
+      if (typeof credVal !== 'object' || credVal === null) continue;
+      const credId = credVal.id;
+      if (typeof credId !== 'string') continue;
+      if (SAFE_CRED_IDS.has(credId)) continue;
+      if (credId.includes('{{') || credId.includes('$env')) continue;
+      if (/your|placeholder|example|test|fake|dummy/i.test(credId)) continue;
+      if (REAL_CRED_ID_RE.test(credId)) {
+        findings.push({
+          sev: 'HIGH', check: '2.4',
+          msg: `Node '${node.name}' credential '${credType}' has hardcoded ID "${credId}" — use "1" as placeholder for marketplace portability`,
+          nodes: [node.id],
+        });
+      }
+    }
+  }
+
+  // §2.5 Hardcoded external resource IDs (Google Drive folders, Sheets, Notion DBs, etc.)
+  // These should use $env.VAR expressions so buyers can point them to their own resources.
+  const RESOURCE_SIMPLE_FIELDS = new Set(['spreadsheetId', 'databaseId', 'calendarId', 'fileId', 'pageId', 'channelId', 'teamId']);
+  const RESOURCE_PICKER_FIELDS = new Set(['folderToWatch', 'driveId', 'folderId', 'parentFolderId']);
+  for (const node of (wf.nodes || [])) {
+    const params = node.parameters || {};
+    const issues = [];
+
+    for (const [key, val] of Object.entries(params)) {
+      // Helper: real resource IDs have mixed case + digits (e.g. "1tzeSpx4D3EAGXa3Wg-gqGbdaUk6LI")
+      // Descriptive slugs like "knowledge-folder-id" or "devhubconnect_company_docs" are lowercase-only — skip them
+      const isRealResourceId = (s) =>
+        /[A-Z]/.test(s) && /[a-z]/.test(s) && /[0-9]/.test(s) && /^[A-Za-z0-9_-]+$/.test(s);
+
+      // Simple string fields: spreadsheetId="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+      if (RESOURCE_SIMPLE_FIELDS.has(key) && typeof val === 'string') {
+        if (val.length >= 20 && !val.includes('{{') && !val.includes('$env') &&
+            !/your|placeholder|example|primary|me@/i.test(val) &&
+            isRealResourceId(val)) {
+          issues.push(`${key}="${val.slice(0, 30)}"`);
+        }
+      }
+      // Resource picker objects: folderToWatch.value="15gjDQZiHZuBeVscnK8Ic_kIWt3mOaVfs"
+      if (RESOURCE_PICKER_FIELDS.has(key) && val && typeof val === 'object') {
+        const id = val.value;
+        if (typeof id === 'string' && id.length >= 15 && !id.includes('{{') && !id.includes('$env') &&
+            !/your|placeholder|example/i.test(id) && isRealResourceId(id)) {
+          issues.push(`${key}.value="${id.slice(0, 30)}"`);
+        }
+      }
+    }
+
+    if (issues.length > 0) {
+      findings.push({
+        sev: 'HIGH', check: '2.5',
+        msg: `Node '${node.name}' has hardcoded external resource IDs: ${issues.join(', ')} — use $env.VAR expressions for portability`,
+        nodes: [node.id],
+      });
+    }
+  }
+
   // ── §3 Node Configuration ──────────────────────────────────────────────────
 
   // §3.1 HTTP nodes missing timeout
@@ -628,6 +693,28 @@ function auditWorkflow(wf) {
     });
   }
 
+  // §5.4 Non-observable terminal Set nodes — reachable leaf nodes whose data is silently dropped
+  // A Set (or similar transform) node at the end of a path has no side-effect: nothing reads it.
+  // These should pipe into a respond, log, DB write, or notify node to be meaningful.
+  const NON_OBSERVABLE_TERMINAL_TYPES = new Set([
+    'n8n-nodes-base.set', 'n8n-nodes-base.setV2',
+  ]);
+  if (triggerNodes.length > 0) {
+    const terminalLeaves = nodes.filter(n => {
+      if (!allReachable.has(n.name)) return false;
+      if (!NON_OBSERVABLE_TERMINAL_TYPES.has(n.type)) return false;
+      const outs = outgoing[n.name];
+      return !outs || outs.size === 0;
+    });
+    if (terminalLeaves.length > 0) {
+      findings.push({
+        sev: 'MEDIUM', check: '5.4',
+        msg: `${terminalLeaves.length} terminal Set node(s) produce data with no observable downstream effect: ${terminalLeaves.map(n => n.name).slice(0, 4).join(', ')}`,
+        nodes: terminalLeaves.map(n => n.id),
+      });
+    }
+  }
+
   // ── §6 Performance & Portability ─────────────────────────────────────────
 
   // §6.1 Large batch sizes
@@ -710,6 +797,49 @@ function auditWorkflow(wf) {
       msg: 'Workflow contains staticData — may persist state between runs',
       nodes: [],
     });
+  }
+
+  // §7.5 Documentation / sticky note vs actual implementation mismatch
+  // Sticky notes that describe a different AI model than what's actually wired in the workflow
+  // create confusing documentation for buyers.
+  const stickyNotes = (wf.nodes || []).filter(n => n.type === 'n8n-nodes-base.stickyNote');
+  if (stickyNotes.length > 0) {
+    const stickyText = stickyNotes.map(n => n.parameters?.content || '').join(' ').toLowerCase();
+    const usesOpenAI = (wf.nodes || []).some(n =>
+      n.type === '@n8n/n8n-nodes-langchain.lmChatOpenAi' ||
+      n.type === '@n8n/n8n-nodes-langchain.lmOpenAi' ||
+      n.type === '@n8n/n8n-nodes-langchain.lmChatAzureOpenAi'
+    );
+    const usesAnthropic = (wf.nodes || []).some(n =>
+      n.type === '@n8n/n8n-nodes-langchain.lmChatAnthropic'
+    );
+    const usesGemini = (wf.nodes || []).some(n =>
+      n.type === '@n8n/n8n-nodes-langchain.lmChatGoogleGemini'
+    );
+    const usesGroq = (wf.nodes || []).some(n =>
+      n.type === '@n8n/n8n-nodes-langchain.lmChatGroq'
+    );
+
+    const mentionsGPT = /\bgpt[-\s]?4\b|\bgpt[-\s]?3\.5\b|\bgpt[-\s]?4o\b|\bchatgpt\b|\bopenai\b/.test(stickyText);
+    const mentionsClaude = /\bclaude\b|\banthropic\b/.test(stickyText);
+    const mentionsGemini = /\bgemini\b|\bgoogle\s+ai\b|\bgoogle\s+gemini\b/.test(stickyText);
+    const mentionsGroq = /\bgroq\b/.test(stickyText);
+
+    const hasAnyLm = usesOpenAI || usesAnthropic || usesGemini || usesGroq;
+    if (hasAnyLm) {
+      const mismatches = [];
+      if (mentionsGPT && !usesOpenAI) mismatches.push('sticky says GPT/OpenAI but no OpenAI LM node');
+      if (mentionsClaude && !usesAnthropic) mismatches.push('sticky says Claude/Anthropic but no Anthropic LM node');
+      if (mentionsGemini && !usesGemini) mismatches.push('sticky says Gemini but no Gemini LM node');
+      if (mentionsGroq && !usesGroq) mismatches.push('sticky says Groq but no Groq LM node');
+      if (mismatches.length > 0) {
+        findings.push({
+          sev: 'LOW', check: '7.5',
+          msg: `Documentation mismatch: ${mismatches.join('; ')}`,
+          nodes: stickyNotes.map(n => n.id),
+        });
+      }
+    }
   }
 
   // ── §8 Red Flags ──────────────────────────────────────────────────────────
