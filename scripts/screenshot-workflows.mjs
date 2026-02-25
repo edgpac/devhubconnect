@@ -72,7 +72,17 @@ async function uploadToGitHub(filename, pngBuffer) {
   });
   if (!res.ok) throw new Error(`GitHub: ${res.status} ${await res.text()}`);
 
-  // Purge jsDelivr CDN cache so the new image is immediately visible
+  // Extract the commit SHA from the response so we can build an immutable URL.
+  // Using @main is unreliable — jsDelivr caches it for hours even after purging.
+  // A commit-SHA URL is permanent and never stale.
+  const resData = await res.json();
+  const commitSha = resData?.commit?.sha;
+
+  if (commitSha) {
+    return `https://cdn.jsdelivr.net/gh/${GH_REPO}@${commitSha}/${filePath}`;
+  }
+
+  // Fallback to @main + purge if SHA is unavailable
   const cdnUrl = `https://cdn.jsdelivr.net/gh/${GH_REPO}@main/${filePath}`;
   try {
     await fetch(`https://purge.jsdelivr.net/gh/${GH_REPO}@main/${filePath}`);
