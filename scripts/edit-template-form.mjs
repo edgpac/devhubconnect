@@ -13,21 +13,22 @@
  * Or with inline UPDATES array edited below for bulk editing.
  *
  * Env vars:
- *   SITE_URL       — base URL of the DevHubConnect site
- *   ADMIN_EMAIL    — admin account email
- *   ADMIN_PASSWORD — admin account password
- *   DRY_RUN=true   — navigate and fill but do not submit
+ *   SITE_URL         — base URL of the DevHubConnect site (default: https://www.devhubconnect.com)
+ *   GITHUB_USERNAME  — your GitHub username (DevHubConnect uses GitHub OAuth)
+ *   GITHUB_PASSWORD  — your GitHub password
+ *   DRY_RUN=true     — navigate and fill but do not submit
  */
 
 import { chromium } from 'playwright';
 
-const SITE_URL      = process.env.SITE_URL      || 'http://localhost:3000';
-const ADMIN_EMAIL   = process.env.ADMIN_EMAIL;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const DRY_RUN       = process.env.DRY_RUN === 'true';
+const SITE_URL        = process.env.SITE_URL        || 'https://www.devhubconnect.com';
+const GITHUB_USERNAME = process.env.GITHUB_USERNAME;
+const GITHUB_PASSWORD = process.env.GITHUB_PASSWORD;
+const DRY_RUN         = process.env.DRY_RUN === 'true';
 
-if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-  console.error('❌ Set ADMIN_EMAIL and ADMIN_PASSWORD env vars');
+if (!GITHUB_USERNAME || !GITHUB_PASSWORD) {
+  console.error('❌ Set GITHUB_USERNAME and GITHUB_PASSWORD env vars');
+  console.error('   (DevHubConnect uses GitHub OAuth — provide your GitHub login)');
   process.exit(1);
 }
 
@@ -65,14 +66,29 @@ const browser = await chromium.launch({ headless: false });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page    = await context.newPage();
 
-// ── 1. Log in ─────────────────────────────────────────────────────────────────
-console.log('🔐 Logging in...');
-await page.goto(`${SITE_URL}/signin`, { waitUntil: 'networkidle' });
-await page.locator('input[type="email"], input[name="email"]').first().fill(ADMIN_EMAIL);
-await page.locator('input[type="password"]').first().fill(ADMIN_PASSWORD);
-await page.locator('button[type="submit"], button').filter({ hasText: /sign in|log in/i }).first().click();
-await page.waitForURL(url => !url.includes('/signin'), { timeout: 15000 });
-console.log('✅ Logged in\n');
+// ── 1. Log in via GitHub OAuth ────────────────────────────────────────────────
+console.log('🔐 Logging in via GitHub OAuth...');
+await page.goto(`${SITE_URL}/login`, { waitUntil: 'networkidle', timeout: 30000 });
+
+// Should now be on GitHub login page
+if (page.url().includes('github.com')) {
+  await page.locator('input[name="login"]').first().fill(GITHUB_USERNAME);
+  await page.locator('input[name="password"]').first().fill(GITHUB_PASSWORD);
+  await page.locator('input[type="submit"], button[type="submit"]').first().click();
+  // Wait for redirect back to devhubconnect
+  await page.waitForURL(url => url.includes('devhubconnect.com') || url.includes('localhost'), { timeout: 30000 });
+  // Handle GitHub OAuth authorization screen if it appears
+  const authorizeBtn = page.locator('button').filter({ hasText: /authorize/i });
+  if (await authorizeBtn.count() > 0) {
+    await authorizeBtn.first().click();
+    await page.waitForURL(url => url.includes('devhubconnect.com') || url.includes('localhost'), { timeout: 15000 });
+  }
+} else {
+  throw new Error(`Expected GitHub login page, got: ${page.url()}`);
+}
+
+await page.waitForLoadState('networkidle');
+console.log('✅ Logged in —', page.url(), '\n');
 
 // ── 2. Process each update ────────────────────────────────────────────────────
 const results = { success: 0, failed: 0 };
