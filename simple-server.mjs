@@ -3065,7 +3065,7 @@ Node types: ${serviceTypes.slice(0, 10).join(', ')}
 
 Produce EXACTLY this structure — no other text:
 
-NAME: [A clear, professional template name starting with "DevHubConnect -"]
+NAME: [A clear, professional template name — do NOT include "DevHubConnect" or any brand name. Focus on what the workflow does, e.g. "Claude AI SOC Analyst: Automated Threat Detection" or "Gmail to Slack Lead Notification Pipeline"]
 
 DESCRIPTION:
 [PARAGRAPH 1 — ~100 words: What this workflow automates, what manual process it replaces, step-by-step using actual node names, who benefits (job title, team size), quantified time savings (e.g. 20-30 min → seconds)]
