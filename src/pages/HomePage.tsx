@@ -323,7 +323,7 @@ export const HomePage = () => {
              </h1>
 
              <p className="text-lg mb-4 text-gray-300 max-w-2xl mx-auto">
-               Claude can write workflows. DevHubConnect makes them production safe.<br />
+               Claude writes the workflows. DevHubConnect makes them production safe.<br />
                Powered by expert prompt architecture and {templates.length > 0 ? `${templates.length}+` : ''} MCP audited templates, our Claude AI Studio understands n8n structurally from an MCP perspective, not just syntactically.
              </p>
              <p className="text-sm mb-10 text-teal-400/60 max-w-xl mx-auto font-mono tracking-wide">
