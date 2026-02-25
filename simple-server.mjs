@@ -3030,12 +3030,71 @@ Ask me specific questions like:
   }
 }); 
 
+// ── Admin: Claude-powered template details generator ─────────────────────────
+async function generateTemplateDetailsWithClaude(workflow) {
+  const nodeCount = workflow.nodes?.length || 0;
+  const FILTER = new Set(['Start', 'Set', 'NoOp', 'If', 'Switch', 'StickyNote', 'stickyNote']);
+  const serviceTypes = [...new Set(
+    (workflow.nodes || [])
+      .map(n => n.type?.split('.').pop() || '')
+      .filter(t => t && !FILTER.has(t))
+  )];
+  const nodeNames = (workflow.nodes || []).slice(0, 12).map(n => n.name).join(', ');
+  const wfName = workflow.name || 'Automation Workflow';
+  const price = nodeCount < 5 ? 999 : nodeCount < 15 ? 1999 : 2999;
+
+  if (!anthropic) {
+    // Graceful fallback when ANTHROPIC_API_KEY is not configured
+    return {
+      name: wfName,
+      description: `This workflow automates ${wfName} using n8n. It orchestrates ${nodeCount} nodes including ${serviceTypes.slice(0, 5).join(', ')} to create a seamless end-to-end pipeline, eliminating manual steps and saving hours weekly.\n\nDesigned for operations teams, this template delivers immediate ROI by reducing manual intervention. Use cases include data synchronization, notification pipelines, and API integrations. Requirements: relevant API credentials for connected services, an n8n instance (free at n8n.io or cloud ~$20/month).\n\nImport this template into n8n, configure credentials for each service under Settings > Credentials, and activate the workflow. Run a manual test first and review the execution log. Common issues: 401 invalid key, 429 rate limit, 500 misconfigured parameters.`,
+      meta_description: `Automate ${wfName} with this n8n workflow template featuring ${serviceTypes.slice(0, 3).join(', ')}.`.slice(0, 160),
+      price,
+      aiEnhanced: false,
+    };
+  }
+
+  const systemPrompt = `You are a professional SaaS marketplace copywriter specializing in n8n workflow automation templates. Write compelling, accurate listings based on workflow structure.`;
+
+  const userPrompt = `Write a marketplace listing for an n8n workflow template.
+
+Workflow name: "${wfName}"
+Node count: ${nodeCount}
+Node names: ${nodeNames}
+Node types: ${serviceTypes.slice(0, 10).join(', ')}
+
+Produce EXACTLY this structure — no other text:
+
+NAME: [A clear, professional template name starting with "DevHubConnect -"]
+
+DESCRIPTION:
+[PARAGRAPH 1 — ~100 words: What this workflow automates, what manual process it replaces, step-by-step using actual node names, who benefits (job title, team size), quantified time savings (e.g. 20-30 min → seconds)]
+
+[PARAGRAPH 2 — ~80 words: ROI and business value, 3 specific use cases, technical requirements with API costs (e.g. ~$0.01/1K tokens), n8n instance requirement (~$20/month cloud or free self-hosted)]
+
+[PARAGRAPH 3 — ~120 words: Step-by-step setup — where to get accounts/API keys, configure n8n credentials, key node settings, expose webhooks if needed. How to test with example inputs. 3-4 common errors with fixes (401 invalid key, 429 rate limit). Activate and maintenance tips]
+
+META: [One sentence, max 155 characters, SEO-focused summary of what the workflow does and saves]`;
+
+  const raw = await callClaude(systemPrompt, [{ role: 'user', content: userPrompt }], 1200);
+
+  const nameMatch  = raw.match(/^NAME:\s*(.+)/m);
+  const metaMatch  = raw.match(/^META:\s*(.+)/m);
+  const descMatch  = raw.match(/DESCRIPTION:\n([\s\S]+?)(?:\nMETA:|$)/);
+
+  const name             = nameMatch?.[1]?.trim() || wfName;
+  const description      = descMatch?.[1]?.trim() || raw;
+  const meta_description = (metaMatch?.[1]?.trim() || `${wfName} — n8n automation template`).slice(0, 160);
+
+  return { name, description, meta_description, price, aiEnhanced: true };
+}
+
 // ✅ NEW: AI template generation endpoint for admin dashboard
 app.post('/api/ai/generate-template-details', requireAdminAuth, async (req, res) => {
   try {
     if (req.isDisconnected()) return;
     
-    const { workflowJson, templateName, description } = req.body;
+    const { workflowJson } = req.body;
     
     if (!workflowJson) {
       return res.status(400).json({ 
@@ -3063,36 +3122,10 @@ app.post('/api/ai/generate-template-details', requireAdminAuth, async (req, res)
       });
     }
 
-    const nodeCount = workflow.nodes?.length || 0;
-    const serviceTypes = workflow.nodes ? 
-      [...new Set(workflow.nodes
-        .map(node => node.type?.replace('n8n-nodes-base.', '') || 'Unknown')
-        .filter(type => !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(type))
-      )] : [];
-
     if (req.isDisconnected() || res.headersSent) return;
 
-    res.json({
-      success: true,
-      name: templateName || `${serviceTypes[0] || 'Automation'} Workflow`,
-      description: description || `Automated workflow with ${nodeCount} nodes using ${serviceTypes.slice(0,3).join(', ')}`,
-      price: nodeCount < 5 ? 999 : nodeCount < 15 ? 1999 : 2999,
-      enhancedDetails: {
-        name: templateName,
-        description: description || `Automated workflow with ${nodeCount} nodes`,
-        nodeCount: nodeCount,
-        integratedApps: serviceTypes.slice(0, 10),
-        category: serviceTypes.length > 0 ? serviceTypes[0] : 'Automation',
-        complexity: nodeCount < 5 ? 'Simple' : nodeCount < 15 ? 'Intermediate' : 'Advanced',
-        estimatedSetupTime: nodeCount < 5 ? '5-10 minutes' : nodeCount < 15 ? '15-30 minutes' : '30+ minutes'
-      },
-      metadata: {
-        totalNodes: nodeCount,
-        serviceCount: serviceTypes.length,
-        aiEnhanced: false,
-        generatedAt: new Date().toISOString()
-      }
-    });
+    const details = await generateTemplateDetailsWithClaude(workflow);
+    res.json({ success: true, ...details });
 
   } catch (error) {
     if (error.code === 'ECONNRESET' || error.code === 'EPIPE' || error.code === 'ECONNABORTED') {
@@ -3113,7 +3146,7 @@ app.post('/api/admin/generate-template-details', requireAdminAuth, async (req, r
   try {
     if (req.isDisconnected()) return;
     
-    const { workflowJson, templateName, description } = req.body;
+    const { workflowJson } = req.body;
     
     if (!workflowJson) {
       return res.status(400).json({ 
@@ -3141,36 +3174,10 @@ app.post('/api/admin/generate-template-details', requireAdminAuth, async (req, r
       });
     }
 
-    const nodeCount = workflow.nodes?.length || 0;
-    const serviceTypes = workflow.nodes ? 
-      [...new Set(workflow.nodes
-        .map(node => node.type?.replace('n8n-nodes-base.', '') || 'Unknown')
-        .filter(type => !['Start', 'Set', 'NoOp', 'If', 'Switch'].includes(type))
-      )] : [];
-
     if (req.isDisconnected() || res.headersSent) return;
 
-    res.json({
-      success: true,
-      name: templateName || `${serviceTypes[0] || 'Automation'} Workflow`,
-      description: description || `Automated workflow with ${nodeCount} nodes using ${serviceTypes.slice(0,3).join(', ')}`,
-      price: nodeCount < 5 ? 999 : nodeCount < 15 ? 1999 : 2999,
-      enhancedDetails: {
-        name: templateName,
-        description: description || `Automated workflow with ${nodeCount} nodes`,
-        nodeCount: nodeCount,
-        integratedApps: serviceTypes.slice(0, 10),
-        category: serviceTypes.length > 0 ? serviceTypes[0] : 'Automation',
-        complexity: nodeCount < 5 ? 'Simple' : nodeCount < 15 ? 'Intermediate' : 'Advanced',
-        estimatedSetupTime: nodeCount < 5 ? '5-10 minutes' : nodeCount < 15 ? '15-30 minutes' : '30+ minutes'
-      },
-      metadata: {
-        totalNodes: nodeCount,
-        serviceCount: serviceTypes.length,
-        aiEnhanced: false,
-        generatedAt: new Date().toISOString()
-      }
-    });
+    const details = await generateTemplateDetailsWithClaude(workflow);
+    res.json({ success: true, ...details });
 
   } catch (error) {
     if (error.code === 'ECONNRESET' || error.code === 'EPIPE' || error.code === 'ECONNABORTED') {

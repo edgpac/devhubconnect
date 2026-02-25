@@ -12,6 +12,7 @@ import { useAuth } from '@/components/context/AuthProvider';
 export function AdminDashboard() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [metaDescription, setMetaDescription] = useState('');
   const [price, setPrice] = useState('');
   const [workflowJson, setWorkflowJson] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -101,6 +102,7 @@ export function AdminDashboard() {
         body: JSON.stringify({
           name,
           description,
+          metaDescription,
           price: parseFloat(price),
           workflowJson: parsedJson,
           imageUrl: finalImageUrl,
@@ -115,6 +117,7 @@ export function AdminDashboard() {
         // Clear form
         setName('');
         setDescription('');
+        setMetaDescription('');
         setPrice('');
         setWorkflowJson('');
         setImageUrl('');
@@ -159,6 +162,7 @@ export function AdminDashboard() {
         body: JSON.stringify({
           name,
           description,
+          metaDescription,
           price: parseFloat(price),
           workflowJson: parsedJson,
           imageUrl: finalImageUrl,
@@ -214,10 +218,11 @@ export function AdminDashboard() {
       const data = await response.json();
 
       if (response.ok) {
-        setName(data.name);
-        setDescription(data.description);
+        setName(data.name || '');
+        setDescription(data.description || '');
+        setMetaDescription(data.meta_description || '');
         setPrice((data.price / 100).toFixed(2));
-        toast.success('Details Generated!', { description: 'AI has suggested template name, description, and price.' });
+        toast.success('Details Generated!', { description: 'AI has generated SEO title, description, and meta description.' });
         setMessage('Details generated successfully!');
       } else {
         if (response.status === 409) {
@@ -363,9 +368,21 @@ export function AdminDashboard() {
 
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
-                <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} required />
+                <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} required rows={6} />
               </div>
-              
+
+              <div className="space-y-2">
+                <Label htmlFor="metaDescription">Meta Description <span className="text-gray-400 font-normal text-xs">(SEO — max 160 chars)</span></Label>
+                <Textarea
+                  id="metaDescription"
+                  value={metaDescription}
+                  onChange={(e) => setMetaDescription(e.target.value.slice(0, 160))}
+                  rows={2}
+                  placeholder="Short SEO summary shown in search results…"
+                />
+                <p className="text-xs text-gray-400 text-right">{metaDescription.length}/160</p>
+              </div>
+
               <div className="space-y-2">
                 <Label>Preview Image</Label>
                 <div className="p-4 border-2 border-dashed rounded-lg text-center">
