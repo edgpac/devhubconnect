@@ -547,6 +547,48 @@ function auditWorkflow(wf) {
     }
   }
 
+  // §2.6 Permissive security fallback values in IF/Switch conditions
+  // Expressions like {{ $json.headers?.['x-api-key'] || 'valid' }} with isNotEmpty will ALWAYS
+  // evaluate to TRUE when the header is absent — effectively bypassing authentication checks.
+  // Pattern: value1/leftValue contains `|| 'non-empty-string'` and op is isNotEmpty/notEmpty.
+  // Matches trailing || 'string' or || "string" just before the closing }}
+  const PERMISSIVE_FALLBACK_RE = /\|\|\s*(['"])[^'"]{1,}\1\s*}}/;
+  const ALWAYS_TRUE_OPS = new Set(['isNotEmpty', 'notEmpty', 'isNotUndefined', 'exists']);
+  for (const node of (wf.nodes || [])) {
+    if (node.type !== 'n8n-nodes-base.if' && node.type !== 'n8n-nodes-base.switch') continue;
+    const conds = node.parameters?.conditions || {};
+    // Support both legacy format (conditions.string[]) and new format (conditions.conditions[])
+    const allConds = [
+      ...(conds.string  || []),
+      ...(conds.number  || []),
+      ...(conds.boolean || []),
+      ...(Array.isArray(conds.conditions) ? conds.conditions : []),
+    ];
+    const permissive = allConds.filter(c => {
+      const val    = typeof c.value1    === 'string' ? c.value1    :
+                     typeof c.leftValue === 'string' ? c.leftValue : '';
+      const right  = typeof c.value2     === 'string' ? c.value2     :
+                     typeof c.rightValue === 'string' ? c.rightValue : '';
+      const op     = c.operation || c.operator?.operation || '';
+      if (!PERMISSIVE_FALLBACK_RE.test(val)) return false;
+      // Case 1: isNotEmpty with any fallback string → always TRUE
+      if (ALWAYS_TRUE_OPS.has(op)) return true;
+      // Case 2: equals/is where the fallback string matches the right-hand value → always TRUE
+      if (op === 'equals' || op === 'is' || op === 'equal') {
+        const m = val.match(/\|\|\s*(['"])([^'"]*)\1\s*}}/);
+        if (m && m[2] === right) return true;
+      }
+      return false;
+    });
+    if (permissive.length > 0) {
+      findings.push({
+        sev: 'HIGH', check: '2.6',
+        msg: `IF node '${node.name}' has ${permissive.length} condition(s) with permissive fallback (|| 'string') — always evaluates TRUE when input is absent, bypassing security checks`,
+        nodes: [node.id],
+      });
+    }
+  }
+
   // ── §3 Node Configuration ──────────────────────────────────────────────────
 
   // §3.1 HTTP nodes missing timeout
