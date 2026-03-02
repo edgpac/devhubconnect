@@ -137,9 +137,10 @@ const handleOAuthCallback = async () => {
         try {
           const storedUser = JSON.parse(storedUserStr);
           console.log('Found cached user profile:', storedUser.email || storedUser.username);
-          
-          // Set immediately to prevent flash
-          setCurrentUser(storedUser);
+
+          // Derive isAdmin from role only — never trust the cached isAdmin field
+          // (a user could edit localStorage to set isAdmin:true; role cannot be faked this way)
+          setCurrentUser({ ...storedUser, isAdmin: storedUser.role === 'admin' });
           
           // Verify session is still valid in background
           await checkSession();
@@ -165,11 +166,11 @@ const handleOAuthCallback = async () => {
     
     const enhancedUser = {
       ...user,
-      isAdmin: user.role === 'admin' || user.isAdmin || false
+      isAdmin: user.role === 'admin',  // derive from role only, never trust passed isAdmin
     };
 
     setCurrentUser(enhancedUser);
-    
+
     // Cache user profile for UI performance
     localStorage.setItem('devhub_user', JSON.stringify(enhancedUser));
     
@@ -182,11 +183,11 @@ const handleOAuthCallback = async () => {
     
     const enhancedUser = {
       ...user,
-      isAdmin: user.role === 'admin' || user.isAdmin || false
+      isAdmin: user.role === 'admin',  // derive from role only
     };
-    
+
     setCurrentUser(enhancedUser);
-    
+
     // Update cached profile
     localStorage.setItem('devhub_user', JSON.stringify(enhancedUser));
     

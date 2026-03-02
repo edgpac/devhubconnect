@@ -82,6 +82,49 @@
  }
  </script>
 
+ <!-- SoftwareApplication Schema (JSON-LD) - Surfaces the Studio as a SaaS tool in AI queries -->
+ <script type="application/ld+json">
+ {
+   "@context": "https://schema.org",
+   "@type": "SoftwareApplication",
+   "name": "DevHubConnect Workflow Studio",
+   "alternateName": "DevHubConnect",
+   "url": "https://www.devhubconnect.com/studio",
+   "applicationCategory": "DeveloperApplication",
+   "applicationSubCategory": "Automation",
+   "operatingSystem": "Web",
+   "offers": {
+     "@type": "Offer",
+     "price": "0",
+     "priceCurrency": "USD",
+     "description": "Browse free; purchase individual templates from $5. No subscription required."
+   },
+   "description": "AI-powered n8n workflow studio. Generate, customize, and download n8n workflow JSON using Claude AI. 500+ templates plus Build New and Prompt Store modes.",
+   "featureList": [
+     "Claude AI workflow generation from plain English",
+     "500+ ready-to-import n8n workflow JSON templates",
+     "Customize tab — modify existing workflows with AI",
+     "Build New tab — generate workflows from scratch",
+     "Prompt Store — expert n8n prompt combos",
+     "One-click JSON download for n8n import"
+   ],
+   "screenshot": "https://www.devhubconnect.com/og-image.png",
+   "softwareVersion": "2.0",
+   "datePublished": "2025-01-01",
+   "dateModified": "2026-03-02",
+   "provider": {
+     "@type": "Organization",
+     "name": "DevHubConnect",
+     "url": "https://www.devhubconnect.com"
+   },
+   "isAccessibleForFree": false,
+   "sameAs": [
+     "https://www.devhubconnect.com",
+     "https://github.com/devhubconnect"
+   ]
+ }
+ </script>
+
  <!-- Minimal OAuth Callback Handler -->
  <script>
    // Only handle OAuth callback URL cleanup - React handles the rest

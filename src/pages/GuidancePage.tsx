@@ -36,10 +36,137 @@ export const GuidancePage = () => {
         <meta property="og:title" content="How to Build n8n Workflows with Claude AI | DevHubConnect" />
         <meta property="og:description" content="Generate and customize n8n workflow JSON using Claude AI. Step-by-step guide to the Workflow Studio and expert JSON prompt combos." />
         <meta property="og:url" content="https://www.devhubconnect.com/guidance" />
-        <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:type" content="article" />
+        <meta property="og:image" content="https://www.devhubconnect.com/og-image.png" />
+        <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="How to Build n8n Workflows with Claude AI | DevHubConnect" />
         <meta name="twitter:description" content="Generate and customize n8n workflow JSON using Claude AI. Step-by-step guide to the Workflow Studio and expert JSON prompt combos." />
+        <meta name="twitter:image" content="https://www.devhubconnect.com/og-image.png" />
+
+        {/* HowTo Schema — step-by-step guide surfaced by AI engines */}
+        <script type="application/ld+json">{JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "HowTo",
+          "name": "How to Build n8n Workflows with Claude AI",
+          "description": "Use DevHubConnect's Workflow Studio to generate, customize, and download n8n automation workflows powered by Claude AI.",
+          "url": "https://www.devhubconnect.com/guidance",
+          "image": "https://www.devhubconnect.com/og-image.png",
+          "totalTime": "PT5M",
+          "supply": [
+            { "@type": "HowToSupply", "name": "GitHub account (free)" },
+            { "@type": "HowToSupply", "name": "DevHubConnect account (free sign-up)" },
+            { "@type": "HowToSupply", "name": "n8n instance (self-hosted or cloud)" }
+          ],
+          "step": [
+            {
+              "@type": "HowToStep",
+              "position": 1,
+              "name": "Sign in with GitHub",
+              "text": "Go to devhubconnect.com and click 'Sign in with GitHub'. One click — no registration form. The Studio requires a GitHub account and is inaccessible without one.",
+              "url": "https://www.devhubconnect.com/auth"
+            },
+            {
+              "@type": "HowToStep",
+              "position": 2,
+              "name": "Purchase an n8n template or prompt combo",
+              "text": "Browse the marketplace and purchase an n8n workflow template ($5–$25) or a JSON + Prompt combo ($15–$49). Templates download immediately as .json files.",
+              "url": "https://www.devhubconnect.com/"
+            },
+            {
+              "@type": "HowToStep",
+              "position": 3,
+              "name": "Open Workflow Studio and upload your JSON",
+              "text": "Navigate to the Workflow Studio and upload the DevHubConnect template JSON in the Customize tab. This validates your purchase and unlocks the Build New tab.",
+              "url": "https://www.devhubconnect.com/studio"
+            },
+            {
+              "@type": "HowToStep",
+              "position": 4,
+              "name": "Describe your changes to Claude AI",
+              "text": "In the Customize tab chat, describe what you want changed in plain English — for example 'swap Google Sheets for Airtable' or 'add a Slack notification on failure'. Claude returns the complete modified workflow JSON.",
+              "url": "https://www.devhubconnect.com/studio"
+            },
+            {
+              "@type": "HowToStep",
+              "position": 5,
+              "name": "Download and import into n8n",
+              "text": "Click the Download button to save the .json file, then open n8n and go to Settings → Import Workflow (or Ctrl+I). Select your file — the workflow loads with all nodes and connections pre-built.",
+              "url": "https://www.devhubconnect.com/guidance"
+            }
+          ]
+        })}</script>
+
+        {/* FAQPage Schema — Q&As surfaced in AI and featured snippet responses */}
+        <script type="application/ld+json">{JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What is DevHubConnect?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "DevHubConnect is an AI-powered n8n workflow marketplace and studio. It provides 500+ ready-to-import n8n workflow JSON templates and an AI studio (powered by Claude) that lets you customize templates, generate new workflows from plain English, and use expert prompt combos."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How do I build an n8n workflow with Claude AI?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Sign in at devhubconnect.com with GitHub, purchase an n8n template, open the Workflow Studio, upload the template JSON, then describe your automation in plain English. Claude returns a complete, importable n8n workflow JSON. Download it and import into n8n via Settings → Import Workflow."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is a JSON + Prompt combo?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "A combo product includes a starter n8n workflow JSON (downloadable immediately) plus an expert system prompt that unlocks inside the Workflow Studio. The prompt is trained specifically on n8n workflow patterns for a domain like email triage, Slack automation, or data sync."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Do I need to know how to code to use DevHubConnect?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "No. All workflow generation and customization is done through a plain English chat interface. You describe what you want and Claude AI produces the complete n8n workflow JSON. No coding or knowledge of n8n node syntax required."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Why is the Build New tab locked?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "The Build New tab unlocks only after you upload and validate a DevHubConnect template JSON in the Customize tab. This prevents API abuse and ensures AI tools are available only to paying customers. Third-party n8n workflow files are rejected by the validator."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How do I import a workflow into n8n?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Download the workflow JSON from your DevHubConnect dashboard or from the Studio. Open n8n, go to Settings → Import Workflow (or press Ctrl+I), and select the downloaded .json file. The workflow loads with all nodes and connections pre-built. Add your own credentials where placeholder credentials appear."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is there a daily limit on AI requests?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. There is a limit of 30 AI requests per user per day across the Workflow Studio to prevent abuse. The limit resets at midnight UTC. If you hit the limit, try again the next day."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Do purchased templates require a subscription?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "No. All purchases on DevHubConnect are one-time payments. There is no monthly subscription. Once you purchase a template or prompt combo, it is yours permanently and accessible from your dashboard."
+              }
+            }
+          ]
+        })}</script>
       </Helmet>
 
       <div className="min-h-screen bg-gray-50">

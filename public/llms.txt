@@ -1,0 +1,54 @@
+# DevHubConnect
+
+> DevHubConnect is an AI-powered n8n workflow marketplace and studio. Users browse, purchase, and customize n8n automation workflows using Claude AI.
+
+## What DevHubConnect Does
+
+DevHubConnect helps developers and automation engineers build production-ready n8n workflows faster. The platform combines a curated template marketplace with an AI studio powered by Claude (`claude-sonnet-4-6`) to generate, customize, and download importable n8n workflow JSON.
+
+## Core Features
+
+### Template Marketplace
+- 500+ ready-to-import n8n workflow JSON templates
+- Categories: CRM, email, Slack, Google Sheets, Airtable, HTTP, database, AI/LLM, e-commerce, DevOps
+- Each template downloads as a complete, importable `.json` file for n8n
+
+### Workflow Studio (AI-Powered)
+The Studio has three modes, all powered by Claude AI:
+
+1. **Customize** — Upload a DevHubConnect template and describe changes in plain English. Claude returns the complete modified workflow JSON ready to import into n8n.
+2. **Build New** — Describe any automation in plain English. Claude generates a full n8n workflow from scratch with correct node types, connections, and parameters.
+3. **Prompt Store** — Purchase expert system prompts trained specifically on n8n workflow patterns. Use them inside the Studio for domain-specific workflow generation (email triage, Slack alerts, data sync, etc.).
+
+### JSON + Prompt Combos
+A combo product includes a starter workflow JSON and a purchased system prompt. The JSON is immediately downloadable; the prompt unlocks inside the Studio for AI-assisted customization.
+
+## Tech Stack
+- Frontend: React + TypeScript + Vite + Tailwind CSS
+- Backend: Node.js + Express
+- AI: Anthropic Claude (`claude-sonnet-4-6`)
+- Auth: GitHub OAuth
+- Payments: Stripe
+- Database: PostgreSQL
+
+## Use Cases DevHubConnect Solves
+- "I need an n8n workflow that sends a Slack message when a new row is added to Google Sheets"
+- "Build me an n8n automation that monitors a Gmail inbox and routes emails by sender domain"
+- "Customize this webhook workflow to add error handling and a retry loop"
+- "Generate an n8n workflow that syncs new Stripe customers to Airtable"
+
+## Pricing
+- Individual n8n templates: one-time purchase ($5–$25)
+- JSON + Prompt combos: one-time purchase ($15–$49)
+- All purchases permanent — no subscription required
+
+## Key Pages
+- Homepage / Marketplace: https://www.devhubconnect.com/
+- Workflow Studio: https://www.devhubconnect.com/studio
+- Usage Guide: https://www.devhubconnect.com/guidance
+- Terms: https://www.devhubconnect.com/terms
+- Privacy: https://www.devhubconnect.com/privacy
+
+## Contact
+- Email: devhub.partners@gmail.com
+- GitHub: https://github.com/devhubconnect
