@@ -12,6 +12,7 @@ import { getDeterministicRandom } from "@/lib/utils";
 
 interface Template {
   id: number;
+  slug?: string;
   name: string;
   description: string;
   price: number;
@@ -108,7 +109,9 @@ export const TemplateDetail = () => {
   const [isPurchasing, setIsPurchasing] = useState(false);
   const { currentUser } = useAuth();
 
-  const templateId = templateIdParam;
+  // The route param may be a bare numeric ID ("367") or an ID+slug ("367-llm-construction-...");
+  // the DB and API only know the numeric ID, so pull that out for lookups.
+  const templateId = templateIdParam?.match(/^\d+/)?.[0];
 
   // ✅ YOUR FIX: Read saved page at the top
   const lastPage = sessionStorage.getItem("lastTemplatePage") || "1";
@@ -179,7 +182,7 @@ export const TemplateDetail = () => {
   const metaTitle = `${template.name} | n8n Template ${priceDisplay !== 'Free' ? `– ${priceDisplay}` : '(Free)'} | DevHubConnect`;
   const autoDescription = `${template.name}${stepCount > 0 ? ` — ${stepCount}-step` : ''} n8n automation${integratedApps.length > 0 ? ` with ${integratedApps.slice(0, 3).join(', ')}` : ''}. ${priceDisplay === 'Free' ? 'Free download' : `Only ${priceDisplay}`} — instant access, ready to import.`;
   const metaDescription = (template as any).metaDescription || autoDescription;
-  const templateUrl = `https://www.devhubconnect.com/templates/${template.id}`;
+  const templateUrl = `https://www.devhubconnect.com/templates/${template.slug ? `${template.id}-${template.slug}` : template.id}`;
   const priceValue = (template.price / 100).toFixed(2);
 
   return (

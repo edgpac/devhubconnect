@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 interface Template {
  id: number;
+ slug?: string;
  name: string;
  description: string;
  price: number;
@@ -25,6 +26,10 @@ interface Template {
  _rating?: number;
  _reviewCount?: number;
  _tags?: string[];
+}
+
+function templateHref(template: Template): string {
+  return template.slug ? `/templates/${template.id}-${template.slug}` : `/templates/${template.id}`;
 }
 
 function buildStarterPrompt(name: string, description: string, workflowJson?: any): string {
@@ -223,7 +228,7 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
    <Card className="h-full flex flex-col hover:shadow-lg transition-shadow duration-200">
      {/* ✅ YOUR FIX: Wrap card content in Link with onClick to save page */}
      <Link
-       to={`/templates/${template.id}`}
+       to={templateHref(template)}
        onClick={handlePreview}
        className="flex flex-col flex-1"
      >
@@ -351,7 +356,7 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
              onClick={(e) => {
                e.preventDefault();
                handlePreview();
-               navigate(`/templates/${template.id}`);
+               navigate(templateHref(template));
              }}
            >
              <Eye className="h-4 w-4 mr-2" />

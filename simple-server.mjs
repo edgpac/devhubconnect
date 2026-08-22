@@ -595,7 +595,7 @@ app.get('/sitemap.xml', async (req, res) => {
     console.log('🗺️ Generating optimized sitemap...');
     
     const templates = await pool.query(
-      'SELECT id, updated_at FROM templates WHERE is_public = true ORDER BY id'
+      'SELECT id, slug, updated_at FROM templates WHERE is_public = true ORDER BY id'
     );
     
     if (req.isDisconnected()) return;
@@ -626,9 +626,10 @@ app.get('/sitemap.xml', async (req, res) => {
   </url>`;
     
     templates.rows.forEach(template => {
+      const slugPath = template.slug ? `${template.id}-${template.slug}` : `${template.id}`;
       sitemap += `
   <url>
-    <loc>https://www.devhubconnect.com/templates/${template.id}</loc>
+    <loc>https://www.devhubconnect.com/templates/${slugPath}</loc>
     <lastmod>${template.updated_at.toISOString().split('T')[0]}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -660,20 +661,23 @@ app.get('/templates', (req, res) => {
 });
 
 // ✅ Shared handler for template SEO injection — used by both /template/:id and /templates/:id
-async function serveTemplatePage(req, res) {
+// The URL param may be a bare numeric ID ("367") or an ID+slug ("367-llm-construction-...");
+// the leading digits are always the DB id, so we parse those out for the lookup.
+async function serveTemplatePage(req, res, { enforceCanonical = false } = {}) {
   try {
     if (req.isDisconnected()) return;
 
-    const templateId = req.params.id;
+    const rawParam = req.params.id;
+    const idMatch = rawParam && rawParam.match(/^(\d+)/);
+    const templateId = idMatch ? idMatch[1] : null;
     console.log('🔍 SEO: Serving template page with dynamic meta tags:', templateId);
 
-    // Validate template ID is numeric
-    if (!templateId || !/^\d+$/.test(templateId)) {
+    if (!templateId) {
       return res.status(404).sendFile(path.join(__dirname, 'dist', 'index.html'));
     }
 
     const templateResult = await pool.query(
-      'SELECT id, name, description, price, image_url, workflow_json, meta_description FROM templates WHERE id = $1 AND is_public = true',
+      'SELECT id, name, slug, description, price, image_url, workflow_json, meta_description FROM templates WHERE id = $1 AND is_public = true',
       [templateId]
     );
 
@@ -684,6 +688,14 @@ async function serveTemplatePage(req, res) {
     }
 
     const template = templateResult.rows[0];
+
+    // Canonical URL is /templates/{id}-{slug}. Redirect bare-numeric or stale-slug
+    // requests to it so search engines consolidate ranking onto the SEO-friendly URL.
+    const canonicalSlugPath = template.slug ? `${template.id}-${template.slug}` : `${template.id}`;
+    if (enforceCanonical && rawParam !== canonicalSlugPath) {
+      const query = req.originalUrl.includes('?') ? `?${req.originalUrl.split('?')[1]}` : '';
+      return res.redirect(301, `/templates/${canonicalSlugPath}${query}`);
+    }
 
     // Parse workflow details
     let stepCount = 0;
@@ -709,7 +721,7 @@ async function serveTemplatePage(req, res) {
     const metaTitle = `${template.name} | n8n Template ${priceDisplay !== 'Free' ? `– ${priceDisplay}` : '(Free)'} | DevHubConnect`;
     const autoDescription = `${template.name}${stepCount > 0 ? ` — ${stepCount}-step` : ''} n8n automation${integratedApps.length > 0 ? ` with ${integratedApps.join(', ')}` : ''}. ${priceDisplay === 'Free' ? 'Free download' : `Only ${priceDisplay}`} — instant access, ready to import.`;
     const metaDescription = template.meta_description || autoDescription;
-    const templateUrl = `https://www.devhubconnect.com/templates/${template.id}`;
+    const templateUrl = `https://www.devhubconnect.com/templates/${canonicalSlugPath}`;
     const imageUrl = template.image_url || 'https://www.devhubconnect.com/placeholder.svg';
     const priceValue = (template.price / 100).toFixed(2);
 
@@ -818,9 +830,10 @@ async function serveTemplatePage(req, res) {
 }
 
 // ✅ CRITICAL: Both /template/:id and /templates/:id use the same SSR handler
-// Google has already indexed /template/:id (singular) — DO NOT redirect it
-app.get('/template/:id', serveTemplatePage);
-app.get('/templates/:id', serveTemplatePage);
+// Google has already indexed /template/:id (singular) — DO NOT redirect it, only /templates/:id
+// (plural) enforces the canonical id-slug URL via 301.
+app.get('/template/:id', (req, res) => serveTemplatePage(req, res, { enforceCanonical: false }));
+app.get('/templates/:id', (req, res) => serveTemplatePage(req, res, { enforceCanonical: true }));
 
 // ✅ General static middleware for other files - AFTER template route
 app.use(express.static(path.join(__dirname, 'dist'), {
@@ -1234,6 +1247,7 @@ setInterval(async () => {
 function convertFieldNames(template) {
   return {
     id: template.id,
+    slug: template.slug,
     name: template.name,
     description: template.description,
     price: template.price,
@@ -1250,6 +1264,27 @@ function convertFieldNames(template) {
     ratingCount: template.rating_count,
     stripePriceId: template.stripe_price_id
   };
+}
+
+// Builds a URL-friendly slug from a template name, and disambiguates it against
+// existing rows so /templates/{id}-{slug} stays unique (matches templates_slug_idx).
+function makeSlug(name) {
+  return (name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 200);
+}
+
+async function generateUniqueSlug(name) {
+  const base = makeSlug(name) || 'template';
+  let slug = base;
+  let suffix = 2;
+  while (true) {
+    const existing = await pool.query('SELECT 1 FROM templates WHERE slug = $1', [slug]);
+    if (existing.rows.length === 0) return slug;
+    slug = `${base}-${suffix++}`;
+  }
 }
 
 // Helper function to parse workflow details
@@ -3475,11 +3510,13 @@ app.post('/api/templates', requireAdminAuth, async (req, res) => {
 
     if (req.isDisconnected()) return;
 
+    const slug = await generateUniqueSlug(name.trim());
+
     const result = await pool.query(`
       INSERT INTO templates (
         name, description, meta_description, price, workflow_json, image_url,
-        creator_id, currency, status, is_public, download_count, view_count
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        creator_id, currency, status, is_public, download_count, view_count, slug
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `, [
       name.trim(),
@@ -3493,7 +3530,8 @@ app.post('/api/templates', requireAdminAuth, async (req, res) => {
       'draft',
       true,
       0,
-      0
+      0,
+      slug
     ]);
     
     if (req.isDisconnected() || res.headersSent) return;
@@ -3507,6 +3545,7 @@ app.post('/api/templates', requireAdminAuth, async (req, res) => {
       message: 'Template created successfully',
       template: {
         id: template.id,
+        slug: template.slug,
         name: template.name,
         description: template.description,
         price: template.price,
