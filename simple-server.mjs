@@ -526,25 +526,32 @@ app.get('/assets/*.js', (req, res) => {
     console.log('🔧 JavaScript route handler triggered for:', req.path);
   }
   
-  const filePath = path.join(__dirname, 'dist', req.path);
-  
+  // Security: resolve and confine to the dist/assets directory to block
+  // path traversal (e.g. /assets/../../node_modules/express/index.js)
+  const assetsDir = path.resolve(__dirname, 'dist', 'assets');
+  const filePath = path.resolve(__dirname, 'dist', req.path.replace(/^\//, ''));
+
+  if (!filePath.startsWith(assetsDir + path.sep)) {
+    return res.status(404).send('JavaScript file not found');
+  }
+
   // Check if already disconnected
   if (req.isDisconnected()) return;
-  
+
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-  
+
   res.sendFile(filePath, (err) => {
     if (err) {
       // Handle disconnect errors silently
       if (err.code === 'EPIPE' || err.code === 'ECONNRESET' || err.code === 'ECONNABORTED') {
         return;
       }
-      
+
       if (process.env.NODE_ENV !== 'production') {
         console.error('❌ Error serving JS file:', req.path, err.message);
       }
-      
+
       if (!res.headersSent && !res.destroyed && !req.isDisconnected()) {
         res.status(404).send('JavaScript file not found');
       }
@@ -560,23 +567,30 @@ app.get('/assets/*.css', (req, res) => {
     console.log('🔧 CSS route handler triggered for:', req.path);
   }
   
-  const filePath = path.join(__dirname, 'dist', req.path);
-  
+  // Security: resolve and confine to the dist/assets directory to block
+  // path traversal (e.g. /assets/../../node_modules/express/index.js)
+  const assetsDir = path.resolve(__dirname, 'dist', 'assets');
+  const filePath = path.resolve(__dirname, 'dist', req.path.replace(/^\//, ''));
+
+  if (!filePath.startsWith(assetsDir + path.sep)) {
+    return res.status(404).send('CSS file not found');
+  }
+
   if (req.isDisconnected()) return;
-  
+
   res.setHeader('Content-Type', 'text/css; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-  
+
   res.sendFile(filePath, (err) => {
     if (err) {
       if (err.code === 'EPIPE' || err.code === 'ECONNRESET' || err.code === 'ECONNABORTED') {
         return;
       }
-      
+
       if (process.env.NODE_ENV !== 'production') {
         console.error('❌ Error serving CSS file:', req.path, err.message);
       }
-      
+
       if (!res.headersSent && !req.isDisconnected()) {
         res.status(404).send('CSS file not found');
       }
