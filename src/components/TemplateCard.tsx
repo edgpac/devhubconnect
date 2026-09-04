@@ -114,9 +114,21 @@ export const TemplateCard = ({ template, onPreview, onTemplateRemoved }: Templat
      });
 
      if (!response.ok) {
-       const errorData = await response.json();
-       console.error('Purchase failed:', errorData);
-       throw new Error(errorData.message || `Failed to create checkout session: ${response.status}`);
+       let errorData: { error?: string; message?: string; loginUrl?: string; redirectToLogin?: boolean } = {};
+       try {
+         errorData = await response.json();
+       } catch {
+         // response body wasn't JSON — fall through with status code only
+       }
+       console.error('Purchase failed:', response.status, errorData);
+
+       if (response.status === 401 || errorData.redirectToLogin || errorData.loginUrl) {
+         toast.error('Please log in to purchase this template', { description: 'Redirecting you to sign in...' });
+         setTimeout(() => { window.location.href = errorData.loginUrl || '/auth/github'; }, 1200);
+         return;
+       }
+
+       throw new Error(errorData.message || errorData.error || `Failed to create checkout session (${response.status})`);
      }
 
      const session = await response.json();
